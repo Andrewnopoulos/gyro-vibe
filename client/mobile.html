@@ -91,6 +91,9 @@
       <button id="startBtn">Start Sensors</button>
       <button id="stopBtn" disabled>Stop Sensors</button>
     </div>
+    <div class="controls" style="margin-top: 10px;">
+      <button id="calibrateBtn" style="width: 100%; background-color: #17a2b8;" disabled>Calibrate Sensors</button>
+    </div>
     
     <div class="card">
       <h2>Gyroscope</h2>
@@ -141,6 +144,20 @@
     let handleOrientation = null;
     let handleMotion = null;
     
+    // Calibration offsets
+    let calibration = {
+      gyro: {
+        alpha: 0,
+        beta: 0,
+        gamma: 0
+      },
+      accel: {
+        x: 0,
+        y: 0,
+        z: 0
+      }
+    };
+    
     // Connect to Socket.IO server
     function connectSocket() {
       connectionStatus.textContent = 'Connecting...';
@@ -162,6 +179,18 @@
         connectionStatus.className = 'status disconnected';
         connectionInfo.textContent = 'Disconnected from server';
         stopSensors();
+      });
+      
+      // Handle calibration request from desktop
+      socket.on('request-calibration', () => {
+        // Only calibrate if sensors are active
+        if (sensorInterval) {
+          calibrateSensors();
+        } else {
+          connectionInfo.textContent += '\nCalibration requested but sensors are not active. Please start sensors first.';
+          // Notify desktop that calibration failed
+          socket.emit('calibration-failed', { reason: 'Sensors not active' });
+        }
       });
     }
     
@@ -273,9 +302,14 @@
           connectionInfo.textContent += '\nGyroscope events receiving: YES';
         }
         
-        sensorData.gyro.alpha = event.alpha || 0; // Z-axis rotation
-        sensorData.gyro.beta = event.beta || 0;   // X-axis rotation
-        sensorData.gyro.gamma = event.gamma || 0; // Y-axis rotation
+        // Apply calibration by subtracting offset
+        sensorData.gyro.alpha = (event.alpha || 0) - calibration.gyro.alpha; 
+        sensorData.gyro.beta = (event.beta || 0) - calibration.gyro.beta;
+        sensorData.gyro.gamma = (event.gamma || 0) - calibration.gyro.gamma;
+        
+        // Normalize alpha to 0-360 range
+        if (sensorData.gyro.alpha < 0) sensorData.gyro.alpha += 360;
+        if (sensorData.gyro.alpha >= 360) sensorData.gyro.alpha -= 360;
         
         gyroData.textContent = `Alpha: ${sensorData.gyro.alpha.toFixed(2)}°
 Beta: ${sensorData.gyro.beta.toFixed(2)}°
@@ -293,9 +327,10 @@ Gamma: ${sensorData.gyro.gamma.toFixed(2)}°`;
         }
         
         if (event.accelerationIncludingGravity) {
-          sensorData.accel.x = event.accelerationIncludingGravity.x || 0;
-          sensorData.accel.y = event.accelerationIncludingGravity.y || 0;
-          sensorData.accel.z = event.accelerationIncludingGravity.z || 0;
+          // Apply calibration by subtracting offset
+          sensorData.accel.x = (event.accelerationIncludingGravity.x || 0) - calibration.accel.x;
+          sensorData.accel.y = (event.accelerationIncludingGravity.y || 0) - calibration.accel.y;
+          sensorData.accel.z = (event.accelerationIncludingGravity.z || 0) - calibration.accel.z;
           
           accelData.textContent = `X: ${sensorData.accel.x.toFixed(2)}g
 Y: ${sensorData.accel.y.toFixed(2)}g
@@ -326,8 +361,7 @@ Z: ${sensorData.accel.z.toFixed(2)}g`;
       }, SEND_INTERVAL);
       
       // Update UI
-      startBtn.disabled = true;
-      stopBtn.disabled = false;
+      updateUIStarted();
       connectionInfo.textContent += '\nSensor monitoring started';
     }
     
@@ -343,14 +377,81 @@ Z: ${sensorData.accel.z.toFixed(2)}g`;
       window.removeEventListener('devicemotion', handleMotion);
       
       // Update UI
+      updateUIStopped();
+      connectionInfo.textContent += '\nSensor monitoring stopped';
+    }
+    
+    // Calibrate sensors
+    function calibrateSensors() {
+      connectionInfo.textContent += '\n--- Calibrating sensors ---';
+      
+      // Store current raw values as offsets
+      let rawGyro = {};
+      let rawAccel = {};
+      
+      // Get current uncalibrated values
+      const saveRawValues = (event) => {
+        rawGyro.alpha = event.alpha || 0;
+        rawGyro.beta = event.beta || 0;
+        rawGyro.gamma = event.gamma || 0;
+        window.removeEventListener('deviceorientation', saveRawValues);
+      };
+      
+      const saveRawAccel = (event) => {
+        if (event.accelerationIncludingGravity) {
+          rawAccel.x = event.accelerationIncludingGravity.x || 0;
+          rawAccel.y = event.accelerationIncludingGravity.y || 0;
+          // Don't calibrate Z since we want to keep gravity
+          rawAccel.z = 0; // Keep gravity effect for Z
+          window.removeEventListener('devicemotion', saveRawAccel);
+        }
+      };
+      
+      // Add temporary event listeners to get raw values
+      window.addEventListener('deviceorientation', saveRawValues);
+      window.addEventListener('devicemotion', saveRawAccel);
+      
+      // Wait for values to be captured (need to get at least one event)
+      setTimeout(() => {
+        // Store the calibration values
+        calibration.gyro.alpha = rawGyro.alpha || 0;
+        calibration.gyro.beta = rawGyro.beta || 0;
+        calibration.gyro.gamma = rawGyro.gamma || 0;
+        
+        calibration.accel.x = rawAccel.x || 0;
+        calibration.accel.y = rawAccel.y || 0;
+        calibration.accel.z = rawAccel.z || 0;
+        
+        // Log calibration values
+        connectionInfo.textContent += `\nCalibration complete!
+Gyro offsets: α=${calibration.gyro.alpha.toFixed(2)}° β=${calibration.gyro.beta.toFixed(2)}° γ=${calibration.gyro.gamma.toFixed(2)}°
+Accel offsets: x=${calibration.accel.x.toFixed(2)}g y=${calibration.accel.y.toFixed(2)}g z=${calibration.accel.z.toFixed(2)}g`;
+        
+        // Notify the desktop client
+        if (socket && socket.connected) {
+          socket.emit('calibration-complete', calibration);
+        }
+      }, 500); // Wait for 500ms to capture the values
+    }
+    
+    // Update UI when starting sensors
+    function updateUIStarted() {
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+      calibrateBtn.disabled = false;
+    }
+    
+    // Update UI when stopping sensors
+    function updateUIStopped() {
       startBtn.disabled = false;
       stopBtn.disabled = true;
-      connectionInfo.textContent += '\nSensor monitoring stopped';
+      calibrateBtn.disabled = true;
     }
     
     // Event listeners
     startBtn.addEventListener('click', startSensors);
     stopBtn.addEventListener('click', stopSensors);
+    calibrateBtn.addEventListener('click', calibrateSensors);
     
     // Initialize
     connectSocket();

@@ -10,6 +10,7 @@ const qrcodeDisplay = document.getElementById('qrcodeDisplay');
 const mobileUrl = document.getElementById('mobileUrl');
 const gyroCanvas = document.getElementById('gyroCanvas');
 const accelCanvas = document.getElementById('accelCanvas');
+const phone3dContainer = document.getElementById('phone3d');
 
 // Canvas contexts
 const gyroCtx = gyroCanvas.getContext('2d');
@@ -30,6 +31,14 @@ const dataHistory = {
 };
 
 const MAX_DATA_POINTS = 50;
+
+// Three.js variables
+let scene, camera, renderer, phone;
+let lastGyroData = { alpha: 0, beta: 0, gamma: 0 };
+let animationFrameId = null;
+
+// Calibration button
+const calibrateBtn = document.getElementById('calibrateBtn');
 
 // Generate QR code for mobile connection
 function generateQRCode() {
@@ -169,22 +178,135 @@ function updateVisualizations() {
   drawData(accelCtx, dataHistory.accel, ['purple', 'orange', 'cyan']);
 }
 
+// Initialize 3D scene
+function init3DScene() {
+  // Create scene
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xf0f0f0);
+
+  // Create camera
+  camera = new THREE.PerspectiveCamera(75, phone3dContainer.clientWidth / phone3dContainer.clientHeight, 0.1, 1000);
+  camera.position.z = 5;
+
+  // Create renderer
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(phone3dContainer.clientWidth, phone3dContainer.clientHeight);
+  phone3dContainer.appendChild(renderer.domElement);
+
+  // Add ambient light
+  const ambientLight = new THREE.AmbientLight(0x404040, 1.5);
+  scene.add(ambientLight);
+
+  // Add directional light
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+  directionalLight.position.set(1, 1, 1);
+  scene.add(directionalLight);
+
+  // Create phone model
+  createPhoneModel();
+
+  // Add coordinate axes for reference
+  const axesHelper = new THREE.AxesHelper(5);
+  scene.add(axesHelper);
+
+  // Start animation loop
+  animate();
+
+  // Handle window resize
+  window.addEventListener('resize', onWindowResize, false);
+}
+
+// Create phone model
+function createPhoneModel() {
+  // Phone dimensions
+  const width = 0.8;
+  const height = 1.6;
+  const depth = 0.1;
+
+  // Create phone body
+  const phoneGeometry = new THREE.BoxGeometry(width, height, depth);
+  const phoneMaterial = new THREE.MeshPhongMaterial({ 
+    color: 0x333333,
+    specular: 0x111111,
+    shininess: 30
+  });
+  phone = new THREE.Mesh(phoneGeometry, phoneMaterial);
+  scene.add(phone);
+
+  // Add screen to the phone
+  const screenGeometry = new THREE.BoxGeometry(width * 0.9, height * 0.9, depth * 0.1);
+  const screenMaterial = new THREE.MeshBasicMaterial({ color: 0x3355ff });
+  const screen = new THREE.Mesh(screenGeometry, screenMaterial);
+  screen.position.z = depth / 2 + 0.01;
+  phone.add(screen);
+
+  // Add camera lens
+  const lensGeometry = new THREE.CircleGeometry(0.05, 32);
+  const lensMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
+  const lens = new THREE.Mesh(lensGeometry, lensMaterial);
+  lens.position.set(0, height * 0.35, depth / 2 + 0.01);
+  phone.add(lens);
+}
+
+// Animation loop
+function animate() {
+  animationFrameId = requestAnimationFrame(animate);
+  renderer.render(scene, camera);
+}
+
+// Update phone orientation based on gyroscope data
+function updatePhoneOrientation(gyroData) {
+  if (!phone) return;
+
+  // Convert degrees to radians
+  const degToRad = Math.PI / 180;
+
+  // Apply rotations in the correct order
+  phone.rotation.set(0, 0, 0); // Reset rotation
+  
+  // Apply rotations in ZXY order to match device orientation
+  // Alpha is rotation around Z axis (compass direction)
+  // Beta is front-to-back tilt
+  // Gamma is left-to-right tilt
+  
+  // First rotate around Y (beta)
+  phone.rotateX(gyroData.beta * degToRad);
+  
+  // Then rotate around X (gamma)
+  phone.rotateY(gyroData.gamma * degToRad);
+  
+  // Finally rotate around Z (alpha)
+  phone.rotateZ(-gyroData.alpha * degToRad);
+}
+
+// Handle window resize
+function onWindowResize() {
+  if (camera && renderer) {
+    camera.aspect = phone3dContainer.clientWidth / phone3dContainer.clientHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(phone3dContainer.clientWidth, phone3dContainer.clientHeight);
+  }
+}
+
 // Socket.IO event handlers
 socket.on('connect', () => {
   console.log('Connected to server with ID:', socket.id);
   generateQRCode();
   initCanvas(gyroCtx);
   initCanvas(accelCtx);
+  init3DScene();
 });
 
 socket.on('mobile-connected', (socketId) => {
   deviceStatus.textContent = `Mobile device connected (${socketId})`;
   deviceStatus.className = 'connected';
+  calibrateBtn.disabled = false;
 });
 
 socket.on('device-disconnected', (socketId) => {
   deviceStatus.textContent = 'No mobile device connected';
   deviceStatus.className = 'disconnected';
+  calibrateBtn.disabled = true;
 });
 
 socket.on('sensor-data', (data) => {
@@ -199,6 +321,10 @@ Gamma: ${data.gyro.gamma.toFixed(2)}°`;
     
     // Add to data history
     addDataPoint('gyro', data.gyro);
+    
+    // Update 3D phone model orientation
+    lastGyroData = data.gyro;
+    updatePhoneOrientation(lastGyroData);
   }
   
   if (data.accel) {
@@ -214,3 +340,77 @@ Z: ${data.accel.z.toFixed(2)}g`;
   // Update visualizations
   updateVisualizations();
 });
+
+// Handle calibration complete event from mobile
+socket.on('calibration-complete', (calibrationData) => {
+  deviceStatus.textContent = `Mobile device connected - Calibrated!`;
+  deviceStatus.className = 'connected';
+  
+  // Reset data history after calibration
+  dataHistory.gyro.alpha = [];
+  dataHistory.gyro.beta = [];
+  dataHistory.gyro.gamma = [];
+  dataHistory.accel.x = [];
+  dataHistory.accel.y = [];
+  dataHistory.accel.z = [];
+  
+  // Show notification
+  const notification = document.createElement('div');
+  notification.style.position = 'fixed';
+  notification.style.top = '20px';
+  notification.style.left = '50%';
+  notification.style.transform = 'translateX(-50%)';
+  notification.style.backgroundColor = '#17a2b8';
+  notification.style.color = 'white';
+  notification.style.padding = '10px 20px';
+  notification.style.borderRadius = '4px';
+  notification.style.zIndex = '1000';
+  notification.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+  notification.textContent = 'Sensors calibrated successfully!';
+  document.body.appendChild(notification);
+  
+  // Remove notification after 3 seconds
+  setTimeout(() => {
+    notification.style.opacity = '0';
+    notification.style.transition = 'opacity 0.5s';
+    setTimeout(() => document.body.removeChild(notification), 500);
+  }, 3000);
+});
+
+// Send calibration request to mobile device
+function requestCalibration() {
+  if (socket && socket.connected) {
+    socket.emit('request-calibration');
+    deviceStatus.textContent = 'Calibrating sensors...';
+  }
+}
+
+// Handle calibration failure
+socket.on('calibration-failed', (data) => {
+  deviceStatus.textContent = `Mobile device connected - Calibration failed`;
+  
+  // Show error notification
+  const notification = document.createElement('div');
+  notification.style.position = 'fixed';
+  notification.style.top = '20px';
+  notification.style.left = '50%';
+  notification.style.transform = 'translateX(-50%)';
+  notification.style.backgroundColor = '#dc3545';
+  notification.style.color = 'white';
+  notification.style.padding = '10px 20px';
+  notification.style.borderRadius = '4px';
+  notification.style.zIndex = '1000';
+  notification.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+  notification.textContent = `Calibration failed: ${data.reason || 'Unknown error'}. Please start sensors on mobile first.`;
+  document.body.appendChild(notification);
+  
+  // Remove notification after 3 seconds
+  setTimeout(() => {
+    notification.style.opacity = '0';
+    notification.style.transition = 'opacity 0.5s';
+    setTimeout(() => document.body.removeChild(notification), 500);
+  }, 3000);
+});
+
+// Calibrate button event listener
+calibrateBtn.addEventListener('click', requestCalibration);

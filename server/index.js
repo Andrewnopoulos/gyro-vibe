@@ -93,6 +93,33 @@ io.on('connection', (socket) => {
     });
   });
   
+  // Handle calibration request from PC client
+  socket.on('request-calibration', () => {
+    console.log('Calibration requested for mobile device by:', socket.id);
+    // Forward the request to all mobile clients
+    socket.broadcast.emit('request-calibration');
+  });
+  
+  // Handle calibration completion from mobile
+  socket.on('calibration-complete', (calibrationData) => {
+    console.log('Calibration completed by mobile device:', socket.id);
+    // Forward to all PC clients
+    socket.broadcast.emit('calibration-complete', {
+      socketId: socket.id,
+      ...calibrationData
+    });
+  });
+  
+  // Handle calibration failure
+  socket.on('calibration-failed', (data) => {
+    console.log('Calibration failed:', data.reason);
+    // Forward to all PC clients
+    socket.broadcast.emit('calibration-failed', {
+      socketId: socket.id,
+      ...data
+    });
+  });
+  
   // Handle disconnection
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
