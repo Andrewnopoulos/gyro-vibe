@@ -93,6 +93,11 @@
   
   <script src="/socket.io/socket.io.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.0/build/qrcode.min.js"></script>
+  <!-- Create global variables to be accessible from module -->
+  <script>
+    window.QRCodeLib = window.QRCode;
+    window.SocketIOLib = window.io;
+  </script>
   <!-- Use ES modules version of Three.js for better compatibility -->
   <script type="importmap">
     {

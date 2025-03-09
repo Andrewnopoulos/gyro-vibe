@@ -2,8 +2,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-// Connect to the Socket.IO server
-const socket = io();
+// Connect to the Socket.IO server using the global variable
+const socket = window.SocketIOLib();
 
 // DOM elements
 const deviceStatus = document.getElementById('deviceStatus');
@@ -69,12 +69,28 @@ function generateQRCode() {
   `;
   
   // Generate QR code for the most appropriate URL
-  QRCode.toCanvas(qrcodeDisplay, urlToUse, {
-    width: 200,
-    margin: 1
-  }, function (error) {
-    if (error) console.error('Error generating QR code:', error);
-  });
+  // Use the global QRCodeLib variable we defined
+  try {
+    // Create a canvas element first
+    const canvas = document.createElement('canvas');
+    canvas.width = 200;
+    canvas.height = 200;
+    qrcodeDisplay.innerHTML = ''; // Clear the container
+    qrcodeDisplay.appendChild(canvas);
+    
+    window.QRCodeLib.toCanvas(canvas, urlToUse, {
+      width: 200,
+      margin: 1
+    }, function (error) {
+      if (error) {
+        console.error('Error generating QR code:', error);
+        qrcodeDisplay.innerHTML = 'Error generating QR code. Please use the URL below.';
+      }
+    });
+  } catch (e) {
+    console.error('Exception while generating QR code:', e);
+    qrcodeDisplay.innerHTML = 'Error generating QR code. Please use the URL below.';
+  }
 }
 
 // Initialize the visualizations
