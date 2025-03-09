@@ -165,18 +165,21 @@
     
     // Check if device sensors are available
     function checkSensorAvailability() {
+      connectionInfo.textContent += '\nURL protocol: ' + window.location.protocol;
+      connectionInfo.textContent += '\nUserAgent: ' + navigator.userAgent;
+      
       if ('DeviceOrientationEvent' in window) {
-        connectionInfo.textContent += '\nGyroscope: Available';
+        connectionInfo.textContent += '\nGyroscope API: Available';
       } else {
-        connectionInfo.textContent += '\nGyroscope: Not available';
-        gyroData.textContent = 'Gyroscope not available on this device';
+        connectionInfo.textContent += '\nGyroscope API: Not available';
+        gyroData.textContent = 'Gyroscope API not available on this device';
       }
       
       if ('DeviceMotionEvent' in window) {
-        connectionInfo.textContent += '\nAccelerometer: Available';
+        connectionInfo.textContent += '\nAccelerometer API: Available';
       } else {
-        connectionInfo.textContent += '\nAccelerometer: Not available';
-        accelData.textContent = 'Accelerometer not available on this device';
+        connectionInfo.textContent += '\nAccelerometer API: Not available';
+        accelData.textContent = 'Accelerometer API not available on this device';
       }
       
       // Check if permission is needed (iOS 13+)
@@ -185,6 +188,11 @@
         connectionInfo.textContent += '\nPermission required: Yes (iOS 13+)';
       } else {
         connectionInfo.textContent += '\nPermission required: No';
+      }
+      
+      // HTTPS check
+      if (window.location.protocol !== 'https:') {
+        connectionInfo.textContent += '\nWARNING: Many browsers require HTTPS for sensor access';
       }
     }
     
@@ -220,11 +228,23 @@
     
     // Start sensor data collection
     async function startSensors() {
+      connectionInfo.textContent += '\n--- Starting sensors ---';
+      
+      // HTTPS warning
+      if (window.location.protocol !== 'https:') {
+        connectionInfo.textContent += '\nWARNING: Using HTTP protocol. Modern browsers require HTTPS for sensor access!';
+      }
+      
       // Check if permission is needed (iOS 13+)
       if (typeof DeviceOrientationEvent.requestPermission === 'function' || 
           typeof DeviceMotionEvent.requestPermission === 'function') {
+        connectionInfo.textContent += '\nRequesting sensor permissions...';
         const permissionGranted = await requestSensorPermission();
-        if (!permissionGranted) return;
+        if (!permissionGranted) {
+          connectionInfo.textContent += '\nPermission denied or error occurred';
+          return;
+        }
+        connectionInfo.textContent += '\nPermission granted!';
       }
       
       // Object to store the latest sensor data
@@ -241,8 +261,16 @@
         }
       };
       
+      let gyroReceived = false;
+      let accelReceived = false;
+      
       // Listen for device orientation events (gyroscope)
-      window.addEventListener('deviceorientation', (event) => {
+      const handleOrientation = (event) => {
+        if (!gyroReceived) {
+          gyroReceived = true;
+          connectionInfo.textContent += '\nGyroscope events receiving: YES';
+        }
+        
         sensorData.gyro.alpha = event.alpha || 0; // Z-axis rotation
         sensorData.gyro.beta = event.beta || 0;   // X-axis rotation
         sensorData.gyro.gamma = event.gamma || 0; // Y-axis rotation
@@ -250,10 +278,18 @@
         gyroData.textContent = `Alpha: ${sensorData.gyro.alpha.toFixed(2)}°
 Beta: ${sensorData.gyro.beta.toFixed(2)}°
 Gamma: ${sensorData.gyro.gamma.toFixed(2)}°`;
-      });
+      };
+      
+      window.addEventListener('deviceorientation', handleOrientation);
+      connectionInfo.textContent += '\nGyroscope event listener added';
       
       // Listen for device motion events (accelerometer)
-      window.addEventListener('devicemotion', (event) => {
+      const handleMotion = (event) => {
+        if (!accelReceived) {
+          accelReceived = true;
+          connectionInfo.textContent += '\nAccelerometer events receiving: YES';
+        }
+        
         if (event.accelerationIncludingGravity) {
           sensorData.accel.x = event.accelerationIncludingGravity.x || 0;
           sensorData.accel.y = event.accelerationIncludingGravity.y || 0;
@@ -262,8 +298,23 @@ Gamma: ${sensorData.gyro.gamma.toFixed(2)}°`;
           accelData.textContent = `X: ${sensorData.accel.x.toFixed(2)}g
 Y: ${sensorData.accel.y.toFixed(2)}g
 Z: ${sensorData.accel.z.toFixed(2)}g`;
+        } else {
+          connectionInfo.textContent += '\nNo accelerationIncludingGravity in event';
         }
-      });
+      };
+      
+      window.addEventListener('devicemotion', handleMotion);
+      connectionInfo.textContent += '\nAccelerometer event listener added';
+      
+      // Check after a short delay if we're receiving events
+      setTimeout(() => {
+        if (!gyroReceived) {
+          connectionInfo.textContent += '\nWARNING: No gyroscope events received! Check HTTPS or device capabilities.';
+        }
+        if (!accelReceived) {
+          connectionInfo.textContent += '\nWARNING: No accelerometer events received! Check HTTPS or device capabilities.';
+        }
+      }, 2000);
       
       // Set up interval to send data to the server
       sensorInterval = setInterval(() => {

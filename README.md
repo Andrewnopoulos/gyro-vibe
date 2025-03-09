@@ -46,16 +46,22 @@ A web application that uses WebSockets to connect a mobile device to a PC and tr
 2. Open a web browser on your PC and navigate to `http://localhost:3000`
 3. On your mobile device:
    - Scan the QR code displayed on the PC client, or
-   - Open a web browser and navigate to `http://<your-local-ip>:3000/mobile`
+   - **IMPORTANT:** Use the HTTPS URL for sensor access: `https://<your-local-ip>:3443/mobile`
    - Note: Replace `<your-local-ip>` with your computer's IP address on the local network
-4. Press "Start Sensors" on the mobile device
-5. Move your mobile device around to see the gyroscope and accelerometer data change in real-time on the PC client
+4. Accept the security warning about the self-signed certificate (click "Advanced" then "Proceed")
+5. Press "Start Sensors" on the mobile device
+6. Move your mobile device around to see the gyroscope and accelerometer data change in real-time on the PC client
 
 ## Notes on Mobile Browser Compatibility
 
+- **HTTPS Requirement**: Modern browsers require HTTPS to access device sensors. When connecting from a mobile device, use the HTTPS URL (`https://<your-local-ip>:3443/mobile`).
+- **Self-signed Certificate**: The app uses a self-signed certificate for HTTPS. You'll need to accept the security warning in your browser.
 - **iOS (Safari)**: Starting from iOS 13, you need to grant permission to access device motion and orientation data. The app will prompt for this permission when you click "Start Sensors".
 - **Android (Chrome)**: Most modern Android devices should work without any special permission, but the device needs to have gyroscope and accelerometer sensors.
-- The app must be served over HTTPS to access device sensors when deployed (not required for localhost development).
+
+## Troubleshooting
+
+See the [TROUBLESHOOTING.md](TROUBLESHOOTING.md) file for detailed solutions to common issues.
 
 ## Network Requirements
 

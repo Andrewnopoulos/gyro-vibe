@@ -35,13 +35,25 @@ const MAX_DATA_POINTS = 50;
 function generateQRCode() {
   const protocol = window.location.protocol;
   const host = window.location.host;
-  const mobileUrlText = `${protocol}//${host}/mobile`;
+  const httpUrl = `http://${host}/mobile`;
   
-  // Set the URL text
-  mobileUrl.textContent = mobileUrlText;
+  // For HTTPS, we need to consider the potential port change (3000 -> 3443)
+  let httpsHost = host;
+  if (host.includes(':3000')) {
+    httpsHost = host.replace(':3000', ':3443');
+  }
+  const httpsUrl = `https://${httpsHost}/mobile`;
   
-  // Generate QR code
-  QRCode.toCanvas(qrcodeDisplay, mobileUrlText, {
+  const urlToUse = protocol === 'https:' ? httpsUrl : httpUrl;
+  
+  // Set the URL text - show both options
+  mobileUrl.innerHTML = `
+    <div><strong>HTTP:</strong> ${httpUrl}</div>
+    <div><strong>HTTPS:</strong> ${httpsUrl} (recommended for sensors)</div>
+  `;
+  
+  // Generate QR code for the most appropriate URL
+  QRCode.toCanvas(qrcodeDisplay, urlToUse, {
     width: 200,
     margin: 1
   }, function (error) {
