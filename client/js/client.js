@@ -404,37 +404,23 @@ function resetCameraView() {
   }
 }
 
-// Update phone orientation based on gyroscope data
 function updatePhoneOrientation(gyroData) {
   if (!phone) return;
 
-  // Convert degrees to radians
   const degToRad = Math.PI / 180;
   
-  // Create a quaternion for our rotation
   const quaternion = new THREE.Quaternion();
   
-  // We'll use an intermediary Euler object to convert from gyro angles to quaternion
-  // The order 'YXZ' means we apply:
-  // 1. Y rotation (gamma - left/right tilt)
-  // 2. X rotation (beta - front/back tilt)
-  // 3. Z rotation (alpha - compass direction)
-  const euler = new THREE.Euler(0, 0, 0, 'YXZ');
+  const euler = new THREE.Euler(0, 0, 0, 'ZXY');
   
-  // Apply the rotations:
-  // - Beta: Front-to-back tilt (rotate around X)
-  // - Gamma: Left-to-right tilt (rotate around Y) - negate to fix reversed tilt
-  // - Alpha: Compass direction (rotate around Z) - negate as in original code
   euler.set(
-    gyroData.beta * degToRad,
-    -gyroData.gamma * degToRad, // Negate gamma to fix reversed tilt
-    -gyroData.alpha * degToRad,
+    gyroData.beta * degToRad,   // X-axis: front-to-back tilt
+    gyroData.gamma * degToRad,  // Y-axis: left-to-right tilt
+    gyroData.alpha * degToRad   // Z-axis: compass direction
   );
   
-  // Convert Euler angles to quaternion
   quaternion.setFromEuler(euler);
   
-  // Apply the quaternion rotation to the phone
   phone.quaternion.copy(quaternion);
 }
 
