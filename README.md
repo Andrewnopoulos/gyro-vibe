@@ -65,10 +65,43 @@ See the [TROUBLESHOOTING.md](TROUBLESHOOTING.md) file for detailed solutions to 
 
 ## Network Requirements
 
-For the mobile device to connect to the PC:
+For local development, when connecting the mobile device to the PC:
 1. Both devices must be on the same network
 2. The PC's firewall must allow connections on the port used by the server (default: 3000)
 3. For external access, you'll need to configure port forwarding on your router
+
+## Deployment
+
+### Railway Deployment
+
+This application is configured for easy deployment on Railway:
+
+1. Create a Railway account and install the Railway CLI:
+   ```
+   npm install -g @railway/cli
+   ```
+
+2. Login to Railway:
+   ```
+   railway login
+   ```
+
+3. Link your repository:
+   ```
+   railway link
+   ```
+
+4. Deploy your app:
+   ```
+   railway up
+   ```
+
+Alternatively, you can connect your GitHub repository directly in the Railway dashboard for automatic deployments.
+
+The application is already configured to detect when it's running on Railway and will automatically:
+- Use proper HTTPS settings provided by Railway
+- Generate correct QR codes with the public URL
+- Use the PORT environment variable provided by Railway
 
 ## Customization
 

@@ -51,22 +51,41 @@ const resetViewBtn = document.getElementById('resetViewBtn');
 function generateQRCode() {
   const protocol = window.location.protocol;
   const host = window.location.host;
-  const httpUrl = `http://${host}/mobile`;
+  const currentUrl = window.location.href;
+  const isRailway = currentUrl.includes('railway.app');
   
-  // For HTTPS, we need to consider the potential port change (3000 -> 3443)
-  let httpsHost = host;
-  if (host.includes(':3000')) {
-    httpsHost = host.replace(':3000', ':3443');
+  let urlToUse;
+  let httpUrl;
+  let httpsUrl;
+  
+  if (isRailway) {
+    // On Railway, we're already on HTTPS with the correct domain
+    urlToUse = `${protocol}//${host}/mobile`;
+    // Use the same URL for display
+    httpUrl = urlToUse;
+    httpsUrl = urlToUse;
+  } else {
+    // For local development, handle HTTP/HTTPS differences
+    httpUrl = `http://${host}/mobile`;
+    
+    // For HTTPS, we need to consider the potential port change (3000 -> 3443)
+    let httpsHost = host;
+    if (host.includes(':3000')) {
+      httpsHost = host.replace(':3000', ':3443');
+    }
+    httpsUrl = `https://${httpsHost}/mobile`;
+    
+    urlToUse = protocol === 'https:' ? httpsUrl : httpUrl;
   }
-  const httpsUrl = `https://${httpsHost}/mobile`;
   
-  const urlToUse = protocol === 'https:' ? httpsUrl : httpUrl;
-  
-  // Set the URL text - show both options
-  mobileUrl.innerHTML = `
-    <div><strong>HTTP:</strong> ${httpUrl}</div>
-    <div><strong>HTTPS:</strong> ${httpsUrl} (recommended for sensors)</div>
-  `;
+  // Set the URL text - show appropriate info based on environment
+  if (isRailway) {
+    mobileUrl.innerHTML = `<div><strong>URL:</strong> ${urlToUse}</div>`;
+  } else {
+    mobileUrl.innerHTML = `
+      <div><strong>HTTP:</strong> ${httpUrl}</div>
+      <div><strong>HTTPS:</strong> ${httpsUrl} (recommended for sensors)</div>`;
+  }
   
   // Generate QR code for the most appropriate URL
   // Use the global QRCodeLib variable we defined
