@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Gyro-Vibe - Mobile Client</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      touch-action: none;
+      background-color: #f5f5f5;
+    }
+    .container {
+      max-width: 100%;
+    }
+    .card {
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 16px;
+      background-color: white;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .status {
+      text-align: center;
+      padding: 10px;
+      border-radius: 4px;
+      font-weight: bold;
+      margin-bottom: 20px;
+    }
+    .connected {
+      background-color: #d4edda;
+      color: #155724;
+    }
+    .disconnected {
+      background-color: #f8d7da;
+      color: #721c24;
+    }
+    .connecting {
+      background-color: #fff3cd;
+      color: #856404;
+    }
+    .data-display {
+      font-family: monospace;
+      background-color: #f5f5f5;
+      padding: 10px;
+      border-radius: 4px;
+      white-space: pre-wrap;
+      height: 80px;
+      overflow-y: auto;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .controls {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    button {
+      padding: 10px 15px;
+      border-radius: 4px;
+      border: none;
+      background-color: #007bff;
+      color: white;
+      font-weight: bold;
+      touch-action: manipulation;
+      width: 48%;
+    }
+    #startBtn {
+      background-color: #28a745;
+    }
+    #stopBtn {
+      background-color: #dc3545;
+    }
+    .sensor-info {
+      font-size: 0.9em;
+      margin-top: 10px;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Gyro-Vibe Mobile</h1>
+    
+    <div id="connectionStatus" class="status disconnected">Disconnected</div>
+    
+    <div class="controls">
+      <button id="startBtn">Start Sensors</button>
+      <button id="stopBtn" disabled>Stop Sensors</button>
+    </div>
+    
+    <div class="card">
+      <h2>Gyroscope</h2>
+      <div id="gyroData" class="data-display">Waiting for sensor data...</div>
+      <div class="sensor-info">
+        Alpha: rotation around z-axis (0-360°)<br>
+        Beta: front-to-back tilt (-180° to 180°)<br>
+        Gamma: left-to-right tilt (-90° to 90°)
+      </div>
+    </div>
+    
+    <div class="card">
+      <h2>Accelerometer</h2>
+      <div id="accelData" class="data-display">Waiting for sensor data...</div>
+      <div class="sensor-info">
+        X: left/right motion (g)<br>
+        Y: forward/backward motion (g)<br>
+        Z: up/down motion (g)
+      </div>
+    </div>
+    
+    <div class="card">
+      <h2>Connection Info</h2>
+      <div id="connectionInfo" class="data-display">Waiting to connect...</div>
+    </div>
+  </div>
+  
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    // DOM elements
+    const connectionStatus = document.getElementById('connectionStatus');
+    const gyroData = document.getElementById('gyroData');
+    const accelData = document.getElementById('accelData');
+    const connectionInfo = document.getElementById('connectionInfo');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    
+    // Socket.IO connection
+    let socket = null;
+    
+    // Sensor access variables
+    let gyroscope = null;
+    let accelerometer = null;
+    let sensorInterval = null;
+    const SEND_INTERVAL = 50; // Send data every 50ms
+    
+    // Connect to Socket.IO server
+    function connectSocket() {
+      connectionStatus.textContent = 'Connecting...';
+      connectionStatus.className = 'status connecting';
+      
+      socket = io();
+      
+      socket.on('connect', () => {
+        connectionStatus.textContent = 'Connected';
+        connectionStatus.className = 'status connected';
+        connectionInfo.textContent = `Socket ID: ${socket.id}\nConnected to server`;
+        
+        // Identify as a mobile device
+        socket.emit('mobile-connect');
+      });
+      
+      socket.on('disconnect', () => {
+        connectionStatus.textContent = 'Disconnected';
+        connectionStatus.className = 'status disconnected';
+        connectionInfo.textContent = 'Disconnected from server';
+        stopSensors();
+      });
+    }
+    
+    // Check if device sensors are available
+    function checkSensorAvailability() {
+      if ('DeviceOrientationEvent' in window) {
+        connectionInfo.textContent += '\nGyroscope: Available';
+      } else {
+        connectionInfo.textContent += '\nGyroscope: Not available';
+        gyroData.textContent = 'Gyroscope not available on this device';
+      }
+      
+      if ('DeviceMotionEvent' in window) {
+        connectionInfo.textContent += '\nAccelerometer: Available';
+      } else {
+        connectionInfo.textContent += '\nAccelerometer: Not available';
+        accelData.textContent = 'Accelerometer not available on this device';
+      }
+      
+      // Check if permission is needed (iOS 13+)
+      if (typeof DeviceOrientationEvent.requestPermission === 'function' || 
+          typeof DeviceMotionEvent.requestPermission === 'function') {
+        connectionInfo.textContent += '\nPermission required: Yes (iOS 13+)';
+      } else {
+        connectionInfo.textContent += '\nPermission required: No';
+      }
+    }
+    
+    // Request permission for device sensors (iOS 13+)
+    async function requestSensorPermission() {
+      try {
+        if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+          const permissionState = await DeviceOrientationEvent.requestPermission();
+          connectionInfo.textContent += `\nGyroscope permission: ${permissionState}`;
+          
+          if (permissionState !== 'granted') {
+            gyroData.textContent = 'Gyroscope permission denied';
+            return false;
+          }
+        }
+        
+        if (typeof DeviceMotionEvent.requestPermission === 'function') {
+          const permissionState = await DeviceMotionEvent.requestPermission();
+          connectionInfo.textContent += `\nAccelerometer permission: ${permissionState}`;
+          
+          if (permissionState !== 'granted') {
+            accelData.textContent = 'Accelerometer permission denied';
+            return false;
+          }
+        }
+        
+        return true;
+      } catch (error) {
+        connectionInfo.textContent += `\nError requesting permission: ${error.message}`;
+        return false;
+      }
+    }
+    
+    // Start sensor data collection
+    async function startSensors() {
+      // Check if permission is needed (iOS 13+)
+      if (typeof DeviceOrientationEvent.requestPermission === 'function' || 
+          typeof DeviceMotionEvent.requestPermission === 'function') {
+        const permissionGranted = await requestSensorPermission();
+        if (!permissionGranted) return;
+      }
+      
+      // Object to store the latest sensor data
+      const sensorData = {
+        gyro: {
+          alpha: 0,
+          beta: 0,
+          gamma: 0
+        },
+        accel: {
+          x: 0,
+          y: 0,
+          z: 0
+        }
+      };
+      
+      // Listen for device orientation events (gyroscope)
+      window.addEventListener('deviceorientation', (event) => {
+        sensorData.gyro.alpha = event.alpha || 0; // Z-axis rotation
+        sensorData.gyro.beta = event.beta || 0;   // X-axis rotation
+        sensorData.gyro.gamma = event.gamma || 0; // Y-axis rotation
+        
+        gyroData.textContent = `Alpha: ${sensorData.gyro.alpha.toFixed(2)}°
+Beta: ${sensorData.gyro.beta.toFixed(2)}°
+Gamma: ${sensorData.gyro.gamma.toFixed(2)}°`;
+      });
+      
+      // Listen for device motion events (accelerometer)
+      window.addEventListener('devicemotion', (event) => {
+        if (event.accelerationIncludingGravity) {
+          sensorData.accel.x = event.accelerationIncludingGravity.x || 0;
+          sensorData.accel.y = event.accelerationIncludingGravity.y || 0;
+          sensorData.accel.z = event.accelerationIncludingGravity.z || 0;
+          
+          accelData.textContent = `X: ${sensorData.accel.x.toFixed(2)}g
+Y: ${sensorData.accel.y.toFixed(2)}g
+Z: ${sensorData.accel.z.toFixed(2)}g`;
+        }
+      });
+      
+      // Set up interval to send data to the server
+      sensorInterval = setInterval(() => {
+        if (socket && socket.connected) {
+          socket.emit('sensor-data', sensorData);
+        }
+      }, SEND_INTERVAL);
+      
+      // Update UI
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+      connectionInfo.textContent += '\nSensor monitoring started';
+    }
+    
+    // Stop sensor data collection
+    function stopSensors() {
+      if (sensorInterval) {
+        clearInterval(sensorInterval);
+        sensorInterval = null;
+      }
+      
+      // Remove event listeners if possible
+      window.removeEventListener('deviceorientation', () => {});
+      window.removeEventListener('devicemotion', () => {});
+      
+      // Update UI
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      connectionInfo.textContent += '\nSensor monitoring stopped';
+    }
+    
+    // Event listeners
+    startBtn.addEventListener('click', startSensors);
+    stopBtn.addEventListener('click', stopSensors);
+    
+    // Initialize
+    connectSocket();
+    checkSensorAvailability();
+  </script>
+</body>
+</html>

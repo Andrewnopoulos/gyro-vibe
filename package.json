@@ -1,0 +1,27 @@
+{
+  "name": "gyro-vibe",
+  "version": "1.0.0",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "nodemon server/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "websocket",
+    "gyroscope",
+    "accelerometer",
+    "mobile",
+    "sensor"
+  ],
+  "author": "",
+  "license": "ISC",
+  "description": "Web app that uses WebSockets to connect a mobile device to a PC and transmits gyroscope and accelerometer data",
+  "dependencies": {
+    "express": "^4.21.2",
+    "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  }
+}
