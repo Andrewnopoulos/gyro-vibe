@@ -1,3 +1,7 @@
+// Import Three.js modules
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
 // Connect to the Socket.IO server
 const socket = io();
 
@@ -36,9 +40,12 @@ const MAX_DATA_POINTS = 50;
 let scene, camera, renderer, phone;
 let lastGyroData = { alpha: 0, beta: 0, gamma: 0 };
 let animationFrameId = null;
+const defaultCameraPosition = { x: 3, y: 2, z: 3 };
+let orbitControls;
 
-// Calibration button
+// UI buttons
 const calibrateBtn = document.getElementById('calibrateBtn');
+const resetViewBtn = document.getElementById('resetViewBtn');
 
 // Generate QR code for mobile connection
 function generateQRCode() {
@@ -185,35 +192,79 @@ function init3DScene() {
   scene.background = new THREE.Color(0xf0f0f0);
 
   // Create camera
-  camera = new THREE.PerspectiveCamera(75, phone3dContainer.clientWidth / phone3dContainer.clientHeight, 0.1, 1000);
-  camera.position.z = 5;
+  camera = new THREE.PerspectiveCamera(60, phone3dContainer.clientWidth / phone3dContainer.clientHeight, 0.1, 1000);
+  camera.position.set(defaultCameraPosition.x, defaultCameraPosition.y, defaultCameraPosition.z);
+  camera.lookAt(0, 0, 0);
 
-  // Create renderer
+  // Create renderer with shadows enabled
   renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(phone3dContainer.clientWidth, phone3dContainer.clientHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   phone3dContainer.appendChild(renderer.domElement);
 
   // Add ambient light
   const ambientLight = new THREE.AmbientLight(0x404040, 1.5);
   scene.add(ambientLight);
 
-  // Add directional light
+  // Add directional light with shadows
   const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-  directionalLight.position.set(1, 1, 1);
+  directionalLight.position.set(5, 5, 5);
+  directionalLight.castShadow = true;
+  directionalLight.shadow.mapSize.width = 1024;
+  directionalLight.shadow.mapSize.height = 1024;
+  directionalLight.shadow.camera.near = 0.5;
+  directionalLight.shadow.camera.far = 20;
   scene.add(directionalLight);
+
+  // Add a subtle hemisphere light for better ambient lighting
+  const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x080820, 0.5);
+  scene.add(hemisphereLight);
+
+  // Add a grid helper to show the ground plane
+  const gridHelper = new THREE.GridHelper(10, 10, 0x888888, 0xcccccc);
+  scene.add(gridHelper);
+
+  // Add world coordinate axes for reference
+  const axesHelper = new THREE.AxesHelper(5);
+  scene.add(axesHelper);
 
   // Create phone model
   createPhoneModel();
 
-  // Add coordinate axes for reference
-  const axesHelper = new THREE.AxesHelper(5);
-  scene.add(axesHelper);
+  // Add a small info element explaining the colors
+  const axisInfoDiv = document.createElement('div');
+  axisInfoDiv.style.position = 'absolute';
+  axisInfoDiv.style.bottom = '10px';
+  axisInfoDiv.style.left = '10px';
+  axisInfoDiv.style.backgroundColor = 'rgba(0,0,0,0.5)';
+  axisInfoDiv.style.color = 'white';
+  axisInfoDiv.style.padding = '5px';
+  axisInfoDiv.style.fontSize = '12px';
+  axisInfoDiv.style.borderRadius = '3px';
+  axisInfoDiv.innerHTML = 'Phone axes: <span style="color:red">X</span>, <span style="color:green">Y</span>, <span style="color:blue">Z</span>';
+  phone3dContainer.appendChild(axisInfoDiv);
 
+  // Add orbit controls for interactive viewing
+  orbitControls = new OrbitControls(camera, renderer.domElement);
+  orbitControls.enableDamping = true;
+  orbitControls.dampingFactor = 0.25;
+  orbitControls.screenSpacePanning = false;
+  orbitControls.maxPolarAngle = Math.PI;
+  orbitControls.minDistance = 2;
+  orbitControls.maxDistance = 10;
+  
   // Start animation loop
   animate();
 
   // Handle window resize
   window.addEventListener('resize', onWindowResize, false);
+  
+  // Add click handler for reset view button
+  resetViewBtn.addEventListener('click', resetCameraView);
+  
+  // Debug message to confirm initialization
+  console.log('3D scene initialized successfully');
 }
 
 // Create phone model
@@ -223,6 +274,10 @@ function createPhoneModel() {
   const height = 1.6;
   const depth = 0.1;
 
+  // Create phone group
+  phone = new THREE.Group();
+  scene.add(phone);
+
   // Create phone body
   const phoneGeometry = new THREE.BoxGeometry(width, height, depth);
   const phoneMaterial = new THREE.MeshPhongMaterial({ 
@@ -230,10 +285,10 @@ function createPhoneModel() {
     specular: 0x111111,
     shininess: 30
   });
-  phone = new THREE.Mesh(phoneGeometry, phoneMaterial);
-  scene.add(phone);
+  const phoneBody = new THREE.Mesh(phoneGeometry, phoneMaterial);
+  phone.add(phoneBody);
 
-  // Add screen to the phone
+  // Add screen to the phone (front side)
   const screenGeometry = new THREE.BoxGeometry(width * 0.9, height * 0.9, depth * 0.1);
   const screenMaterial = new THREE.MeshBasicMaterial({ color: 0x3355ff });
   const screen = new THREE.Mesh(screenGeometry, screenMaterial);
@@ -246,12 +301,107 @@ function createPhoneModel() {
   const lens = new THREE.Mesh(lensGeometry, lensMaterial);
   lens.position.set(0, height * 0.35, depth / 2 + 0.01);
   phone.add(lens);
+  
+  // Add home button at the bottom to indicate orientation
+  const homeButtonGeometry = new THREE.CircleGeometry(0.08, 32);
+  const homeButtonMaterial = new THREE.MeshBasicMaterial({ color: 0x555555 });
+  const homeButton = new THREE.Mesh(homeButtonGeometry, homeButtonMaterial);
+  homeButton.position.set(0, -height * 0.4, depth / 2 + 0.01);
+  phone.add(homeButton);
+  
+  // Add text indicator for front side
+  const frontTextGeometry = new THREE.BoxGeometry(width * 0.5, height * 0.1, depth * 0.05);
+  const frontTextMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const frontText = new THREE.Mesh(frontTextGeometry, frontTextMaterial);
+  frontText.position.set(0, 0, depth / 2 + 0.02);
+  phone.add(frontText);
+  
+  // Add indicator for the top of the phone
+  const topIndicatorGeometry = new THREE.BoxGeometry(width * 0.3, height * 0.05, depth * 0.05);
+  const topIndicatorMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const topIndicator = new THREE.Mesh(topIndicatorGeometry, topIndicatorMaterial);
+  topIndicator.position.set(0, height * 0.45, depth / 2 + 0.02);
+  phone.add(topIndicator);
+
+  // Add X, Y, Z axes indicators for better visualization
+  const axisLength = 0.4;
+  
+  // X axis (red) - points right from the phone's perspective
+  const xAxisGeometry = new THREE.CylinderGeometry(0.02, 0.02, axisLength, 8);
+  const xAxisMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+  const xAxis = new THREE.Mesh(xAxisGeometry, xAxisMaterial);
+  xAxis.rotation.z = Math.PI / 2; // Rotate to point along X axis
+  xAxis.position.set(axisLength/2, 0, 0);
+  phone.add(xAxis);
+  
+  // Y axis (green) - points up from the phone's perspective
+  const yAxisGeometry = new THREE.CylinderGeometry(0.02, 0.02, axisLength, 8);
+  const yAxisMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+  const yAxis = new THREE.Mesh(yAxisGeometry, yAxisMaterial);
+  yAxis.position.set(0, axisLength/2, 0);
+  phone.add(yAxis);
+  
+  // Z axis (blue) - points out from the phone's screen
+  const zAxisGeometry = new THREE.CylinderGeometry(0.02, 0.02, axisLength, 8);
+  const zAxisMaterial = new THREE.MeshBasicMaterial({ color: 0x0000ff });
+  const zAxis = new THREE.Mesh(zAxisGeometry, zAxisMaterial);
+  zAxis.rotation.x = Math.PI / 2; // Rotate to point along Z axis
+  zAxis.position.set(0, 0, axisLength/2);
+  phone.add(zAxis);
+  
+  console.log('Phone model created successfully');
 }
 
 // Animation loop
 function animate() {
   animationFrameId = requestAnimationFrame(animate);
+  
+  // Update orbit controls
+  if (orbitControls) {
+    orbitControls.update();
+  }
+  
   renderer.render(scene, camera);
+}
+
+// Function to reset camera view to default position
+function resetCameraView() {
+  if (camera && orbitControls) {
+    // Animate the camera back to original position
+    const duration = 1000; // Duration in milliseconds
+    const startTime = Date.now();
+    const startPosition = { x: camera.position.x, y: camera.position.y, z: camera.position.z };
+    
+    function animateReset() {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      // Use easing function for smoother motion
+      const easeProgress = 1 - Math.pow(1 - progress, 3); // Cubic ease-out
+      
+      // Interpolate position
+      camera.position.set(
+        startPosition.x + (defaultCameraPosition.x - startPosition.x) * easeProgress,
+        startPosition.y + (defaultCameraPosition.y - startPosition.y) * easeProgress,
+        startPosition.z + (defaultCameraPosition.z - startPosition.z) * easeProgress
+      );
+      
+      // Look at the center
+      camera.lookAt(0, 0, 0);
+      
+      // Reset orbit controls target and update
+      orbitControls.target.set(0, 0, 0);
+      orbitControls.update();
+      
+      // Continue animation if not finished
+      if (progress < 1) {
+        requestAnimationFrame(animateReset);
+      }
+    }
+    
+    // Start animation
+    animateReset();
+  }
 }
 
 // Update phone orientation based on gyroscope data
@@ -260,23 +410,32 @@ function updatePhoneOrientation(gyroData) {
 
   // Convert degrees to radians
   const degToRad = Math.PI / 180;
-
-  // Apply rotations in the correct order
-  phone.rotation.set(0, 0, 0); // Reset rotation
   
-  // Apply rotations in ZXY order to match device orientation
-  // Alpha is rotation around Z axis (compass direction)
-  // Beta is front-to-back tilt
-  // Gamma is left-to-right tilt
+  // Create a quaternion for our rotation
+  const quaternion = new THREE.Quaternion();
   
-  // First rotate around Y (beta)
-  phone.rotateX(gyroData.beta * degToRad);
+  // We'll use an intermediary Euler object to convert from gyro angles to quaternion
+  // The order 'YXZ' means we apply:
+  // 1. Y rotation (gamma - left/right tilt)
+  // 2. X rotation (beta - front/back tilt)
+  // 3. Z rotation (alpha - compass direction)
+  const euler = new THREE.Euler(0, 0, 0, 'YXZ');
   
-  // Then rotate around X (gamma)
-  phone.rotateY(gyroData.gamma * degToRad);
+  // Apply the rotations:
+  // - Beta: Front-to-back tilt (rotate around X)
+  // - Gamma: Left-to-right tilt (rotate around Y) - negate to fix reversed tilt
+  // - Alpha: Compass direction (rotate around Z) - negate as in original code
+  euler.set(
+    gyroData.beta * degToRad,
+    -gyroData.gamma * degToRad, // Negate gamma to fix reversed tilt
+    -gyroData.alpha * degToRad,
+  );
   
-  // Finally rotate around Z (alpha)
-  phone.rotateZ(-gyroData.alpha * degToRad);
+  // Convert Euler angles to quaternion
+  quaternion.setFromEuler(euler);
+  
+  // Apply the quaternion rotation to the phone
+  phone.quaternion.copy(quaternion);
 }
 
 // Handle window resize
@@ -377,14 +536,6 @@ socket.on('calibration-complete', (calibrationData) => {
   }, 3000);
 });
 
-// Send calibration request to mobile device
-function requestCalibration() {
-  if (socket && socket.connected) {
-    socket.emit('request-calibration');
-    deviceStatus.textContent = 'Calibrating sensors...';
-  }
-}
-
 // Handle calibration failure
 socket.on('calibration-failed', (data) => {
   deviceStatus.textContent = `Mobile device connected - Calibration failed`;
@@ -412,5 +563,16 @@ socket.on('calibration-failed', (data) => {
   }, 3000);
 });
 
+// Send calibration request to mobile device
+function requestCalibration() {
+  if (socket && socket.connected) {
+    socket.emit('request-calibration');
+    deviceStatus.textContent = 'Calibrating sensors...';
+  }
+}
+
 // Calibrate button event listener
 calibrateBtn.addEventListener('click', requestCalibration);
+
+// Log initialization to help with debugging
+console.log('Client script loaded and initialized');
