@@ -9,7 +9,6 @@
       font-family: Arial, sans-serif;
       margin: 0;
       padding: 20px;
-      touch-action: none;
       background-color: #f5f5f5;
     }
     .container {
@@ -67,7 +66,6 @@
       background-color: #007bff;
       color: white;
       font-weight: bold;
-      touch-action: manipulation;
       width: 48%;
     }
     #startBtn {
@@ -138,6 +136,10 @@
     let accelerometer = null;
     let sensorInterval = null;
     const SEND_INTERVAL = 50; // Send data every 50ms
+    
+    // Event handler references
+    let handleOrientation = null;
+    let handleMotion = null;
     
     // Connect to Socket.IO server
     function connectSocket() {
@@ -265,7 +267,7 @@
       let accelReceived = false;
       
       // Listen for device orientation events (gyroscope)
-      const handleOrientation = (event) => {
+      handleOrientation = (event) => {
         if (!gyroReceived) {
           gyroReceived = true;
           connectionInfo.textContent += '\nGyroscope events receiving: YES';
@@ -284,7 +286,7 @@ Gamma: ${sensorData.gyro.gamma.toFixed(2)}°`;
       connectionInfo.textContent += '\nGyroscope event listener added';
       
       // Listen for device motion events (accelerometer)
-      const handleMotion = (event) => {
+      handleMotion = (event) => {
         if (!accelReceived) {
           accelReceived = true;
           connectionInfo.textContent += '\nAccelerometer events receiving: YES';
@@ -336,9 +338,9 @@ Z: ${sensorData.accel.z.toFixed(2)}g`;
         sensorInterval = null;
       }
       
-      // Remove event listeners if possible
-      window.removeEventListener('deviceorientation', () => {});
-      window.removeEventListener('devicemotion', () => {});
+      // Remove event listeners
+      window.removeEventListener('deviceorientation', handleOrientation);
+      window.removeEventListener('devicemotion', handleMotion);
       
       // Update UI
       startBtn.disabled = false;
