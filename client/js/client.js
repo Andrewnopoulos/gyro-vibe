@@ -232,13 +232,19 @@ function generateQRCode() {
     httpUrl = urlToUse;
     httpsUrl = urlToUse;
   } else {
+    let debug_host = host
+
+    if (debug_host.includes('localhost')) {
+      debug_host = debug_host.replace('localhost', '192.168.1.127');
+    }
+
     // For local development, handle HTTP/HTTPS differences
-    httpUrl = `http://${host}/mobile?session=${sessionId}`;
+    httpUrl = `http://${debug_host}/mobile?session=${sessionId}`;
     
     // For HTTPS, we need to consider the potential port change (3000 -> 3443)
-    let httpsHost = host;
-    if (host.includes(':3000')) {
-      httpsHost = host.replace(':3000', ':3443');
+    let httpsHost = debug_host;
+    if (httpsHost.includes(':3000')) {
+      httpsHost = httpsHost.replace(':3000', ':3443');
     }
     httpsUrl = `https://${httpsHost}/mobile?session=${sessionId}`;
     
