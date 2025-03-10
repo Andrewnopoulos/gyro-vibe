@@ -79,12 +79,23 @@
       margin-top: 10px;
       color: #666;
     }
+    .session-info {
+      padding: 10px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+      background-color: #e2f4ff;
+      border: 1px solid #a8d7ff;
+      color: #0055aa;
+      font-size: 14px;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>Gyro-Vibe Mobile</h1>
     
+    <div id="sessionInfo" class="session-info">Connected to session: <span id="sessionId">None</span></div>
     <div id="connectionStatus" class="status disconnected">Disconnected</div>
     
     <div class="controls">
@@ -125,20 +136,38 @@
   <script>
     // DOM elements
     const connectionStatus = document.getElementById('connectionStatus');
+    const sessionInfoDisplay = document.getElementById('sessionInfo');
+    const sessionIdDisplay = document.getElementById('sessionId');
     const gyroData = document.getElementById('gyroData');
     const accelData = document.getElementById('accelData');
     const connectionInfo = document.getElementById('connectionInfo');
     const startBtn = document.getElementById('startBtn');
     const stopBtn = document.getElementById('stopBtn');
+    const calibrateBtn = document.getElementById('calibrateBtn');
     
-    // Socket.IO connection
+    // Socket.IO connection for signaling
     let socket = null;
+    
+    // WebRTC variables
+    let peerConnection = null;
+    let dataChannel = null;
+    let desktopSocketId = null;
+    let sessionId = null;
+    let connectedWithWebRTC = false;
+    
+    // RTC configuration with standard STUN servers
+    const rtcConfig = {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+      ]
+    };
     
     // Sensor access variables
     let gyroscope = null;
     let accelerometer = null;
     let sensorInterval = null;
-    const SEND_INTERVAL = 50; // Send data every 50ms
+    const SEND_INTERVAL = 33; // Send data every 33ms (approximately 30fps) - reduced from 50ms for lower latency
     
     // Event handler references
     let handleOrientation = null;
@@ -158,38 +187,259 @@
       }
     };
     
-    // Connect to Socket.IO server
+    // Parse URL parameters to get session ID
+    function getSessionIdFromUrl() {
+      const urlParams = new URLSearchParams(window.location.search);
+      return urlParams.get('session');
+    }
+    
+    // Initialize WebRTC
+    function initWebRTC() {
+      // Create a new RTCPeerConnection
+      peerConnection = new RTCPeerConnection(rtcConfig);
+      
+      // Set up event handlers for the peer connection
+      peerConnection.onicecandidate = handleICECandidate;
+      peerConnection.onconnectionstatechange = handleConnectionStateChange;
+      peerConnection.ondatachannel = handleDataChannel;
+      
+      connectionInfo.textContent += '\nWebRTC peer connection initialized';
+    }
+    
+    // Handle ICE candidate events
+    function handleICECandidate(event) {
+      if (event.candidate) {
+        connectionInfo.textContent += '\nGenerated ICE candidate';
+        
+        // Send the ICE candidate to the desktop via the signaling server
+        socket.emit('webrtc-ice-candidate', {
+          targetId: desktopSocketId,
+          candidate: event.candidate
+        });
+      }
+    }
+    
+    // Handle connection state changes
+    function handleConnectionStateChange(event) {
+      connectionInfo.textContent += `\nWebRTC connection state: ${peerConnection.connectionState}`;
+      
+      if (peerConnection.connectionState === 'connected') {
+        connectedWithWebRTC = true;
+        connectionStatus.textContent = 'Connected via WebRTC';
+        connectionStatus.className = 'status connected';
+        calibrateBtn.disabled = false;
+        
+        // Create a data channel if we're the answerer and don't have one yet
+        if (!dataChannel) {
+          createDataChannel();
+        }
+      } else if (peerConnection.connectionState === 'disconnected' || 
+                 peerConnection.connectionState === 'failed' ||
+                 peerConnection.connectionState === 'closed') {
+        connectedWithWebRTC = false;
+        connectionStatus.textContent = 'WebRTC connection lost';
+        connectionStatus.className = 'status disconnected';
+        calibrateBtn.disabled = true;
+        stopSensors();
+      }
+    }
+    
+    // Handle incoming data channels
+    function handleDataChannel(event) {
+      connectionInfo.textContent += '\nReceived data channel from desktop';
+      setupDataChannel(event.channel);
+    }
+    
+    // Create data channel
+    function createDataChannel() {
+      dataChannel = peerConnection.createDataChannel('sensorData', {
+        ordered: false,  // Use unordered delivery for lower latency
+        maxRetransmits: 0 // Don't retransmit lost packets
+      });
+      
+      // Set up data channel event handlers
+      setupDataChannel(dataChannel);
+    }
+    
+    // Set up data channel event handlers
+    function setupDataChannel(channel) {
+      dataChannel = channel;
+      
+      dataChannel.onopen = () => {
+        connectionInfo.textContent += '\nData channel is open';
+      };
+      
+      dataChannel.onclose = () => {
+        connectionInfo.textContent += '\nData channel closed';
+        stopSensors();
+      };
+      
+      dataChannel.onerror = (error) => {
+        connectionInfo.textContent += '\nData channel error: ' + error.message;
+      };
+      
+      dataChannel.onmessage = (event) => {
+        // Handle incoming messages from desktop
+        try {
+          const message = JSON.parse(event.data);
+          
+          if (message.type === 'request-calibration') {
+            connectionInfo.textContent += '\nCalibration request received via WebRTC';
+            if (sensorInterval) {
+              calibrateSensors();
+            } else {
+              connectionInfo.textContent += '\nCalibration requested but sensors are not active. Please start sensors first.';
+              sendCalibrationFailed('Sensors not active');
+            }
+          }
+        } catch (e) {
+          connectionInfo.textContent += '\nError parsing message: ' + e.message;
+        }
+      };
+    }
+    
+    // Create WebRTC answer
+    async function createAnswer(offer) {
+      try {
+        connectionInfo.textContent += '\nCreating WebRTC answer';
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+        
+        // Send the answer to the desktop via the signaling server
+        socket.emit('webrtc-answer', {
+          targetId: desktopSocketId,
+          answer: answer
+        });
+        
+        connectionInfo.textContent += '\nSent WebRTC answer to desktop';
+      } catch (e) {
+        connectionInfo.textContent += '\nError creating answer: ' + e.message;
+      }
+    }
+    
+    // Connect to Socket.IO server for signaling
     function connectSocket() {
-      connectionStatus.textContent = 'Connecting...';
+      // Get session ID from URL
+      sessionId = getSessionIdFromUrl();
+      
+      if (!sessionId) {
+        connectionStatus.textContent = 'No session ID provided';
+        connectionInfo.textContent = 'Error: No session ID found in URL. Please scan the QR code from the desktop client.';
+        sessionInfoDisplay.style.backgroundColor = '#ffecec';
+        sessionInfoDisplay.style.borderColor = '#ffb1b1';
+        sessionInfoDisplay.style.color = '#a50000';
+        sessionIdDisplay.textContent = 'Missing';
+        return;
+      }
+      
+      // Display session ID
+      sessionIdDisplay.textContent = sessionId;
+      
+      connectionStatus.textContent = 'Connecting to signaling server...';
       connectionStatus.className = 'status connecting';
       
       socket = io();
       
       socket.on('connect', () => {
-        connectionStatus.textContent = 'Connected';
-        connectionStatus.className = 'status connected';
-        connectionInfo.textContent = `Socket ID: ${socket.id}\nConnected to server`;
+        connectionStatus.textContent = 'Connected to signaling server';
+        connectionStatus.className = 'status connecting';
+        connectionInfo.textContent = `Socket ID: ${socket.id}\nConnected to signaling server\nJoining session: ${sessionId}`;
         
-        // Identify as a mobile device
-        socket.emit('mobile-connect');
+        // Join the session with the provided session ID
+        socket.emit('join-session', { sessionId });
       });
       
       socket.on('disconnect', () => {
-        connectionStatus.textContent = 'Disconnected';
+        connectionStatus.textContent = 'Disconnected from signaling server';
         connectionStatus.className = 'status disconnected';
-        connectionInfo.textContent = 'Disconnected from server';
+        connectionInfo.textContent += '\nDisconnected from signaling server';
+        
+        // Close WebRTC connection if it exists
+        if (peerConnection) {
+          peerConnection.close();
+          peerConnection = null;
+        }
+        if (dataChannel) {
+          dataChannel.close();
+          dataChannel = null;
+        }
+        connectedWithWebRTC = false;
+        
         stopSensors();
       });
       
-      // Handle calibration request from desktop
+      // Handle session joining result
+      socket.on('session-joined', (data) => {
+        desktopSocketId = data.desktopSocketId;
+        connectionInfo.textContent += `\nJoined session with desktop: ${desktopSocketId}`;
+        connectionStatus.textContent = 'Establishing WebRTC connection...';
+        
+        // Initialize WebRTC
+        initWebRTC();
+      });
+      
+      // Handle session errors
+      socket.on('session-error', (data) => {
+        connectionStatus.textContent = `Session error: ${data.error}`;
+        connectionStatus.className = 'status disconnected';
+        connectionInfo.textContent += `\nSession error: ${data.error}`;
+      });
+      
+      // Handle WebRTC offer from desktop
+      socket.on('webrtc-offer', async (data) => {
+        connectionInfo.textContent += '\nReceived WebRTC offer from desktop';
+        
+        if (!peerConnection) {
+          initWebRTC();
+        }
+        
+        // Create and send answer
+        await createAnswer(data.offer);
+      });
+      
+      // Handle WebRTC ICE candidates
+      socket.on('webrtc-ice-candidate', async (data) => {
+        connectionInfo.textContent += '\nReceived ICE candidate from desktop';
+        
+        try {
+          if (peerConnection) {
+            await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+          }
+        } catch (e) {
+          connectionInfo.textContent += '\nError adding ICE candidate: ' + e.message;
+        }
+      });
+      
+      // Handle desktop client disconnection
+      socket.on('desktop-disconnected', () => {
+        connectionStatus.textContent = 'Desktop disconnected';
+        connectionStatus.className = 'status disconnected';
+        connectionInfo.textContent += '\nDesktop client disconnected';
+        
+        // Close WebRTC connection
+        if (peerConnection) {
+          peerConnection.close();
+          peerConnection = null;
+        }
+        if (dataChannel) {
+          dataChannel.close();
+          dataChannel = null;
+        }
+        connectedWithWebRTC = false;
+        
+        stopSensors();
+      });
+      
+      // Handle calibration request through signaling server (fallback)
       socket.on('request-calibration', () => {
+        connectionInfo.textContent += '\nCalibration request received via signaling';
         // Only calibrate if sensors are active
         if (sensorInterval) {
           calibrateSensors();
         } else {
           connectionInfo.textContent += '\nCalibration requested but sensors are not active. Please start sensors first.';
-          // Notify desktop that calibration failed
-          socket.emit('calibration-failed', { reason: 'Sensors not active' });
+          sendCalibrationFailed('Sensors not active');
         }
       });
     }
@@ -349,9 +599,13 @@ Z: ${sensorData.accel.z.toFixed(2)}g`;
         }
       }, 2000);
       
-      // Set up interval to send data to the server
+      // Set up interval to send data via WebRTC data channel when possible
       sensorInterval = setInterval(() => {
-        if (socket && socket.connected) {
+        if (connectedWithWebRTC && dataChannel && dataChannel.readyState === 'open') {
+          // Use WebRTC for lower latency
+          dataChannel.send(JSON.stringify(sensorData));
+        } else if (socket && socket.connected) {
+          // Fallback to signaling server
           socket.emit('sensor-data', sensorData);
         }
       }, SEND_INTERVAL);
@@ -375,6 +629,34 @@ Z: ${sensorData.accel.z.toFixed(2)}g`;
       // Update UI
       updateUIStopped();
       connectionInfo.textContent += '\nSensor monitoring stopped';
+    }
+    
+    // Send calibration success via appropriate channel
+    function sendCalibrationComplete(calibrationData) {
+      if (connectedWithWebRTC && dataChannel && dataChannel.readyState === 'open') {
+        // Use WebRTC for lower latency
+        dataChannel.send(JSON.stringify({
+          type: 'calibration-complete',
+          ...calibrationData
+        }));
+      } else if (socket && socket.connected) {
+        // Fallback to signaling server
+        socket.emit('calibration-complete', calibrationData);
+      }
+    }
+    
+    // Send calibration failure via appropriate channel
+    function sendCalibrationFailed(reason) {
+      if (connectedWithWebRTC && dataChannel && dataChannel.readyState === 'open') {
+        // Use WebRTC for lower latency
+        dataChannel.send(JSON.stringify({
+          type: 'calibration-failed',
+          reason: reason
+        }));
+      } else if (socket && socket.connected) {
+        // Fallback to signaling server
+        socket.emit('calibration-failed', { reason: reason });
+      }
     }
     
     // Calibrate sensors
@@ -424,9 +706,7 @@ Gyro offsets: α=${calibration.gyro.alpha.toFixed(2)}° β=${calibration.gyro.be
 Accel offsets: x=${calibration.accel.x.toFixed(2)}g y=${calibration.accel.y.toFixed(2)}g z=${calibration.accel.z.toFixed(2)}g`;
         
         // Notify the desktop client
-        if (socket && socket.connected) {
-          socket.emit('calibration-complete', calibration);
-        }
+        sendCalibrationComplete(calibration);
       }, 500); // Wait for 500ms to capture the values
     }
     

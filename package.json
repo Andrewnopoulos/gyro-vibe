@@ -22,7 +22,8 @@
   "description": "Web app that uses WebSockets to connect a mobile device to a PC and transmits gyroscope and accelerometer data",
   "dependencies": {
     "express": "^4.21.2",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.1",
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.9"

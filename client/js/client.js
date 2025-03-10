@@ -2,8 +2,23 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-// Connect to the Socket.IO server using the global variable
+// Connect to the Socket.IO server for signaling
 const socket = window.SocketIOLib();
+
+// WebRTC variables
+let peerConnection = null;
+let dataChannel = null;
+let sessionId = null;
+let mobileSocketId = null;
+let connectedWithWebRTC = false;
+
+// RTC configuration with standard STUN servers
+const rtcConfig = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+  ]
+};
 
 // DOM elements
 const deviceStatus = document.getElementById('deviceStatus');
@@ -47,6 +62,151 @@ let orbitControls;
 const calibrateBtn = document.getElementById('calibrateBtn');
 const resetViewBtn = document.getElementById('resetViewBtn');
 
+// Initialize WebRTC peer connection
+function initWebRTC() {
+  // Create a new RTCPeerConnection
+  peerConnection = new RTCPeerConnection(rtcConfig);
+  
+  // Set up event handlers for the peer connection
+  peerConnection.onicecandidate = handleICECandidate;
+  peerConnection.onconnectionstatechange = handleConnectionStateChange;
+  peerConnection.ondatachannel = handleDataChannel;
+  
+  console.log('WebRTC peer connection initialized');
+  
+  // Create the data channel for sending calibration requests
+  dataChannel = peerConnection.createDataChannel('sensorData', {
+    ordered: false,  // Use unordered delivery for lower latency
+    maxRetransmits: 0 // Don't retransmit lost packets
+  });
+  
+  // Set up data channel event handlers
+  setupDataChannel(dataChannel);
+}
+
+// Handle ICE candidate events
+function handleICECandidate(event) {
+  if (event.candidate) {
+    console.log('Sending ICE candidate');
+    // Send the ICE candidate to the peer via the signaling server
+    socket.emit('webrtc-ice-candidate', {
+      targetId: mobileSocketId,
+      candidate: event.candidate
+    });
+  }
+}
+
+// Handle connection state changes
+function handleConnectionStateChange(event) {
+  console.log('WebRTC connection state:', peerConnection.connectionState);
+  
+  if (peerConnection.connectionState === 'connected') {
+    connectedWithWebRTC = true;
+    deviceStatus.textContent = 'Mobile device connected via WebRTC';
+    deviceStatus.className = 'connected';
+    calibrateBtn.disabled = false;
+    console.log('WebRTC connection established successfully');
+  } else if (peerConnection.connectionState === 'disconnected' || 
+             peerConnection.connectionState === 'failed' ||
+             peerConnection.connectionState === 'closed') {
+    connectedWithWebRTC = false;
+    deviceStatus.textContent = 'WebRTC connection lost';
+    deviceStatus.className = 'disconnected';
+    calibrateBtn.disabled = true;
+    console.log('WebRTC connection lost');
+  }
+}
+
+// Handle incoming data channels
+function handleDataChannel(event) {
+  console.log('Data channel received from peer');
+  setupDataChannel(event.channel);
+}
+
+// Set up data channel event handlers
+function setupDataChannel(channel) {
+  channel.onopen = () => {
+    console.log('Data channel is open');
+    deviceStatus.textContent = 'Mobile device connected via WebRTC';
+    deviceStatus.className = 'connected';
+    calibrateBtn.disabled = false;
+  };
+  
+  channel.onclose = () => {
+    console.log('Data channel closed');
+    deviceStatus.textContent = 'WebRTC connection lost';
+    deviceStatus.className = 'disconnected';
+    calibrateBtn.disabled = true;
+  };
+  
+  channel.onerror = (error) => {
+    console.error('Data channel error:', error);
+  };
+  
+  channel.onmessage = (event) => {
+    // Handle incoming messages from the mobile device
+    handleSensorData(event.data);
+  };
+}
+
+// Handle incoming sensor data from WebRTC
+function handleSensorData(dataString) {
+  try {
+    const data = JSON.parse(dataString);
+    
+    // Update raw data display
+    rawData.textContent = JSON.stringify(data, null, 2);
+    
+    if (data.gyro) {
+      // Update gyroscope data display
+      gyroData.textContent = `Alpha: ${data.gyro.alpha.toFixed(2)}°
+Beta: ${data.gyro.beta.toFixed(2)}°
+Gamma: ${data.gyro.gamma.toFixed(2)}°`;
+      
+      // Add to data history
+      addDataPoint('gyro', data.gyro);
+      
+      // Update 3D phone model orientation
+      lastGyroData = data.gyro;
+      updatePhoneOrientation(lastGyroData);
+    }
+    
+    if (data.accel) {
+      // Update accelerometer data display
+      accelData.textContent = `X: ${data.accel.x.toFixed(2)}g
+Y: ${data.accel.y.toFixed(2)}g
+Z: ${data.accel.z.toFixed(2)}g`;
+      
+      // Add to data history
+      addDataPoint('accel', data.accel);
+    }
+    
+    // Update visualizations
+    updateVisualizations();
+  } catch (e) {
+    console.error('Error parsing WebRTC sensor data:', e);
+  }
+}
+
+// Create WebRTC offer
+async function createOffer() {
+  if (!peerConnection) return;
+  
+  try {
+    console.log('Creating WebRTC offer');
+    const offer = await peerConnection.createOffer();
+    await peerConnection.setLocalDescription(offer);
+    
+    // Send the offer to the mobile client through the signaling server
+    socket.emit('webrtc-offer', {
+      targetId: mobileSocketId,
+      offer: offer
+    });
+  } catch (e) {
+    console.error('Error creating WebRTC offer:', e);
+  }
+}
+
 // Generate QR code for mobile connection
 function generateQRCode() {
   const protocol = window.location.protocol;
@@ -54,26 +214,33 @@ function generateQRCode() {
   const currentUrl = window.location.href;
   const isRailway = currentUrl.includes('railway.app');
   
+  if (!sessionId) {
+    console.error('Session ID not available for QR code');
+    qrcodeDisplay.innerHTML = 'Error: Session not created yet';
+    return;
+  }
+  
   let urlToUse;
   let httpUrl;
   let httpsUrl;
   
+  // Add session ID to the URL as a query parameter
   if (isRailway) {
     // On Railway, we're already on HTTPS with the correct domain
-    urlToUse = `${protocol}//${host}/mobile`;
+    urlToUse = `${protocol}//${host}/mobile?session=${sessionId}`;
     // Use the same URL for display
     httpUrl = urlToUse;
     httpsUrl = urlToUse;
   } else {
     // For local development, handle HTTP/HTTPS differences
-    httpUrl = `http://${host}/mobile`;
+    httpUrl = `http://${host}/mobile?session=${sessionId}`;
     
     // For HTTPS, we need to consider the potential port change (3000 -> 3443)
     let httpsHost = host;
     if (host.includes(':3000')) {
       httpsHost = host.replace(':3000', ':3443');
     }
-    httpsUrl = `https://${httpsHost}/mobile`;
+    httpsUrl = `https://${httpsHost}/mobile?session=${sessionId}`;
     
     urlToUse = protocol === 'https:' ? httpsUrl : httpUrl;
   }
@@ -488,62 +655,109 @@ function onWindowResize() {
   }
 }
 
-// Socket.IO event handlers
+// Socket.IO event handlers for WebRTC signaling
 socket.on('connect', () => {
-  console.log('Connected to server with ID:', socket.id);
-  generateQRCode();
+  console.log('Connected to signaling server with ID:', socket.id);
+  // Register as a desktop client
+  socket.emit('register-desktop');
+  // Initialize UI elements
   initCanvas(gyroCtx);
   initCanvas(accelCtx);
   init3DScene();
 });
 
-socket.on('mobile-connected', (socketId) => {
-  deviceStatus.textContent = `Mobile device connected (${socketId})`;
-  deviceStatus.className = 'connected';
-  calibrateBtn.disabled = false;
+// Receive session ID from server
+socket.on('session-created', (data) => {
+  sessionId = data.sessionId;
+  console.log('Session created with ID:', sessionId);
+  // Now we can generate the QR code with the session ID
+  generateQRCode();
+  
+  // Update status
+  deviceStatus.textContent = 'Waiting for mobile device to connect...';
+  deviceStatus.className = 'disconnected';
 });
 
-socket.on('device-disconnected', (socketId) => {
-  deviceStatus.textContent = 'No mobile device connected';
+// Mobile client has joined our session
+socket.on('mobile-joined', (data) => {
+  console.log('Mobile device joined with socket ID:', data.mobileSocketId);
+  mobileSocketId = data.mobileSocketId;
+  deviceStatus.textContent = 'Mobile connected, establishing WebRTC...';
+  deviceStatus.className = 'connecting';
+  
+  // Initialize WebRTC
+  initWebRTC();
+  
+  // Create and send offer to mobile
+  createOffer();
+});
+
+// Mobile client disconnected
+socket.on('mobile-disconnected', () => {
+  console.log('Mobile device disconnected');
+  deviceStatus.textContent = 'Mobile device disconnected';
   deviceStatus.className = 'disconnected';
   calibrateBtn.disabled = true;
+  
+  // Clean up WebRTC connection
+  if (peerConnection) {
+    peerConnection.close();
+    peerConnection = null;
+  }
+  if (dataChannel) {
+    dataChannel.close();
+    dataChannel = null;
+  }
+  connectedWithWebRTC = false;
 });
 
-socket.on('sensor-data', (data) => {
-  // Update raw data display
-  rawData.textContent = JSON.stringify(data, null, 2);
+// WebRTC signaling - handle offer from mobile
+socket.on('webrtc-offer', async (data) => {
+  console.log('Received WebRTC offer from mobile');
   
-  if (data.gyro) {
-    // Update gyroscope data display
-    gyroData.textContent = `Alpha: ${data.gyro.alpha.toFixed(2)}°
-Beta: ${data.gyro.beta.toFixed(2)}°
-Gamma: ${data.gyro.gamma.toFixed(2)}°`;
-    
-    // Add to data history
-    addDataPoint('gyro', data.gyro);
-    
-    // Update 3D phone model orientation
-    lastGyroData = data.gyro;
-    updatePhoneOrientation(lastGyroData);
+  if (!peerConnection) {
+    initWebRTC();
   }
   
-  if (data.accel) {
-    // Update accelerometer data display
-    accelData.textContent = `X: ${data.accel.x.toFixed(2)}g
-Y: ${data.accel.y.toFixed(2)}g
-Z: ${data.accel.z.toFixed(2)}g`;
+  try {
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+    const answer = await peerConnection.createAnswer();
+    await peerConnection.setLocalDescription(answer);
     
-    // Add to data history
-    addDataPoint('accel', data.accel);
+    socket.emit('webrtc-answer', {
+      targetId: data.sourceId,
+      answer: answer
+    });
+  } catch (e) {
+    console.error('Error handling WebRTC offer:', e);
   }
-  
-  // Update visualizations
-  updateVisualizations();
 });
 
-// Handle calibration complete event from mobile
+// WebRTC signaling - handle answer from mobile
+socket.on('webrtc-answer', async (data) => {
+  console.log('Received WebRTC answer from mobile');
+  
+  try {
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+  } catch (e) {
+    console.error('Error handling WebRTC answer:', e);
+  }
+});
+
+// WebRTC signaling - handle ICE candidates
+socket.on('webrtc-ice-candidate', async (data) => {
+  console.log('Received ICE candidate from mobile');
+  
+  try {
+    await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+  } catch (e) {
+    console.error('Error adding ICE candidate:', e);
+  }
+});
+
+// Handle calibration complete
 socket.on('calibration-complete', (calibrationData) => {
-  deviceStatus.textContent = `Mobile device connected - Calibrated!`;
+  deviceStatus.textContent = `Mobile device connected via WebRTC - Calibrated!`;
   deviceStatus.className = 'connected';
   
   // Reset data history after calibration
@@ -604,11 +818,18 @@ socket.on('calibration-failed', (data) => {
   }, 3000);
 });
 
-// Send calibration request to mobile device
+// Send calibration request to mobile device via WebRTC
 function requestCalibration() {
-  if (socket && socket.connected) {
-    socket.emit('request-calibration');
-    deviceStatus.textContent = 'Calibrating sensors...';
+  if (connectedWithWebRTC && dataChannel && dataChannel.readyState === 'open') {
+    // Send via WebRTC for lower latency
+    dataChannel.send(JSON.stringify({ type: 'request-calibration' }));
+    deviceStatus.textContent = 'Calibrating sensors via WebRTC...';
+  } else if (socket && socket.connected && mobileSocketId) {
+    // Fallback to signaling server if WebRTC not available
+    socket.emit('request-calibration', { targetId: mobileSocketId });
+    deviceStatus.textContent = 'Calibrating sensors via signaling...';
+  } else {
+    console.error('Cannot request calibration: No connection to mobile device');
   }
 }
 
