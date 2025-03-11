@@ -58,6 +58,32 @@ let animationFrameId = null;
 const defaultCameraPosition = { x: 3, y: 2, z: 3 };
 let orbitControls;
 
+// First-person camera variables
+let firstPersonMode = false;
+let playerHeight = 1.6; // Player height in units (average human height)
+let moveSpeed = 0.25; // Movement speed (increased for faster walking)
+let lookSpeed = 0.002; // Look sensitivity
+let moveForward = false;
+let moveBackward = false;
+let moveLeft = false;
+let moveRight = false;
+let canJump = false;
+let velocity = new THREE.Vector3();
+let direction = new THREE.Vector3();
+let prevTime = performance.now();
+
+// FPS weapon view variables
+let weaponPhone = null; // Separate phone model for weapon view
+let weaponScene = null; // Separate scene for weapon view
+let weaponCamera = null; // Camera for the weapon view
+let weaponRenderer = null; // Renderer for the weapon view
+let weaponContainer = null; // DOM container for weapon view
+let weaponBobbing = { // For realistic weapon bobbing effect
+  time: 0,
+  intensity: 0.015,
+  speed: 4
+};
+
 // UI buttons
 const calibrateBtn = document.getElementById('calibrateBtn');
 const resetViewBtn = document.getElementById('resetViewBtn');
@@ -162,9 +188,14 @@ Gamma: ${data.gyro.gamma.toFixed(2)}°`;
       // Add to data history
       addDataPoint('gyro', data.gyro);
       
-      // Update 3D phone model orientation
+      // Store gyro data for camera or phone model updates
       lastGyroData = data.gyro;
-      updatePhoneOrientation(lastGyroData);
+      
+      // Update 3D phone model orientation if not in first-person mode
+      if (!firstPersonMode) {
+        updatePhoneOrientation(lastGyroData);
+      }
+      // Note: In first-person mode, camera rotation is updated in updateFirstPersonControls
     }
     
     if (data.accel) {
@@ -369,10 +400,9 @@ function updateVisualizations() {
 function init3DScene() {
   // Create scene
   scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xf0f0f0);
-
+  
   // Create camera
-  camera = new THREE.PerspectiveCamera(60, phone3dContainer.clientWidth / phone3dContainer.clientHeight, 0.1, 1000);
+  camera = new THREE.PerspectiveCamera(75, phone3dContainer.clientWidth / phone3dContainer.clientHeight, 0.1, 1000);
   camera.position.set(defaultCameraPosition.x, defaultCameraPosition.y, defaultCameraPosition.z);
   camera.lookAt(0, 0, 0);
 
@@ -381,36 +411,25 @@ function init3DScene() {
   renderer.setSize(phone3dContainer.clientWidth, phone3dContainer.clientHeight);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.2;
   phone3dContainer.appendChild(renderer.domElement);
-
-  // Add ambient light
-  const ambientLight = new THREE.AmbientLight(0x404040, 1.5);
-  scene.add(ambientLight);
-
-  // Add directional light with shadows
-  const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-  directionalLight.position.set(5, 5, 5);
-  directionalLight.castShadow = true;
-  directionalLight.shadow.mapSize.width = 1024;
-  directionalLight.shadow.mapSize.height = 1024;
-  directionalLight.shadow.camera.near = 0.5;
-  directionalLight.shadow.camera.far = 20;
-  scene.add(directionalLight);
-
-  // Add a subtle hemisphere light for better ambient lighting
-  const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x080820, 0.5);
-  scene.add(hemisphereLight);
-
-  // Add a grid helper to show the ground plane
-  const gridHelper = new THREE.GridHelper(10, 10, 0x888888, 0xcccccc);
-  scene.add(gridHelper);
-
-  // Add world coordinate axes for reference
-  const axesHelper = new THREE.AxesHelper(5);
-  scene.add(axesHelper);
+  
+  // Create skybox
+  createSkybox();
+  
+  // Create game environment
+  createGameEnvironment();
+  
+  // Setup game lighting
+  setupGameLighting();
 
   // Create phone model
   createPhoneModel();
+  
+  // Initialize weapon view for first-person mode
+  initWeaponView();
 
   // Add a small info element explaining the colors
   const axisInfoDiv = document.createElement('div');
@@ -432,7 +451,56 @@ function init3DScene() {
   orbitControls.screenSpacePanning = false;
   orbitControls.maxPolarAngle = Math.PI;
   orbitControls.minDistance = 2;
-  orbitControls.maxDistance = 10;
+  orbitControls.maxDistance = 30;
+  
+  // Add first-person mode button
+  const fpModeBtn = document.createElement('button');
+  fpModeBtn.textContent = 'First Person Mode';
+  fpModeBtn.style.position = 'absolute';
+  fpModeBtn.style.top = '10px';
+  fpModeBtn.style.right = '10px';
+  fpModeBtn.style.padding = '5px 10px';
+  fpModeBtn.style.backgroundColor = '#4CAF50';
+  fpModeBtn.style.color = 'white';
+  fpModeBtn.style.border = 'none';
+  fpModeBtn.style.borderRadius = '4px';
+  fpModeBtn.style.cursor = 'pointer';
+  fpModeBtn.style.zIndex = '1000';
+  fpModeBtn.onclick = toggleFirstPersonMode;
+  phone3dContainer.appendChild(fpModeBtn);
+  
+  // Add controls guide for first-person mode
+  const controlsGuide = document.createElement('div');
+  controlsGuide.style.position = 'absolute';
+  controlsGuide.style.bottom = '10px';
+  controlsGuide.style.right = '10px';
+  controlsGuide.style.padding = '10px';
+  controlsGuide.style.backgroundColor = 'rgba(0,0,0,0.5)';
+  controlsGuide.style.color = 'white';
+  controlsGuide.style.fontSize = '12px';
+  controlsGuide.style.borderRadius = '4px';
+  controlsGuide.style.zIndex = '1000';
+  controlsGuide.style.display = 'none'; // Hidden by default
+  controlsGuide.innerHTML = `
+    <strong>Controls:</strong><br>
+    W/Arrow Up - Move Forward<br>
+    S/Arrow Down - Move Backward<br>
+    A/Arrow Left - Move Left<br>
+    D/Arrow Right - Move Right<br>
+    Mouse - Look Around
+  `;
+  controlsGuide.id = 'fp-controls-guide';
+  phone3dContainer.appendChild(controlsGuide);
+  
+  // Add keyboard controls event listeners
+  document.addEventListener('keydown', onKeyDown, false);
+  document.addEventListener('keyup', onKeyUp, false);
+  
+  // Add mouse movement for first-person camera
+  document.addEventListener('mousemove', onMouseMove, false);
+  
+  // Pointer lock for first-person mode
+  phone3dContainer.addEventListener('click', requestPointerLock, false);
   
   // Start animation loop
   animate();
@@ -445,6 +513,117 @@ function init3DScene() {
   
   // Debug message to confirm initialization
   console.log('3D scene initialized successfully');
+}
+
+// Create skybox for game environment
+function createSkybox() {
+  const skyboxSize = 500;
+  const skyboxGeometry = new THREE.BoxGeometry(skyboxSize, skyboxSize, skyboxSize);
+  
+  // Create skybox materials with gradient colors
+  const skyboxMaterials = [
+    new THREE.MeshBasicMaterial({ color: 0x0077ff, side: THREE.BackSide }), // Right side
+    new THREE.MeshBasicMaterial({ color: 0x0066dd, side: THREE.BackSide }), // Left side
+    new THREE.MeshBasicMaterial({ color: 0x0088ff, side: THREE.BackSide }), // Top side
+    new THREE.MeshBasicMaterial({ color: 0x005599, side: THREE.BackSide }), // Bottom side
+    new THREE.MeshBasicMaterial({ color: 0x0077ee, side: THREE.BackSide }), // Front side
+    new THREE.MeshBasicMaterial({ color: 0x0066cc, side: THREE.BackSide })  // Back side
+  ];
+  
+  const skybox = new THREE.Mesh(skyboxGeometry, skyboxMaterials);
+  scene.add(skybox);
+}
+
+// Create game environment with terrain and decorative elements
+function createGameEnvironment() {
+  // Create ground plane
+  const groundSize = 100;
+  const groundGeometry = new THREE.PlaneGeometry(groundSize, groundSize, 32, 32);
+  const groundMaterial = new THREE.MeshStandardMaterial({ 
+    color: 0x3a8c3a, 
+    roughness: 0.8,
+    metalness: 0.2
+  });
+  const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = -0.5;
+  ground.receiveShadow = true;
+  scene.add(ground);
+  
+  // Add some random decorative cubes as environment elements
+  for (let i = 0; i < 20; i++) {
+    const size = Math.random() * 2 + 0.5;
+    const cubeGeometry = new THREE.BoxGeometry(size, size, size);
+    const cubeMaterial = new THREE.MeshStandardMaterial({
+      color: Math.random() > 0.5 ? 0x8a5430 : 0x6a7a8a,
+      roughness: 0.7,
+      metalness: 0.2
+    });
+    
+    const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+    cube.position.set(
+      (Math.random() - 0.5) * 40,
+      size / 2 - 0.5,
+      (Math.random() - 0.5) * 40
+    );
+    
+    cube.castShadow = true;
+    cube.receiveShadow = true;
+    scene.add(cube);
+  }
+  
+  // Add some larger "buildings" or structures
+  for (let i = 0; i < 5; i++) {
+    const width = Math.random() * 4 + 2;
+    const height = Math.random() * 8 + 4;
+    const depth = Math.random() * 4 + 2;
+    
+    const buildingGeometry = new THREE.BoxGeometry(width, height, depth);
+    const buildingMaterial = new THREE.MeshStandardMaterial({
+      color: 0x505050 + Math.random() * 0x202020,
+      roughness: 0.7,
+      metalness: 0.3
+    });
+    
+    const building = new THREE.Mesh(buildingGeometry, buildingMaterial);
+    building.position.set(
+      (Math.random() - 0.5) * 60,
+      height / 2 - 0.5,
+      (Math.random() - 0.5) * 60
+    );
+    
+    building.castShadow = true;
+    building.receiveShadow = true;
+    scene.add(building);
+  }
+}
+
+// Setup game lighting
+function setupGameLighting() {
+  // Main directional light (sun)
+  const sunLight = new THREE.DirectionalLight(0xffffbb, 1.5);
+  sunLight.position.set(10, 20, 10);
+  sunLight.castShadow = true;
+  sunLight.shadow.mapSize.width = 2048;
+  sunLight.shadow.mapSize.height = 2048;
+  sunLight.shadow.camera.near = 0.5;
+  sunLight.shadow.camera.far = 50;
+  sunLight.shadow.camera.left = -20;
+  sunLight.shadow.camera.right = 20;
+  sunLight.shadow.camera.top = 20;
+  sunLight.shadow.camera.bottom = -20;
+  scene.add(sunLight);
+  
+  // Ambient light for general illumination
+  const ambientLight = new THREE.AmbientLight(0x404060, 0.5);
+  scene.add(ambientLight);
+  
+  // Hemisphere light for better sky/ground color transition
+  const hemisphereLight = new THREE.HemisphereLight(0x90b0ff, 0x283030, 0.6);
+  scene.add(hemisphereLight);
+  
+  // Add some subtle fog for depth
+  scene.fog = new THREE.FogExp2(0x90b0ff, 0.01);
 }
 
 // Create phone model
@@ -532,16 +711,225 @@ function createPhoneModel() {
   console.log('Phone model created successfully');
 }
 
+// Create weapon phone model for first-person view
+function createWeaponPhoneModel() {
+  // Phone dimensions - smaller for FPS view
+  const width = 0.4;
+  const height = 0.8;
+  const depth = 0.05;
+
+  // Create weapon phone group
+  weaponPhone = new THREE.Group();
+  weaponScene.add(weaponPhone);
+  
+  // Apply a -90 degree rotation around the X axis to the phone model itself
+  // This fixes the orientation issue with the model
+  weaponPhone.rotateX(-Math.PI / 2);
+  
+  // Create a container for phone components - this won't get the gyroscope rotation
+  // but will maintain the -90 degree correction
+  const phoneContainer = new THREE.Group();
+  weaponPhone.add(phoneContainer);
+
+  // Create phone body
+  const phoneGeometry = new THREE.BoxGeometry(width, height, depth);
+  const phoneMaterial = new THREE.MeshPhongMaterial({ 
+    color: 0x333333,
+    specular: 0x111111,
+    shininess: 30
+  });
+  const phoneBody = new THREE.Mesh(phoneGeometry, phoneMaterial);
+  phoneContainer.add(phoneBody);
+
+  // Add screen to the phone (front side)
+  const screenGeometry = new THREE.BoxGeometry(width * 0.9, height * 0.9, depth * 0.1);
+  const screenMaterial = new THREE.MeshBasicMaterial({ color: 0x22aaff });
+  const screen = new THREE.Mesh(screenGeometry, screenMaterial);
+  screen.position.z = depth / 2 + 0.01;
+  phoneContainer.add(screen);
+
+  // Add camera lens
+  const lensGeometry = new THREE.CircleGeometry(0.025, 32);
+  const lensMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
+  const lens = new THREE.Mesh(lensGeometry, lensMaterial);
+  lens.position.set(0, height * 0.35, depth / 2 + 0.01);
+  phoneContainer.add(lens);
+  
+  // Add home button at the bottom to indicate orientation
+  const homeButtonGeometry = new THREE.CircleGeometry(0.04, 32);
+  const homeButtonMaterial = new THREE.MeshBasicMaterial({ color: 0x555555 });
+  const homeButton = new THREE.Mesh(homeButtonGeometry, homeButtonMaterial);
+  homeButton.position.set(0, -height * 0.4, depth / 2 + 0.01);
+  phoneContainer.add(homeButton);
+  
+  // Position the phone as a weapon in first-person view
+  // This positions the phone in the bottom right portion of the screen
+  // like a typical FPS weapon
+  weaponPhone.position.set(0.25, -0.2, -0.8);
+  
+  console.log('Weapon phone model created successfully');
+}
+
+// Initialize weapon view for first-person mode
+function initWeaponView() {
+  // Create a separate container for the weapon view
+  weaponContainer = document.createElement('div');
+  weaponContainer.style.position = 'absolute';
+  weaponContainer.style.top = '0';
+  weaponContainer.style.left = '0';
+  weaponContainer.style.width = '100%';
+  weaponContainer.style.height = '100%';
+  weaponContainer.style.pointerEvents = 'none'; // Allow clicks to pass through
+  weaponContainer.style.display = 'none'; // Hidden by default
+  phone3dContainer.appendChild(weaponContainer);
+  
+  // Create scene for weapon
+  weaponScene = new THREE.Scene();
+  
+  // Add ambient light to weapon scene
+  const ambientLight = new THREE.AmbientLight(0xffffff, 1);
+  weaponScene.add(ambientLight);
+  
+  // Add directional light to weapon scene for better shading
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+  directionalLight.position.set(0, 1, 2);
+  weaponScene.add(directionalLight);
+  
+  // Create camera for weapon view (with wide FOV for dramatic effect)
+  weaponCamera = new THREE.PerspectiveCamera(70, phone3dContainer.clientWidth / phone3dContainer.clientHeight, 0.01, 10);
+  
+  // Create renderer for weapon view with transparent background
+  weaponRenderer = new THREE.WebGLRenderer({ 
+    antialias: true,
+    alpha: true // Transparent background
+  });
+  weaponRenderer.setSize(phone3dContainer.clientWidth, phone3dContainer.clientHeight);
+  weaponRenderer.setClearColor(0x000000, 0); // Transparent
+  weaponRenderer.setPixelRatio(window.devicePixelRatio);
+  weaponContainer.appendChild(weaponRenderer.domElement);
+  
+  // Create the weapon phone model
+  createWeaponPhoneModel();
+  
+  console.log('Weapon view initialized successfully');
+}
+
 // Animation loop
 function animate() {
   animationFrameId = requestAnimationFrame(animate);
   
-  // Update orbit controls
-  if (orbitControls) {
+  const time = performance.now();
+  const delta = (time - prevTime) / 1000; // Convert to seconds
+  
+  if (firstPersonMode) {
+    // Update first-person controls
+    updateFirstPersonControls(delta);
+    
+    // First apply the real phone's orientation to the weapon
+    if (weaponPhone && lastGyroData) {
+      updateWeaponPhoneOrientation(lastGyroData);
+    }
+    
+    // Then apply movement bobbing effect (this keeps position adjustments after orientation)
+    updateWeaponBobbing(delta);
+    
+    // Render the main scene first
+    renderer.render(scene, camera);
+    
+    // Render the weapon view on top
+    if (weaponRenderer && weaponScene && weaponCamera) {
+      weaponRenderer.render(weaponScene, weaponCamera);
+    }
+  } else if (orbitControls) {
+    // Update orbit controls
     orbitControls.update();
+    
+    // Render the main scene
+    renderer.render(scene, camera);
   }
   
-  renderer.render(scene, camera);
+  prevTime = time;
+}
+
+// Update weapon bobbing for walking effect
+function updateWeaponBobbing(delta) {
+  if (!weaponPhone) return;
+  
+  // Only bob when moving
+  const isMoving = moveForward || moveBackward || moveLeft || moveRight;
+  
+  // Base position for the weapon phone
+  const basePosition = { x: 0.25, y: -0.2, z: -0.8 };
+  
+  if (isMoving) {
+    // Increment time for bobbing animation
+    weaponBobbing.time += delta * weaponBobbing.speed;
+    
+    // Calculate very subtle vertical and horizontal bob
+    const verticalBob = Math.sin(weaponBobbing.time * 2) * (weaponBobbing.intensity * 0.3);
+    const horizontalBob = Math.cos(weaponBobbing.time) * (weaponBobbing.intensity * 0.15);
+    
+    // Apply subtle bobbing to weapon position
+    // Note: The Y and Z axes may be swapped due to the -90 degree rotation we applied
+    weaponPhone.position.y = basePosition.y + verticalBob;
+    weaponPhone.position.x = basePosition.x + horizontalBob;
+    weaponPhone.position.z = basePosition.z;
+  } else {
+    // Return to the neutral position when not moving
+    weaponPhone.position.x = THREE.MathUtils.lerp(weaponPhone.position.x, basePosition.x, delta * 3);
+    weaponPhone.position.y = THREE.MathUtils.lerp(weaponPhone.position.y, basePosition.y, delta * 3);
+    weaponPhone.position.z = basePosition.z;
+  }
+}
+
+// Update weapon phone orientation based on real phone gyroscope data
+function updateWeaponPhoneOrientation(gyroData) {
+  if (!weaponPhone) return;
+  
+  // Get the base position of the weapon (we'll keep position stable)
+  const basePosition = { x: 0.25, y: -0.2, z: -0.8 };
+  
+  // For 1:1 mapping between real phone and virtual phone, we'll use the quaternion directly
+  const [w, x, y, z] = getQuaternion(gyroData.alpha, gyroData.beta, gyroData.gamma);
+  const deviceQuaternion = new THREE.Quaternion(x, y, z, w);
+  
+  // Apply the real phone's orientation directly to our weapon phone
+  weaponPhone.quaternion.copy(deviceQuaternion);
+  
+  // Keep position stable to avoid motion sickness
+  weaponPhone.position.set(basePosition.x, basePosition.y, basePosition.z);
+}
+
+// Update first-person controls
+function updateFirstPersonControls(delta) {
+  // Apply damping to slow down movement
+  velocity.x -= velocity.x * 10.0 * delta;
+  velocity.z -= velocity.z * 10.0 * delta;
+  
+  // Set movement direction based on key states
+  direction.z = Number(moveForward) - Number(moveBackward);
+  // Fix left/right direction (invert the values)
+  direction.x = Number(moveLeft) - Number(moveRight);
+  direction.normalize(); // Normalize for consistent movement speed in all directions
+  
+  // Move in the direction the camera is facing
+  if (moveForward || moveBackward) velocity.z -= direction.z * moveSpeed * delta * 100;
+  if (moveLeft || moveRight) velocity.x -= direction.x * moveSpeed * delta * 100;
+  
+  // Calculate new camera position based on velocity
+  const cameraDirection = new THREE.Vector3();
+  camera.getWorldDirection(cameraDirection);
+  
+  // Project movement onto the XZ plane (horizontal movement only)
+  const forward = new THREE.Vector3(cameraDirection.x, 0, cameraDirection.z).normalize();
+  const right = new THREE.Vector3(forward.z, 0, -forward.x);
+  
+  // Apply movement
+  camera.position.add(forward.multiplyScalar(-velocity.z * delta));
+  camera.position.add(right.multiplyScalar(velocity.x * delta)); // Fixed by inverting this value
+  
+  // Maintain player height
+  camera.position.y = playerHeight;
 }
 
 // Function to reset camera view to default position
@@ -644,6 +1032,13 @@ function onWindowResize() {
     camera.aspect = phone3dContainer.clientWidth / phone3dContainer.clientHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(phone3dContainer.clientWidth, phone3dContainer.clientHeight);
+    
+    // Also update weapon view
+    if (weaponCamera && weaponRenderer) {
+      weaponCamera.aspect = phone3dContainer.clientWidth / phone3dContainer.clientHeight;
+      weaponCamera.updateProjectionMatrix();
+      weaponRenderer.setSize(phone3dContainer.clientWidth, phone3dContainer.clientHeight);
+    }
   }
 }
 
@@ -867,6 +1262,161 @@ function requestCalibration() {
 
 // Calibrate button event listener
 calibrateBtn.addEventListener('click', requestCalibration);
+
+// Toggle first-person mode
+function toggleFirstPersonMode() {
+  firstPersonMode = !firstPersonMode;
+  
+  // Get UI elements
+  const fpModeBtn = document.querySelector('button');
+  const controlsGuide = document.getElementById('fp-controls-guide');
+  
+  if (firstPersonMode) {
+    // Switch to first-person mode
+    orbitControls.enabled = false;
+    
+    // Position camera at player height
+    camera.position.y = playerHeight;
+    
+    // Hide regular phone model in first-person mode
+    if (phone) {
+      phone.visible = false;
+    }
+    
+    // Show weapon phone model
+    if (weaponContainer) {
+      weaponContainer.style.display = 'block';
+    }
+    
+    // Show controls guide
+    if (controlsGuide) {
+      controlsGuide.style.display = 'block';
+    }
+    
+    // Update button text
+    if (fpModeBtn) {
+      fpModeBtn.textContent = 'Exit First Person';
+      fpModeBtn.style.backgroundColor = '#dc3545';
+    }
+    
+    // Reset weapon bobbing time
+    weaponBobbing.time = 0;
+    
+    // Request pointer lock for mouse look
+    requestPointerLock();
+  } else {
+    // Switch back to orbit controls
+    orbitControls.enabled = true;
+    
+    // Reset camera position
+    resetCameraView();
+    
+    // Show regular phone model again
+    if (phone) {
+      phone.visible = true;
+    }
+    
+    // Hide weapon phone model
+    if (weaponContainer) {
+      weaponContainer.style.display = 'none';
+    }
+    
+    // Hide controls guide
+    if (controlsGuide) {
+      controlsGuide.style.display = 'none';
+    }
+    
+    // Update button text
+    if (fpModeBtn) {
+      fpModeBtn.textContent = 'First Person Mode';
+      fpModeBtn.style.backgroundColor = '#4CAF50';
+    }
+    
+    // Exit pointer lock
+    document.exitPointerLock();
+  }
+}
+
+// Keyboard event handlers
+function onKeyDown(event) {
+  if (!firstPersonMode) return;
+  
+  switch (event.code) {
+    case 'ArrowUp':
+    case 'KeyW':
+      moveForward = true;
+      break;
+    case 'ArrowLeft':
+    case 'KeyA':
+      moveLeft = true;
+      break;
+    case 'ArrowDown':
+    case 'KeyS':
+      moveBackward = true;
+      break;
+    case 'ArrowRight':
+    case 'KeyD':
+      moveRight = true;
+      break;
+  }
+}
+
+function onKeyUp(event) {
+  if (!firstPersonMode) return;
+  
+  switch (event.code) {
+    case 'ArrowUp':
+    case 'KeyW':
+      moveForward = false;
+      break;
+    case 'ArrowLeft':
+    case 'KeyA':
+      moveLeft = false;
+      break;
+    case 'ArrowDown':
+    case 'KeyS':
+      moveBackward = false;
+      break;
+    case 'ArrowRight':
+    case 'KeyD':
+      moveRight = false;
+      break;
+  }
+}
+
+// Mouse movement handler for first-person camera
+function onMouseMove(event) {
+  if (!firstPersonMode || !document.pointerLockElement) return;
+  
+  const movementX = event.movementX || 0;
+  const movementY = event.movementY || 0;
+  
+  // Rotate camera based on mouse movement
+  const euler = new THREE.Euler(0, 0, 0, 'YXZ');
+  euler.setFromQuaternion(camera.quaternion);
+  
+  // Apply pitch (up/down) rotation - limit to avoid flipping
+  euler.x -= movementY * lookSpeed;
+  euler.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, euler.x));
+  
+  // Apply yaw (left/right) rotation
+  euler.y -= movementX * lookSpeed;
+  
+  camera.quaternion.setFromEuler(euler);
+}
+
+// Request pointer lock for first-person mode
+function requestPointerLock() {
+  if (!firstPersonMode) return;
+  
+  phone3dContainer.requestPointerLock = phone3dContainer.requestPointerLock ||
+                                       phone3dContainer.mozRequestPointerLock ||
+                                       phone3dContainer.webkitRequestPointerLock;
+  
+  if (phone3dContainer.requestPointerLock) {
+    phone3dContainer.requestPointerLock();
+  }
+}
 
 // Log initialization to help with debugging
 console.log('Client script loaded and initialized');
