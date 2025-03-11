@@ -926,7 +926,7 @@ function updateFirstPersonControls(delta) {
   
   // Apply movement
   camera.position.add(forward.multiplyScalar(-velocity.z * delta));
-  camera.position.add(right.multiplyScalar(velocity.x * delta)); // Fixed by inverting this value
+  camera.position.add(right.multiplyScalar(-velocity.x * delta)); // Fixed by inverting this value
   
   // Maintain player height
   camera.position.y = playerHeight;
