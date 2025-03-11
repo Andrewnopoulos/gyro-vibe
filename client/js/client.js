@@ -84,6 +84,12 @@ let weaponBobbing = { // For realistic weapon bobbing effect
   speed: 4
 };
 
+// Define the offset quaternion globally
+const Q_offset = new THREE.Quaternion().setFromAxisAngle(
+  new THREE.Vector3(1, 0, 0),
+  -Math.PI / 2
+);
+
 // UI buttons
 const calibrateBtn = document.getElementById('calibrateBtn');
 const resetViewBtn = document.getElementById('resetViewBtn');
@@ -894,7 +900,7 @@ function updateWeaponPhoneOrientation(gyroData) {
   const deviceQuaternion = new THREE.Quaternion(x, y, z, w);
   
   // Apply the real phone's orientation directly to our weapon phone
-  weaponPhone.quaternion.copy(deviceQuaternion);
+  weaponPhone.quaternion.copy(Q_offset.clone().multiply(deviceQuaternion));
   
   // Keep position stable to avoid motion sickness
   weaponPhone.position.set(basePosition.x, basePosition.y, basePosition.z);
@@ -1002,12 +1008,6 @@ function getQuaternion( alpha, beta, gamma ) {
 
 // Flag to indicate if calibration is in progress
 let calibrationInProgress = false;
-
-// Define the offset quaternion globally
-const Q_offset = new THREE.Quaternion().setFromAxisAngle(
-  new THREE.Vector3(1, 0, 0),
-  -Math.PI / 2
-);
 
 function updatePhoneOrientation(gyroData) {
   if (!phone) return;
