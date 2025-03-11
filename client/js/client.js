@@ -612,16 +612,30 @@ function getQuaternion( alpha, beta, gamma ) {
 
 }
 
+// Flag to indicate if calibration is in progress
+let calibrationInProgress = false;
+
 function updatePhoneOrientation(gyroData) {
   if (!phone) return;
 
+  // Calculate device orientation quaternion
   const [w, x, y, z] = getQuaternion(gyroData.alpha, gyroData.beta, gyroData.gamma);
-
-  // Compute the target quaternion
-  const targetQuaternion = new THREE.Quaternion(x, y, z, w);
-
-  // Smoothly interpolate from the current to the target quaternion
-  phone.quaternion.copy(targetQuaternion);
+  const deviceQuaternion = new THREE.Quaternion(x, y, z, w);
+  
+  if (calibrationInProgress) {
+    // During calibration, position the phone flat on its back (screen facing up)
+    // This is accomplished with a -90 degree rotation around the X-axis
+    const flatQuaternion = new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(1, 0, 0), // X-axis
+      -Math.PI/2 // -90 degrees rotation
+    );
+    
+    // Apply the flat positioning
+    phone.quaternion.copy(flatQuaternion);
+  } else {
+    // Normal operation - use the device's actual orientation
+    phone.quaternion.copy(deviceQuaternion);
+  }
 }
 
 // Handle window resize
@@ -733,10 +747,27 @@ socket.on('webrtc-ice-candidate', async (data) => {
   }
 });
 
+// Function to end calibration mode
+function endCalibrationMode() {
+  // Set flag to false to return to normal orientation
+  calibrationInProgress = false;
+  
+  // Remove calibration instruction if it exists
+  const instruction = document.getElementById('calibration-instruction');
+  if (instruction) {
+    instruction.style.opacity = '0';
+    instruction.style.transition = 'opacity 0.5s';
+    setTimeout(() => instruction.parentNode.removeChild(instruction), 500);
+  }
+}
+
 // Handle calibration complete
 socket.on('calibration-complete', (calibrationData) => {
   deviceStatus.textContent = `Mobile device connected via WebRTC - Calibrated!`;
   deviceStatus.className = 'connected';
+  
+  // End calibration mode
+  endCalibrationMode();
   
   // Reset data history after calibration
   dataHistory.gyro.alpha = [];
@@ -746,7 +777,7 @@ socket.on('calibration-complete', (calibrationData) => {
   dataHistory.accel.y = [];
   dataHistory.accel.z = [];
   
-  // Show notification
+  // Show success notification
   const notification = document.createElement('div');
   notification.style.position = 'fixed';
   notification.style.top = '20px';
@@ -772,6 +803,9 @@ socket.on('calibration-complete', (calibrationData) => {
 // Handle calibration failure
 socket.on('calibration-failed', (data) => {
   deviceStatus.textContent = `Mobile device connected - Calibration failed`;
+  
+  // End calibration mode
+  endCalibrationMode();
   
   // Show error notification
   const notification = document.createElement('div');
@@ -808,7 +842,27 @@ function requestCalibration() {
     deviceStatus.textContent = 'Calibrating sensors via signaling...';
   } else {
     console.error('Cannot request calibration: No connection to mobile device');
+    return;
   }
+  
+  // Set the calibration flag to show the phone flat on its back
+  calibrationInProgress = true;
+  
+  // Add a visual cue to indicate calibration mode
+  const notification = document.createElement('div');
+  notification.style.position = 'fixed';
+  notification.style.top = '60px';
+  notification.style.left = '50%';
+  notification.style.transform = 'translateX(-50%)';
+  notification.style.backgroundColor = '#17a2b8';
+  notification.style.color = 'white';
+  notification.style.padding = '10px 20px';
+  notification.style.borderRadius = '4px';
+  notification.style.zIndex = '1000';
+  notification.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+  notification.textContent = 'Place device flat on its back (screen facing up) for calibration';
+  notification.id = 'calibration-instruction';
+  document.body.appendChild(notification);
 }
 
 // Calibrate button event listener

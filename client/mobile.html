@@ -654,6 +654,27 @@ Z: ${sensorData.accel.z.toFixed(2)}g`;
     function calibrateSensors() {
       connectionInfo.textContent += '\n--- Calibrating sensors ---';
       
+      // Show calibration instruction popup
+      const instruction = document.createElement('div');
+      instruction.style.position = 'fixed';
+      instruction.style.top = '50%';
+      instruction.style.left = '50%';
+      instruction.style.transform = 'translate(-50%, -50%)';
+      instruction.style.backgroundColor = 'rgba(23, 162, 184, 0.9)';
+      instruction.style.color = 'white';
+      instruction.style.padding = '20px';
+      instruction.style.borderRadius = '8px';
+      instruction.style.zIndex = '1000';
+      instruction.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+      instruction.style.textAlign = 'center';
+      instruction.style.maxWidth = '80%';
+      instruction.innerHTML = `
+        <h3>Calibration in Progress</h3>
+        <p>Please place your device flat on its back with the screen facing up.</p>
+        <p>Keep the device still for accurate calibration.</p>
+      `;
+      document.body.appendChild(instruction);
+      
       // Store current raw values as offsets
       let rawGyro = {};
       let rawAccel = {};
@@ -682,6 +703,9 @@ Z: ${sensorData.accel.z.toFixed(2)}g`;
       
       // Wait for values to be captured (need to get at least one event)
       setTimeout(() => {
+        // Remove instruction popup
+        document.body.removeChild(instruction);
+        
         // Store the calibration values
         calibration.gyro.alpha = rawGyro.alpha || 0;
         calibration.gyro.beta = rawGyro.beta || 0;
@@ -696,9 +720,31 @@ Z: ${sensorData.accel.z.toFixed(2)}g`;
 Gyro offsets: α=${calibration.gyro.alpha.toFixed(2)}° β=${calibration.gyro.beta.toFixed(2)}° γ=${calibration.gyro.gamma.toFixed(2)}°
 Accel offsets: x=${calibration.accel.x.toFixed(2)}g y=${calibration.accel.y.toFixed(2)}g z=${calibration.accel.z.toFixed(2)}g`;
         
+        // Show success notification
+        const notification = document.createElement('div');
+        notification.style.position = 'fixed';
+        notification.style.top = '20px';
+        notification.style.left = '50%';
+        notification.style.transform = 'translateX(-50%)';
+        notification.style.backgroundColor = '#28a745';
+        notification.style.color = 'white';
+        notification.style.padding = '10px 20px';
+        notification.style.borderRadius = '4px';
+        notification.style.zIndex = '1000';
+        notification.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+        notification.textContent = 'Calibration complete!';
+        document.body.appendChild(notification);
+        
+        // Remove notification after 2 seconds
+        setTimeout(() => {
+          notification.style.opacity = '0';
+          notification.style.transition = 'opacity 0.5s';
+          setTimeout(() => document.body.removeChild(notification), 500);
+        }, 2000);
+        
         // Notify the desktop client
         sendCalibrationComplete(calibration);
-      }, 500); // Wait for 500ms to capture the values
+      }, 2000); // Increased wait time to 2 seconds to allow user to position device
     }
     
     // Update UI when starting sensors
