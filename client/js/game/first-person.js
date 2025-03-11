@@ -24,6 +24,12 @@ export class FirstPersonController {
     this.direction = new THREE.Vector3();
     this.enabled = false;
     
+    // Touch control variables
+    this.touchActive = false;
+    this.lastTouchX = 0;
+    this.lastTouchY = 0;
+    this.touchSensitivity = 2.5; // Sensitivity multiplier for touch movement
+    
     // UI elements
     this.controlsGuide = null;
     this.fpModeBtn = null;
@@ -70,7 +76,9 @@ export class FirstPersonController {
       S/Arrow Down - Move Backward<br>
       A/Arrow Left - Move Left<br>
       D/Arrow Right - Move Right<br>
-      Mouse - Look Around
+      Mouse - Look Around<br>
+      <strong>Mobile Controls:</strong><br>
+      Touch Drag - Look Around
     `;
     this.controlsGuide.id = 'fp-controls-guide';
     this.container.appendChild(this.controlsGuide);
@@ -84,6 +92,9 @@ export class FirstPersonController {
     document.addEventListener('keyup', this.onKeyUp.bind(this), false);
     document.addEventListener('mousemove', this.onMouseMove.bind(this), false);
     this.container.addEventListener('click', this.requestPointerLock.bind(this), false);
+    
+    // Subscribe to touch data events from the mobile device
+    this.eventBus.on('sensor:touch-updated', this.onTouchUpdate.bind(this));
   }
 
   /**
@@ -247,5 +258,54 @@ export class FirstPersonController {
    */
   isEnabled() {
     return this.enabled;
+  }
+  
+  /**
+   * Handle touch updates from the mobile device
+   * @param {Object} touchData - Touch data from mobile device
+   */
+  onTouchUpdate(touchData) {
+    if (!this.enabled) return;
+    
+    // Only process touch events when active
+    if (touchData.active) {
+      // If this is the first touch event, store the initial position
+      if (!this.touchActive) {
+        this.lastTouchX = touchData.x;
+        this.lastTouchY = touchData.y;
+        this.touchActive = true;
+        return;
+      }
+      
+      // Calculate touch movement delta (normalized 0-1 coordinates)
+      const deltaX = (touchData.x - this.lastTouchX) * this.touchSensitivity;
+      const deltaY = (touchData.y - this.lastTouchY) * this.touchSensitivity;
+      
+      // Update camera rotation - similar to mouse movement
+      if (Math.abs(deltaX) > 0.001 || Math.abs(deltaY) > 0.001) {
+        // Get current camera orientation
+        const euler = new THREE.Euler(0, 0, 0, 'YXZ');
+        euler.setFromQuaternion(this.camera.quaternion);
+        
+        // Apply yaw (left/right) rotation from X movement
+        euler.y -= deltaX;
+        
+        // Apply pitch (up/down) rotation from Y movement
+        euler.x -= deltaY;
+        
+        // Clamp vertical rotation to avoid flipping
+        euler.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, euler.x));
+        
+        // Update camera orientation
+        this.camera.quaternion.setFromEuler(euler);
+      }
+      
+      // Update last touch position
+      this.lastTouchX = touchData.x;
+      this.lastTouchY = touchData.y;
+    } else {
+      // Touch ended
+      this.touchActive = false;
+    }
   }
 }

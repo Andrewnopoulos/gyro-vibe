@@ -86,6 +86,12 @@ Z: ${data.accel.z.toFixed(2)}g`;
         this.eventBus.emit('sensor:accel-updated', data.accel);
       }
       
+      // Handle touch data
+      if (data.touch) {
+        // Emit touch data update event
+        this.eventBus.emit('sensor:touch-updated', data.touch);
+      }
+      
       // Update visualizations
       this.updateVisualizations();
     } catch (e) {
