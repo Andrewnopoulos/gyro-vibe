@@ -1003,26 +1003,23 @@ function getQuaternion( alpha, beta, gamma ) {
 // Flag to indicate if calibration is in progress
 let calibrationInProgress = false;
 
+// Define the offset quaternion globally
+const Q_offset = new THREE.Quaternion().setFromAxisAngle(
+  new THREE.Vector3(1, 0, 0),
+  -Math.PI / 2
+);
+
 function updatePhoneOrientation(gyroData) {
   if (!phone) return;
 
-  // Calculate device orientation quaternion
   const [w, x, y, z] = getQuaternion(gyroData.alpha, gyroData.beta, gyroData.gamma);
   const deviceQuaternion = new THREE.Quaternion(x, y, z, w);
   
   if (calibrationInProgress) {
-    // During calibration, position the phone flat on its back (screen facing up)
-    // This is accomplished with a -90 degree rotation around the X-axis
-    const flatQuaternion = new THREE.Quaternion().setFromAxisAngle(
-      new THREE.Vector3(1, 0, 0), // X-axis
-      -Math.PI/2 // -90 degrees rotation
-    );
-    
-    // Apply the flat positioning
-    phone.quaternion.copy(flatQuaternion);
+    phone.quaternion.copy(Q_offset);
   } else {
-    // Normal operation - use the device's actual orientation
-    phone.quaternion.copy(deviceQuaternion);
+    // Apply offset first, then relative orientation
+    phone.quaternion.copy(Q_offset.clone().multiply(deviceQuaternion));
   }
 }
 
