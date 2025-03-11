@@ -127,16 +127,12 @@ function handleDataChannel(event) {
 function setupDataChannel(channel) {
   channel.onopen = () => {
     console.log('Data channel is open');
-    deviceStatus.textContent = 'Mobile device connected via WebRTC';
-    deviceStatus.className = 'connected';
-    calibrateBtn.disabled = false;
+    // Connection status is now managed by handleConnectionStateChange
   };
   
   channel.onclose = () => {
     console.log('Data channel closed');
-    deviceStatus.textContent = 'WebRTC connection lost';
-    deviceStatus.className = 'disconnected';
-    calibrateBtn.disabled = true;
+    // Connection status is now managed by handleConnectionStateChange
   };
   
   channel.onerror = (error) => {
@@ -232,13 +228,14 @@ function generateQRCode() {
     httpUrl = urlToUse;
     httpsUrl = urlToUse;
   } else {
-    let debug_host = host
+    let debug_host = host;
 
     if (debug_host.includes('localhost')) {
-      debug_host = debug_host.replace('localhost', '192.168.1.127');
+      debug_host = debug_host.replace('localhost', '192.168.1.127')
     }
 
     // For local development, handle HTTP/HTTPS differences
+    // Use current hostname without hardcoding IP
     httpUrl = `http://${debug_host}/mobile?session=${sessionId}`;
     
     // For HTTPS, we need to consider the potential port change (3000 -> 3443)
@@ -285,34 +282,9 @@ function generateQRCode() {
   }
 }
 
-// Initialize the visualizations
+// Initialize the visualizations - this is now handled by drawData()
 function initCanvas(ctx) {
-  ctx.fillStyle = '#f5f5f5';
-  ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-  ctx.strokeStyle = '#ddd';
-  ctx.lineWidth = 1;
-  
-  // Draw grid lines
-  for (let i = 0; i < ctx.canvas.width; i += 20) {
-    ctx.beginPath();
-    ctx.moveTo(i, 0);
-    ctx.lineTo(i, ctx.canvas.height);
-    ctx.stroke();
-  }
-  
-  for (let i = 0; i < ctx.canvas.height; i += 20) {
-    ctx.beginPath();
-    ctx.moveTo(0, i);
-    ctx.lineTo(ctx.canvas.width, i);
-    ctx.stroke();
-  }
-  
-  // Draw center line
-  ctx.strokeStyle = '#aaa';
-  ctx.beginPath();
-  ctx.moveTo(0, ctx.canvas.height / 2);
-  ctx.lineTo(ctx.canvas.width, ctx.canvas.height / 2);
-  ctx.stroke();
+  drawData(ctx, { alpha: [], beta: [], gamma: [] }, ['red', 'green', 'blue']);
 }
 
 // Draw data on the canvas

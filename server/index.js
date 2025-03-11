@@ -53,36 +53,21 @@ try {
 }
 
 // Socket.IO setup - now used for signaling only
-let io;
-
-if (isRailway) {
-  // On Railway, we need to create the io instance with cors options
-  io = new Server({ 
-    cors: {
-      origin: "*",
-      methods: ["GET", "POST"]
-    }
-  });
-  // And attach it to the HTTP server
-  io.attach(httpServer);
-} else {
-  // Local development setup
-  if (httpsAvailable) {
-    io = new Server({ 
-      cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-      }
-    });
-    io.attach(httpServer);
-    io.attach(httpsServer);
-  } else {
-    io = new Server(httpServer);
+// Create io instance with common configuration
+const io = new Server({ 
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
   }
+});
+
+// Attach to appropriate servers
+io.attach(httpServer);
+if (!isRailway && httpsAvailable) {
+  io.attach(httpsServer);
 }
 
-// Store active sessions for WebRTC signaling
-const sessions = new Map();
+// Store active clients for WebRTC signaling
 const desktopClients = new Map();
 const mobileClients = new Map();
 
@@ -119,18 +104,15 @@ io.on('connection', (socket) => {
     const { sessionId } = data;
     console.log(`Mobile ${socket.id} attempting to join session ${sessionId}`);
     
-    // Find the desktop client with this session ID
-    let desktopSocketId = null;
-    for (const [id, client] of desktopClients.entries()) {
-      if (client.sessionId === sessionId) {
-        desktopSocketId = id;
-        // Update the desktop client with the mobile client's socket ID
-        desktopClients.get(id).mobileSocketId = socket.id;
-        break;
-      }
-    }
+    // Create a lookup index: Find desktop client by session ID
+    const matchingDesktop = Array.from(desktopClients.entries())
+      .find(([_, client]) => client.sessionId === sessionId);
     
-    if (desktopSocketId) {
+    if (matchingDesktop) {
+      const [desktopSocketId, client] = matchingDesktop;
+      // Update the desktop client with the mobile client's socket ID
+      client.mobileSocketId = socket.id;
+      
       // Store the mobile client info
       mobileClients.set(socket.id, { sessionId, desktopSocketId });
       
@@ -208,29 +190,25 @@ io.on('connection', (socket) => {
 });
 
 // Start servers based on environment
-if (isRailway) {
-  // On Railway, we only need to start the HTTP server
-  // Railway handles HTTPS for us
-  const PORT = process.env.PORT || 3000;
-  httpServer.listen(PORT, () => {
-    console.log(`Signaling server running on Railway on port ${PORT}`);
+const HTTP_PORT = process.env.PORT || 3000;
+
+// Start HTTP server (required for both Railway and local)
+httpServer.listen(HTTP_PORT, () => {
+  if (isRailway) {
+    console.log(`Signaling server running on Railway on port ${HTTP_PORT}`);
     console.log(`Application available at https://${PUBLIC_URL}`);
     console.log(`Mobile client available at https://${PUBLIC_URL}/mobile`);
-  });
-} else {
-  // Local development - start both HTTP and HTTPS servers if available
-  const HTTP_PORT = process.env.PORT || 3000;
-  httpServer.listen(HTTP_PORT, () => {
+  } else {
     console.log(`HTTP signaling server running on http://${LOCAL_IP}:${HTTP_PORT}`);
     console.log(`Mobile client available at http://${LOCAL_IP}:${HTTP_PORT}/mobile`);
-  });
-  
-  // Start HTTPS server if available
-  if (httpsAvailable) {
-    const HTTPS_PORT = process.env.HTTPS_PORT || 3443;
-    httpsServer.listen(HTTPS_PORT, () => {
-      console.log(`HTTPS signaling server running on https://${LOCAL_IP}:${HTTPS_PORT}`);
-      console.log(`Mobile client available at https://${LOCAL_IP}:${HTTPS_PORT}/mobile (recommended for sensors)`);
-    });
   }
+});
+
+// Start HTTPS server for local development (if available)
+if (!isRailway && httpsAvailable) {
+  const HTTPS_PORT = process.env.HTTPS_PORT || 3443;
+  httpsServer.listen(HTTPS_PORT, () => {
+    console.log(`HTTPS signaling server running on https://${LOCAL_IP}:${HTTPS_PORT}`);
+    console.log(`Mobile client available at https://${LOCAL_IP}:${HTTPS_PORT}/mobile (recommended for sensors)`);
+  });
 }

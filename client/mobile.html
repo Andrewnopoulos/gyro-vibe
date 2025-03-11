@@ -446,34 +446,29 @@
     
     // Check if device sensors are available
     function checkSensorAvailability() {
-      connectionInfo.textContent += '\nURL protocol: ' + window.location.protocol;
-      connectionInfo.textContent += '\nUserAgent: ' + navigator.userAgent;
-      
-      if ('DeviceOrientationEvent' in window) {
-        connectionInfo.textContent += '\nGyroscope API: Available';
-      } else {
-        connectionInfo.textContent += '\nGyroscope API: Not available';
-        gyroData.textContent = 'Gyroscope API not available on this device';
-      }
-      
-      if ('DeviceMotionEvent' in window) {
-        connectionInfo.textContent += '\nAccelerometer API: Available';
-      } else {
-        connectionInfo.textContent += '\nAccelerometer API: Not available';
-        accelData.textContent = 'Accelerometer API not available on this device';
-      }
-      
-      // Check if permission is needed (iOS 13+)
-      if (typeof DeviceOrientationEvent.requestPermission === 'function' || 
-          typeof DeviceMotionEvent.requestPermission === 'function') {
-        connectionInfo.textContent += '\nPermission required: Yes (iOS 13+)';
-      } else {
-        connectionInfo.textContent += '\nPermission required: No';
-      }
+      const info = [
+        `URL protocol: ${window.location.protocol}`,
+        `UserAgent: ${navigator.userAgent}`,
+        `Gyroscope API: ${'DeviceOrientationEvent' in window ? 'Available' : 'Not available'}`,
+        `Accelerometer API: ${'DeviceMotionEvent' in window ? 'Available' : 'Not available'}`,
+        `Permission required: ${(typeof DeviceOrientationEvent.requestPermission === 'function' || 
+          typeof DeviceMotionEvent.requestPermission === 'function') ? 'Yes (iOS 13+)' : 'No'}`
+      ];
       
       // HTTPS check
       if (window.location.protocol !== 'https:') {
-        connectionInfo.textContent += '\nWARNING: Many browsers require HTTPS for sensor access';
+        info.push('WARNING: Many browsers require HTTPS for sensor access');
+      }
+      
+      // Update UI with sensor availability
+      connectionInfo.textContent += '\n' + info.join('\n');
+      
+      // Update data displays if APIs aren't available
+      if (!('DeviceOrientationEvent' in window)) {
+        gyroData.textContent = 'Gyroscope API not available on this device';
+      }
+      if (!('DeviceMotionEvent' in window)) {
+        accelData.textContent = 'Accelerometer API not available on this device';
       }
     }
     
@@ -631,32 +626,28 @@ Z: ${sensorData.accel.z.toFixed(2)}g`;
       connectionInfo.textContent += '\nSensor monitoring stopped';
     }
     
-    // Send calibration success via appropriate channel
-    function sendCalibrationComplete(calibrationData) {
+    // Send calibration message via appropriate channel
+    function sendCalibrationMessage(type, data) {
       if (connectedWithWebRTC && dataChannel && dataChannel.readyState === 'open') {
         // Use WebRTC for lower latency
         dataChannel.send(JSON.stringify({
-          type: 'calibration-complete',
-          ...calibrationData
+          type: type,
+          ...data
         }));
       } else if (socket && socket.connected) {
         // Fallback to signaling server
-        socket.emit('calibration-complete', calibrationData);
+        socket.emit(type, data);
       }
     }
     
-    // Send calibration failure via appropriate channel
+    // Send calibration complete notification
+    function sendCalibrationComplete(calibrationData) {
+      sendCalibrationMessage('calibration-complete', calibrationData);
+    }
+    
+    // Send calibration failure notification
     function sendCalibrationFailed(reason) {
-      if (connectedWithWebRTC && dataChannel && dataChannel.readyState === 'open') {
-        // Use WebRTC for lower latency
-        dataChannel.send(JSON.stringify({
-          type: 'calibration-failed',
-          reason: reason
-        }));
-      } else if (socket && socket.connected) {
-        // Fallback to signaling server
-        socket.emit('calibration-failed', { reason: reason });
-      }
+      sendCalibrationMessage('calibration-failed', { reason: reason });
     }
     
     // Calibrate sensors
