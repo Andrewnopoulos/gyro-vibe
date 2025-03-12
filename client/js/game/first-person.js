@@ -32,7 +32,6 @@ export class FirstPersonController {
     
     // UI elements
     this.controlsGuide = null;
-    this.fpModeBtn = null;
     
     this.createUI();
     this.setupEventListeners();
@@ -42,22 +41,6 @@ export class FirstPersonController {
    * Create first-person UI elements
    */
   createUI() {
-    // Create first-person mode button
-    this.fpModeBtn = document.createElement('button');
-    this.fpModeBtn.textContent = 'First Person Mode';
-    this.fpModeBtn.style.position = 'absolute';
-    this.fpModeBtn.style.top = '10px';
-    this.fpModeBtn.style.right = '10px';
-    this.fpModeBtn.style.padding = '5px 10px';
-    this.fpModeBtn.style.backgroundColor = '#4CAF50';
-    this.fpModeBtn.style.color = 'white';
-    this.fpModeBtn.style.border = 'none';
-    this.fpModeBtn.style.borderRadius = '4px';
-    this.fpModeBtn.style.cursor = 'pointer';
-    this.fpModeBtn.style.zIndex = '1000';
-    this.fpModeBtn.onclick = () => this.toggleFirstPersonMode();
-    this.container.appendChild(this.fpModeBtn);
-    
     // Add controls guide
     this.controlsGuide = document.createElement('div');
     this.controlsGuide.style.position = 'absolute';
@@ -95,6 +78,21 @@ export class FirstPersonController {
     
     // Subscribe to touch data events from the mobile device
     this.eventBus.on('sensor:touch-updated', this.onTouchUpdate.bind(this));
+    
+    // Listen for mobile connection/disconnection events
+    this.eventBus.on('mobile:joined', () => {
+      // Enable first person mode when mobile connects
+      if (!this.enabled) {
+        this.toggleFirstPersonMode();
+      }
+    });
+    
+    this.eventBus.on('mobile:disconnected', () => {
+      // Disable first person mode when mobile disconnects
+      if (this.enabled) {
+        this.toggleFirstPersonMode();
+      }
+    });
   }
 
   /**
@@ -108,16 +106,12 @@ export class FirstPersonController {
       this.sceneManager.setFirstPersonMode(true);
       this.camera.position.y = PLAYER_HEIGHT;
       this.controlsGuide.style.display = 'block';
-      this.fpModeBtn.textContent = 'Exit First Person';
-      this.fpModeBtn.style.backgroundColor = '#dc3545';
       this.requestPointerLock();
       this.eventBus.emit('firstperson:enabled');
     } else {
       // Disable first-person mode
       this.sceneManager.setFirstPersonMode(false);
       this.controlsGuide.style.display = 'none';
-      this.fpModeBtn.textContent = 'First Person Mode';
-      this.fpModeBtn.style.backgroundColor = '#4CAF50';
       document.exitPointerLock();
       this.eventBus.emit('firstperson:disabled');
     }
