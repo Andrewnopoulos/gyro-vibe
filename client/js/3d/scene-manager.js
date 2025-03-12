@@ -62,14 +62,11 @@ export class SceneManager {
     this.renderer.toneMappingExposure = 1.2;
     this.container.appendChild(this.renderer.domElement);
     
-    // Add axis info div
-    this.addAxisInfoDiv();
-    
-    // Add reset view button handler
-    const resetViewBtn = document.getElementById('resetViewBtn');
-    if (resetViewBtn) {
-      resetViewBtn.addEventListener('click', this.resetCameraView.bind(this));
-    }
+    // // Add reset view button handler
+    // const resetViewBtn = document.getElementById('resetViewBtn');
+    // if (resetViewBtn) {
+    //   resetViewBtn.addEventListener('click', this.resetCameraView.bind(this));
+    // }
     
     // Create environment, lighting, and phone model
     this.environment = new Environment(this.scene);
@@ -149,22 +146,6 @@ export class SceneManager {
     this.prevTime = time;
   }
 
-  /**
-   * Add info for axes colors
-   */
-  addAxisInfoDiv() {
-    const axisInfoDiv = document.createElement('div');
-    axisInfoDiv.style.position = 'absolute';
-    axisInfoDiv.style.bottom = '10px';
-    axisInfoDiv.style.left = '10px';
-    axisInfoDiv.style.backgroundColor = 'rgba(0,0,0,0.5)';
-    axisInfoDiv.style.color = 'white';
-    axisInfoDiv.style.padding = '5px';
-    axisInfoDiv.style.fontSize = '12px';
-    axisInfoDiv.style.borderRadius = '3px';
-    axisInfoDiv.innerHTML = 'Phone axes: <span style="color:red">X</span>, <span style="color:green">Y</span>, <span style="color:blue">Z</span>';
-    this.container.appendChild(axisInfoDiv);
-  }
 
   /**
    * Handle window resize

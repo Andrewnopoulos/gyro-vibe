@@ -93,23 +93,9 @@ export class StatusDisplay {
       this.debugSection.style.display = this.debugShowing ? 'block' : 'none';
     }
     
-    // Show QR code in debug section if we're not connected
-    if (this.debugShowing) {
-      // Only move QR code to debug section if not connected
-      if (this.qrcodeElement && this.qrcodeElement.style.display !== 'none') {
-        // Keep QR code visible if not connected
-        this.qrcodeElement.style.display = 'block';
-      }
-      this.debugToggleBtn.textContent = 'Hide Debug';
-    } else {
-      // Hide QR code when exiting debug view if connected
-      if (this.qrcodeElement) {
-        const isConnected = this.deviceStatus && this.deviceStatus.className === 'connected';
-        if (isConnected) {
-          this.qrcodeElement.style.display = 'none';
-        }
-      }
-      this.debugToggleBtn.textContent = 'Show Debug';
+    // Update button text
+    if (this.debugToggleBtn) {
+      this.debugToggleBtn.textContent = this.debugShowing ? 'Hide Debug' : 'Show Debug';
     }
   }
 
@@ -119,19 +105,7 @@ export class StatusDisplay {
    */
   showQRCode(show) {
     if (this.qrcodeElement) {
-      // Show QR code if:
-      // 1. We're asked to show it AND we're in debug mode, OR
-      // 2. We're asked to show it AND we're not connected
-      if (show && this.debugShowing) {
-        // Show in debug mode
-        this.qrcodeElement.style.display = 'block';
-      } else if (show) {
-        // Show when not connected
-        this.qrcodeElement.style.display = 'block';
-      } else {
-        // Hide when connected
-        this.qrcodeElement.style.display = 'none';
-      }
+      this.qrcodeElement.style.display = show ? 'block' : 'none';
     }
   }
 
@@ -164,35 +138,50 @@ export class StatusDisplay {
    */
   showNotification(message, type = 'info') {
     const notification = document.createElement('div');
+    notification.className = 'overlay';
     notification.style.position = 'fixed';
-    notification.style.top = '20px';
+    notification.style.top = '80px';
     notification.style.left = '50%';
     notification.style.transform = 'translateX(-50%)';
     notification.style.padding = '10px 20px';
-    notification.style.borderRadius = '4px';
     notification.style.zIndex = '1000';
-    notification.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+    notification.style.textAlign = 'center';
+    notification.style.minWidth = '250px';
     notification.textContent = message;
     
     // Set color based on type
     if (type === 'success') {
-      notification.style.backgroundColor = '#17a2b8';
-      notification.style.color = 'white';
+      notification.style.backgroundColor = 'rgba(23, 162, 184, 0.9)';
     } else if (type === 'error') {
-      notification.style.backgroundColor = '#dc3545';
-      notification.style.color = 'white';
+      notification.style.backgroundColor = 'rgba(220, 53, 69, 0.9)';
     } else {
-      notification.style.backgroundColor = '#6c757d';
-      notification.style.color = 'white';
+      notification.style.backgroundColor = 'rgba(108, 117, 125, 0.9)';
     }
     
-    document.body.appendChild(notification);
+    // Add to game container
+    const gameContainer = document.getElementById('game-container');
+    if (gameContainer) {
+      gameContainer.appendChild(notification);
+    } else {
+      document.body.appendChild(notification);
+    }
+    
+    // Animate in
+    notification.style.opacity = '0';
+    notification.style.transform = 'translateX(-50%) translateY(-20px)';
+    
+    // Force reflow
+    notification.offsetHeight;
+    
+    // Animate to final position
+    notification.style.opacity = '1';
+    notification.style.transform = 'translateX(-50%) translateY(0)';
     
     // Remove notification after 3 seconds
     setTimeout(() => {
       notification.style.opacity = '0';
-      notification.style.transition = 'opacity 0.5s';
-      setTimeout(() => document.body.removeChild(notification), 500);
+      notification.style.transform = 'translateX(-50%) translateY(-20px)';
+      setTimeout(() => notification.parentNode.removeChild(notification), 500);
     }, 3000);
   }
 }
