@@ -9,6 +9,10 @@ export class StatusDisplay {
     this.eventBus = eventBus;
     this.deviceStatus = document.getElementById('deviceStatus');
     this.calibrateBtn = document.getElementById('calibrateBtn');
+    this.qrcodeElement = document.getElementById('qrcode');
+    this.debugToggleBtn = document.getElementById('debugToggleBtn');
+    this.debugSection = document.getElementById('debugSection');
+    this.debugShowing = false;
     
     this.setupEventListeners();
     this.setStatus('Connecting to server...', 'disconnected');
@@ -24,25 +28,30 @@ export class StatusDisplay {
 
     this.eventBus.on('session:created', () => {
       this.setStatus('Waiting for mobile device to connect...', 'disconnected');
+      this.showQRCode(true);
     });
 
     this.eventBus.on('mobile:joined', () => {
       this.setStatus('Mobile connected, establishing WebRTC...', 'connecting');
+      this.showQRCode(false);
     });
 
     this.eventBus.on('mobile:disconnected', () => {
       this.setStatus('Mobile device disconnected', 'disconnected');
       this.setCalibrationButtonState(false);
+      this.showQRCode(true);
     });
 
     this.eventBus.on('webrtc:connected', () => {
       this.setStatus('Mobile device connected via WebRTC', 'connected');
       this.setCalibrationButtonState(true);
+      this.showQRCode(false);
     });
 
     this.eventBus.on('webrtc:disconnected', () => {
       this.setStatus('WebRTC connection lost', 'disconnected');
       this.setCalibrationButtonState(false);
+      this.showQRCode(true);
     });
 
     this.eventBus.on('calibration:started', () => {
@@ -64,6 +73,65 @@ export class StatusDisplay {
       this.calibrateBtn.addEventListener('click', () => {
         this.eventBus.emit('calibration:request');
       });
+    }
+    
+    // Set up debug toggle button
+    if (this.debugToggleBtn) {
+      this.debugToggleBtn.addEventListener('click', () => {
+        this.toggleDebugSection();
+      });
+    }
+  }
+
+  /**
+   * Toggle debug section visibility
+   */
+  toggleDebugSection() {
+    this.debugShowing = !this.debugShowing;
+    
+    if (this.debugSection) {
+      this.debugSection.style.display = this.debugShowing ? 'block' : 'none';
+    }
+    
+    // Show QR code in debug section if we're not connected
+    if (this.debugShowing) {
+      // Only move QR code to debug section if not connected
+      if (this.qrcodeElement && this.qrcodeElement.style.display !== 'none') {
+        // Keep QR code visible if not connected
+        this.qrcodeElement.style.display = 'block';
+      }
+      this.debugToggleBtn.textContent = 'Hide Debug';
+    } else {
+      // Hide QR code when exiting debug view if connected
+      if (this.qrcodeElement) {
+        const isConnected = this.deviceStatus && this.deviceStatus.className === 'connected';
+        if (isConnected) {
+          this.qrcodeElement.style.display = 'none';
+        }
+      }
+      this.debugToggleBtn.textContent = 'Show Debug';
+    }
+  }
+
+  /**
+   * Show or hide QR code based on connection status
+   * @param {boolean} show - Whether to show QR code
+   */
+  showQRCode(show) {
+    if (this.qrcodeElement) {
+      // Show QR code if:
+      // 1. We're asked to show it AND we're in debug mode, OR
+      // 2. We're asked to show it AND we're not connected
+      if (show && this.debugShowing) {
+        // Show in debug mode
+        this.qrcodeElement.style.display = 'block';
+      } else if (show) {
+        // Show when not connected
+        this.qrcodeElement.style.display = 'block';
+      } else {
+        // Hide when connected
+        this.qrcodeElement.style.display = 'none';
+      }
     }
   }
 
