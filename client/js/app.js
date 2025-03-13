@@ -72,6 +72,30 @@ class App {
         if (this.gameStateManager.isInRoom()) {
           const camera = this.sceneManager.getCamera();
           
+          // Get the phone model orientation if available
+          const phoneModel = this.sceneManager.phoneModel;
+          let phoneOrientation = null;
+          
+          if (phoneModel && phoneModel.getModel()) {
+            const phoneQuaternion = phoneModel.getModel().quaternion;
+            phoneOrientation = {
+              x: phoneQuaternion.x,
+              y: phoneQuaternion.y,
+              z: phoneQuaternion.z,
+              w: phoneQuaternion.w
+            };
+          } else if (DEBUG_CONFIG.ENABLE_MULTIPLAYER_DEBUG) {
+            // In debug mode, simulate phone orientation by deriving from camera orientation
+            // This helps with testing the weapon visualization without needing a mobile device
+            const cameraQuaternion = camera.quaternion;
+            phoneOrientation = {
+              x: cameraQuaternion.x,
+              y: cameraQuaternion.y,
+              z: cameraQuaternion.z,
+              w: cameraQuaternion.w
+            };
+          }
+          
           this.eventBus.emit('player:local-moved', {
             position: camera.position.clone(),
             rotation: {
@@ -79,7 +103,8 @@ class App {
               y: camera.quaternion.y,
               z: camera.quaternion.z,
               w: camera.quaternion.w
-            }
+            },
+            phoneOrientation: phoneOrientation
           });
         }
       }

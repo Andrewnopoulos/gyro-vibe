@@ -119,6 +119,7 @@ function createPlayer(socketId, username, role, devicePairId = null) {
     devicePairId: devicePairId,
     position: { x: 0, y: 0, z: 0 },
     rotation: { x: 0, y: 0, z: 0, w: 0 },
+    phoneOrientation: { x: 0, y: 0, z: 0, w: 1 }, // Default identity quaternion
     lastUpdate: Date.now()
   };
 }
@@ -182,7 +183,8 @@ function getSanitizedPlayerData(player) {
     role: player.role,
     isConnected: player.isConnected,
     position: player.position,
-    rotation: player.rotation
+    rotation: player.rotation,
+    phoneOrientation: player.phoneOrientation
   };
 }
 
@@ -416,6 +418,11 @@ io.on('connection', (socket) => {
     // Update player data
     if (data.position) player.position = data.position;
     if (data.rotation) player.rotation = data.rotation;
+    
+    if (data.phoneOrientation) {
+      player.phoneOrientation = data.phoneOrientation;
+    }
+    
     player.lastUpdate = Date.now();
     
     // We don't need to broadcast here as we have a game loop that broadcasts state regularly

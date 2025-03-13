@@ -96,7 +96,9 @@ export class SceneManager {
    */
   setupEventListeners() {
     this.eventBus.on('sensor:gyro-updated', (gyroData) => {
-      if (!this.firstPersonMode && this.phoneModel) {
+      // Always update the orientation, even in first-person mode
+      // This ensures the orientation data is available for multiplayer
+      if (this.phoneModel) {
         this.phoneModel.updateOrientation(gyroData);
       }
     });
@@ -216,6 +218,8 @@ export class SceneManager {
     }
     
     if (this.phoneModel) {
+      // Only hide the phone model in first-person mode
+      // but continue to update its orientation for multiplayer
       this.phoneModel.setVisible(!enabled);
     }
   }

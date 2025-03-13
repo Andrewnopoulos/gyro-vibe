@@ -124,7 +124,9 @@ export class PlayerManager {
     }
     
     const scene = this.sceneManager.getScene();
-    const remotePlayer = new RemotePlayer(scene, playerId, playerData);
+    // Use current player count as index for color assignment
+    const playerIndex = this.players.size;
+    const remotePlayer = new RemotePlayer(scene, playerId, playerData, playerIndex);
     this.players.set(playerId, remotePlayer);
     
     this.eventBus.emit('player:remote-created', { 

@@ -205,10 +205,17 @@ export class GameStateManager {
    */
   handleLocalPlayerMoved(data) {
     if (this.localPlayerId && this.currentRoom) {
-      this.socketManager.emit('player-update', {
+      const updateData = {
         position: data.position,
         rotation: data.rotation
-      });
+      };
+      
+      // Include phone orientation if available
+      if (data.phoneOrientation) {
+        updateData.phoneOrientation = data.phoneOrientation;
+      }
+      
+      this.socketManager.emit('player-update', updateData);
     }
   }
   

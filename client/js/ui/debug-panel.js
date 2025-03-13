@@ -24,6 +24,13 @@ export class DebugPanel {
           this.createDebugRoom();
         }, 1000);
       }
+      
+      // Auto-start gyro simulation if enabled
+      if (DEBUG_CONFIG.SIMULATE_GYRO) {
+        setTimeout(() => {
+          this.startGyroSimulation();
+        }, 1500);
+      }
     }
   }
   
@@ -99,6 +106,15 @@ export class DebugPanel {
       this.eventBus.emit('debug:toggle-first-person');
     };
     controls.appendChild(toggleFpBtn);
+    
+    // Simulate gyro movement button
+    const simulateGyroBtn = document.createElement('button');
+    simulateGyroBtn.textContent = 'Simulate Gyro Movement';
+    simulateGyroBtn.onclick = () => {
+      // Emit sample gyro data that changes over time to simulate movement
+      this.startGyroSimulation();
+    };
+    controls.appendChild(simulateGyroBtn);
     
     // Leave room button
     const leaveRoomBtn = document.createElement('button');
@@ -185,5 +201,42 @@ export class DebugPanel {
     if (lines.length > 10) {
       this.statusDisplay.innerHTML = lines.slice(0, 10).join('<br>');
     }
+  }
+  
+  /**
+   * Start simulation of gyroscope movement
+   */
+  startGyroSimulation() {
+    // Display status
+    this.updateStatus('Starting gyro simulation');
+    
+    // Clear any existing interval
+    if (this.gyroSimulationInterval) {
+      clearInterval(this.gyroSimulationInterval);
+    }
+    
+    // Starting values
+    let alpha = 0;
+    let beta = 0;
+    let gamma = 0;
+    
+    // Emit initial gyro data
+    this.eventBus.emit('sensor:gyro-updated', { alpha, beta, gamma });
+    
+    // Update at 30fps
+    this.gyroSimulationInterval = setInterval(() => {
+      // Increment angles to simulate movement
+      alpha = (alpha + 2) % 360;  // Rotate around Z axis (compass)
+      beta = 45 * Math.sin(Date.now() / 2000);  // Tilt forward/backward
+      gamma = 30 * Math.sin(Date.now() / 1500);  // Tilt left/right
+      
+      // Emit gyro data
+      this.eventBus.emit('sensor:gyro-updated', { alpha, beta, gamma });
+      
+      // Update status occasionally
+      if (Math.random() < 0.1) {
+        this.updateStatus(`Simulating gyro: α=${alpha.toFixed(0)}° β=${beta.toFixed(0)}° γ=${gamma.toFixed(0)}°`);
+      }
+    }, 33); // ~30fps
   }
 }
