@@ -27,3 +27,31 @@ export const WEAPON_BOBBING = {
 
 // Math constants
 export const DEG_TO_RAD = Math.PI / 180;
+
+// Debug configuration
+export const DEBUG_CONFIG = {
+  /**
+   * Enable debug mode for multiplayer without requiring mobile connection
+   */
+  ENABLE_MULTIPLAYER_DEBUG: true,
+  
+  /**
+   * Auto-join a debug room when in multiplayer debug mode
+   */
+  AUTO_JOIN_DEBUG_ROOM: true,
+  
+  /**
+   * Debug username to use in multiplayer
+   */
+  DEBUG_USERNAME: 'DebugPlayer',
+  
+  /**
+   * Debug room name
+   */
+  DEBUG_ROOM_NAME: 'Debug Room',
+  
+  /**
+   * Simulate touch input from gyroscope for debugging
+   */
+  SIMULATE_GYRO: false
+};

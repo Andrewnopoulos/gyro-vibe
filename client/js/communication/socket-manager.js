@@ -10,6 +10,7 @@ export class SocketManager {
     this.socket = window.SocketIOLib();
     this.sessionId = null;
     this.mobileSocketId = null;
+    this.eventHandlers = new Map();
     this.setupEventListeners();
   }
 
@@ -23,6 +24,12 @@ export class SocketManager {
       this.eventBus.emit('socket:connected', { socketId: this.socket.id });
     });
 
+    this.socket.on('disconnect', () => {
+      console.log('Disconnected from server');
+      this.eventBus.emit('socket:disconnected');
+    });
+
+    // Session and mobile device pairing
     this.socket.on('session-created', (data) => {
       this.sessionId = data.sessionId;
       console.log('Session created with ID:', this.sessionId);
@@ -61,6 +68,56 @@ export class SocketManager {
     this.socket.on('calibration-failed', (data) => {
       this.eventBus.emit('calibration:failed', data);
     });
+    
+    // Multiplayer events
+    const multiplayer = [
+      'game-state-update',
+      'rooms-list',
+      'room-created',
+      'room-joined',
+      'room-left',
+      'room-error',
+      'player-joined',
+      'player-left',
+      'host-changed'
+    ];
+    
+    // Set up handlers for all multiplayer events
+    multiplayer.forEach(eventName => {
+      this.socket.on(eventName, (data) => {
+        // Call any registered event handlers
+        if (this.eventHandlers.has(eventName)) {
+          this.eventHandlers.get(eventName).forEach(handler => handler(data));
+        }
+      });
+    });
+  }
+
+  /**
+   * Register a handler for a Socket.IO event
+   * @param {string} event - Event name
+   * @param {Function} callback - Callback function
+   */
+  on(event, callback) {
+    if (!this.eventHandlers.has(event)) {
+      this.eventHandlers.set(event, []);
+    }
+    this.eventHandlers.get(event).push(callback);
+  }
+  
+  /**
+   * Remove a handler for a Socket.IO event
+   * @param {string} event - Event name
+   * @param {Function} callback - Callback function to remove
+   */
+  off(event, callback) {
+    if (!this.eventHandlers.has(event)) return;
+    
+    const handlers = this.eventHandlers.get(event);
+    const index = handlers.indexOf(callback);
+    if (index !== -1) {
+      handlers.splice(index, 1);
+    }
   }
 
   /**

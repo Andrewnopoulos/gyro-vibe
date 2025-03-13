@@ -152,10 +152,61 @@ export class PhoneModel {
   }
 
   /**
-   * Get the phone object
+   * Get the phone model (for remote players)
    * @returns {THREE.Group} The phone group
    */
-  getPhoneObject() {
+  getModel() {
     return this.phone;
+  }
+  
+  /**
+   * Set phone position
+   * @param {number} x - X position
+   * @param {number} y - Y position
+   * @param {number} z - Z position
+   */
+  setPosition(x, y, z) {
+    if (this.phone) {
+      this.phone.position.set(x, y, z);
+    }
+  }
+  
+  /**
+   * Set phone quaternion directly
+   * @param {THREE.Quaternion} quaternion - The quaternion to set
+   */
+  setQuaternion(quaternion) {
+    if (this.phone) {
+      this.phone.quaternion.copy(quaternion);
+    }
+  }
+  
+  /**
+   * Dispose of the phone model and resources
+   */
+  dispose() {
+    if (this.phone) {
+      // Remove from scene
+      this.scene.remove(this.phone);
+      
+      // Traverse the phone group and dispose of geometries and materials
+      this.phone.traverse((object) => {
+        if (object instanceof THREE.Mesh) {
+          if (object.geometry) {
+            object.geometry.dispose();
+          }
+          
+          if (object.material) {
+            if (Array.isArray(object.material)) {
+              object.material.forEach(material => material.dispose());
+            } else {
+              object.material.dispose();
+            }
+          }
+        }
+      });
+      
+      this.phone = null;
+    }
   }
 }

@@ -8,6 +8,10 @@ import { SceneManager } from './3d/scene-manager.js';
 import { FirstPersonController } from './game/first-person.js';
 import { WeaponView } from './game/weapon-view.js';
 import { CalibrationManager } from './game/calibration-manager.js';
+import { GameStateManager } from './game/game-state-manager.js';
+import { PlayerManager } from './game/player-manager.js';
+import { DebugPanel } from './ui/debug-panel.js';
+import { DEBUG_CONFIG } from './config.js';
 
 /**
  * Main application class
@@ -29,6 +33,15 @@ class App {
     
     // Create weapon view after scene manager (needs container reference)
     this.weaponView = new WeaponView(this.eventBus, this.sceneManager.getContainer());
+    
+    // Initialize multiplayer components
+    this.gameStateManager = new GameStateManager(this.eventBus, this.socketManager);
+    this.playerManager = new PlayerManager(this.eventBus, this.sceneManager);
+    
+    // Initialize debug panel if debug mode is enabled
+    if (DEBUG_CONFIG.ENABLE_MULTIPLAYER_DEBUG) {
+      this.debugPanel = new DebugPanel(this.eventBus, this.gameStateManager);
+    }
     
     // Setup update loop for game components
     this.setupUpdateLoop();
@@ -54,8 +67,59 @@ class App {
         
         // Update weapon view
         this.weaponView.update(delta, isMoving);
+        
+        // Emit local player position and rotation for multiplayer synchronization
+        if (this.gameStateManager.isInRoom()) {
+          const camera = this.sceneManager.getCamera();
+          
+          this.eventBus.emit('player:local-moved', {
+            position: camera.position.clone(),
+            rotation: {
+              x: camera.quaternion.x,
+              y: camera.quaternion.y,
+              z: camera.quaternion.z,
+              w: camera.quaternion.w
+            }
+          });
+        }
       }
     });
+    
+    // Handle debug toggle for first-person mode
+    this.eventBus.on('debug:toggle-first-person', () => {
+      this.sceneManager.setFirstPersonMode(!this.firstPersonController.isEnabled());
+      this.firstPersonController.toggleFirstPersonMode();
+    });
+    
+    // Listen for multiplayer events to update UI and game state
+    this.eventBus.on('mobile:joined', () => {
+      // When mobile device connects, enable first-person view for the local player
+      this.sceneManager.setFirstPersonMode(true);
+      
+      // Enable first-person mode if not already enabled
+      if (!this.firstPersonController.isEnabled()) {
+        this.firstPersonController.toggleFirstPersonMode();
+      }
+    });
+    
+    // Auto-enable first-person mode in debug mode when joining a room
+    if (DEBUG_CONFIG.ENABLE_MULTIPLAYER_DEBUG) {
+      this.eventBus.on('multiplayer:room-joined', () => {
+        // Enable first-person mode if not already enabled
+        if (!this.firstPersonController.isEnabled()) {
+          this.sceneManager.setFirstPersonMode(true);
+          this.firstPersonController.toggleFirstPersonMode();
+        }
+      });
+      
+      this.eventBus.on('multiplayer:room-created', () => {
+        // Enable first-person mode if not already enabled
+        if (!this.firstPersonController.isEnabled()) {
+          this.sceneManager.setFirstPersonMode(true);
+          this.firstPersonController.toggleFirstPersonMode();
+        }
+      });
+    }
   }
 }
 
