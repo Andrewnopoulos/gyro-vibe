@@ -106,60 +106,91 @@ export class WeaponView {
   }
 
   /**
-   * Create weapon phone model
+   * Create wizard staff weapon model
    */
   createWeaponPhoneModel() {
-    // Phone dimensions - smaller for FPS view
-    const width = 0.4;
-    const height = 0.8;
-    const depth = 0.05;
-  
-    // Create weapon phone group
+    // Create weapon group
     this.weaponPhone = new THREE.Group();
     this.weaponScene.add(this.weaponPhone);
     
-    // Apply a -90 degree rotation around the X axis to the phone model itself
-    // This fixes the orientation issue with the model
+    // Apply a rotation to fix the orientation issue
     this.weaponPhone.rotateX(-Math.PI / 2);
     
-    // Create a container for phone components - this won't get the gyroscope rotation
-    // but will maintain the -90 degree correction
-    const phoneContainer = new THREE.Group();
-    this.weaponPhone.add(phoneContainer);
+    // Create a container for staff components
+    const staffContainer = new THREE.Group();
+    this.weaponPhone.add(staffContainer);
   
-    // Create phone body
-    const phoneGeometry = new THREE.BoxGeometry(width, height, depth);
-    const phoneMaterial = new THREE.MeshPhongMaterial({ 
-      color: 0x333333,
-      specular: 0x111111,
-      shininess: 30
+    // Create staff shaft using a cylinder
+    const shaftGeometry = new THREE.CylinderGeometry(0.04, 0.03, 1.2, 8, 6, true);
+    // Apply bending and gnarled effect to vertices
+    const vertices = shaftGeometry.attributes.position;
+    for (let i = 0; i < vertices.count; i++) {
+      const x = vertices.getX(i);
+      const y = vertices.getY(i);
+      const z = vertices.getZ(i);
+      
+      // Apply some random displacement for a gnarled look
+      const noise = Math.sin(y * 10) * 0.01;
+      const curve = Math.sin(y * 0.5) * 0.05;
+      
+      vertices.setX(i, x + noise + curve);
+      vertices.setZ(i, z + noise);
+    }
+    
+    // Brown wooden material with texture
+    const woodMaterial = new THREE.MeshPhongMaterial({ 
+      color: 0x5d4037,
+      specular: 0x1a1209,
+      shininess: 10,
+      flatShading: true
     });
-    const phoneBody = new THREE.Mesh(phoneGeometry, phoneMaterial);
-    phoneContainer.add(phoneBody);
-  
-    // Add screen to the phone (front side)
-    const screenGeometry = new THREE.BoxGeometry(width * 0.9, height * 0.9, depth * 0.1);
-    const screenMaterial = new THREE.MeshBasicMaterial({ color: 0x22aaff });
-    const screen = new THREE.Mesh(screenGeometry, screenMaterial);
-    screen.position.z = depth / 2 + 0.01;
-    phoneContainer.add(screen);
-  
-    // Add camera lens
-    const lensGeometry = new THREE.CircleGeometry(0.025, 32);
-    const lensMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
-    const lens = new THREE.Mesh(lensGeometry, lensMaterial);
-    lens.position.set(0, height * 0.35, depth / 2 + 0.01);
-    phoneContainer.add(lens);
     
-    // Add home button at the bottom to indicate orientation
-    const homeButtonGeometry = new THREE.CircleGeometry(0.04, 32);
-    const homeButtonMaterial = new THREE.MeshBasicMaterial({ color: 0x555555 });
-    const homeButton = new THREE.Mesh(homeButtonGeometry, homeButtonMaterial);
-    homeButton.position.set(0, -height * 0.4, depth / 2 + 0.01);
-    phoneContainer.add(homeButton);
+    const staffShaft = new THREE.Mesh(shaftGeometry, woodMaterial);
+    staffContainer.add(staffShaft);
+  
+    // Create knots/bumps along the staff
+    for (let i = 0; i < 5; i++) {
+      const knotPosition = -0.5 + i * 0.2;
+      const knotSize = 0.02 + Math.random() * 0.02;
+      const knotGeometry = new THREE.SphereGeometry(knotSize, 8, 8);
+      const knotMesh = new THREE.Mesh(knotGeometry, woodMaterial);
+      knotMesh.position.set(
+        (Math.random() - 0.5) * 0.06,
+        knotPosition,
+        (Math.random() - 0.5) * 0.06
+      );
+      staffShaft.add(knotMesh);
+    }
     
-    // Position the phone as a weapon in first-person view
-    this.weaponPhone.position.set(0.25, -0.2, -0.8);
+    // Create crystal/orb at the top
+    const orbGeometry = new THREE.SphereGeometry(0.08, 16, 16);
+    const orbMaterial = new THREE.MeshPhongMaterial({ 
+      color: 0x6fd5ff,
+      specular: 0xffffff,
+      shininess: 90,
+      transparent: true,
+      opacity: 0.8
+    });
+    const orb = new THREE.Mesh(orbGeometry, orbMaterial);
+    orb.position.y = 0.6;
+    staffContainer.add(orb);
+    
+    // Add "roots" at the bottom of the staff
+    const addRoot = (angle, length, thickness) => {
+      const rootGeometry = new THREE.CylinderGeometry(thickness * 0.5, thickness, length, 5, 1);
+      const root = new THREE.Mesh(rootGeometry, woodMaterial);
+      root.position.y = -0.6;
+      root.rotation.x = Math.PI / 2 - 0.3;
+      root.rotation.z = angle;
+      staffContainer.add(root);
+    };
+    
+    for (let i = 0; i < 4; i++) {
+      addRoot(i * Math.PI / 2, 0.1 + Math.random() * 0.05, 0.02);
+    }
+    
+    // Position the staff in first-person view
+    this.weaponPhone.position.set(0.25, -0.3, -0.8);
   }
 
   /**
@@ -205,22 +236,28 @@ export class WeaponView {
   }
 
   /**
-   * Update weapon bobbing animation
+   * Update wizard staff bobbing animation
    * @param {number} delta - Time delta in seconds
    */
   updateBobbing(delta) {
     if (!this.weaponPhone) return;
     
-    // Base position for the weapon phone
-    const basePosition = { x: 0.25, y: -0.2, z: -0.8 };
+    // Base position for the wizard staff - slightly lower and more to the side
+    // to resemble how a wizard would hold a staff
+    const basePosition = { x: 0.3, y: -0.3, z: -0.7 };
     
     if (this.isMoving) {
       // Increment time for bobbing animation
       this.bobbingTime += delta * WEAPON_BOBBING.speed;
       
       // Calculate subtle vertical and horizontal bob
-      const verticalBob = Math.sin(this.bobbingTime * 2) * (WEAPON_BOBBING.intensity * 0.3);
-      const horizontalBob = Math.cos(this.bobbingTime) * (WEAPON_BOBBING.intensity * 0.15);
+      // Slightly more pronounced for the staff to give it a magical feel
+      const verticalBob = Math.sin(this.bobbingTime * 2) * (WEAPON_BOBBING.intensity * 0.35);
+      const horizontalBob = Math.cos(this.bobbingTime) * (WEAPON_BOBBING.intensity * 0.2);
+      
+      // Add a slight rotational sway to the staff while moving
+      const rotationBob = Math.sin(this.bobbingTime) * 0.02;
+      this.weaponPhone.rotation.z = -Math.PI / 2 + rotationBob;
       
       // Apply bobbing to weapon position
       this.weaponPhone.position.y = basePosition.y + verticalBob;
@@ -239,6 +276,17 @@ export class WeaponView {
         delta * 3
       );
       this.weaponPhone.position.z = basePosition.z;
+      
+      // Slowly return rotation to neutral
+      this.weaponPhone.rotation.z = THREE.MathUtils.lerp(
+        this.weaponPhone.rotation.z,
+        -Math.PI / 2,
+        delta * 2
+      );
+      
+      // Add a subtle idle animation - gentle floating effect
+      const idleFloat = Math.sin(Date.now() * 0.001) * 0.01;
+      this.weaponPhone.position.y += idleFloat;
     }
   }
 

@@ -14,47 +14,86 @@ export class RemoteWeapon {
   }
   
   /**
-   * Create the weapon model
+   * Create the wizard staff weapon model
    */
   createWeaponModel() {
     // Create weapon group
     this.weapon = new THREE.Group();
     
-    // Create gun body - slightly smaller than the first-person view
-    const gunBody = new THREE.BoxGeometry(0.08, 0.08, 0.5);
-    const gunMaterial = new THREE.MeshPhongMaterial({ 
-      color: 0x333333,
-      specular: 0x111111,
-      shininess: 30
+    // Create staff shaft using a cylinder
+    const shaftGeometry = new THREE.CylinderGeometry(0.03, 0.025, 0.9, 8, 6, true);
+    // Apply bending and gnarled effect to vertices
+    const vertices = shaftGeometry.attributes.position;
+    for (let i = 0; i < vertices.count; i++) {
+      const x = vertices.getX(i);
+      const y = vertices.getY(i);
+      const z = vertices.getZ(i);
+      
+      // Apply some random displacement for a gnarled look
+      const noise = Math.sin(y * 10) * 0.01;
+      const curve = Math.sin(y * 0.5) * 0.04;
+      
+      vertices.setX(i, x + noise + curve);
+      vertices.setZ(i, z + noise);
+    }
+    
+    // Brown wooden material with texture
+    const woodMaterial = new THREE.MeshPhongMaterial({ 
+      color: 0x5d4037,
+      specular: 0x1a1209,
+      shininess: 10,
+      flatShading: true
     });
-    const gun = new THREE.Mesh(gunBody, gunMaterial);
     
-    // Move the gun to be held at one end rather than centered
-    gun.position.z = 0.25;
+    const staffShaft = new THREE.Mesh(shaftGeometry, woodMaterial);
+    // Rotate to proper orientation
+    staffShaft.rotation.x = Math.PI / 2;
+    this.weapon.add(staffShaft);
+  
+    // Create knots/bumps along the staff
+    for (let i = 0; i < 4; i++) {
+      const knotPosition = -0.4 + i * 0.25;
+      const knotSize = 0.015 + Math.random() * 0.015;
+      const knotGeometry = new THREE.SphereGeometry(knotSize, 6, 6);
+      const knotMesh = new THREE.Mesh(knotGeometry, woodMaterial);
+      knotMesh.position.set(
+        (Math.random() - 0.5) * 0.05,
+        (Math.random() - 0.5) * 0.05,
+        knotPosition
+      );
+      staffShaft.add(knotMesh);
+    }
     
-    // Create gun barrel
-    const barrelGeometry = new THREE.CylinderGeometry(0.03, 0.03, 0.6, 8);
-    const barrelMaterial = new THREE.MeshPhongMaterial({ color: 0x222222 });
-    const barrel = new THREE.Mesh(barrelGeometry, barrelMaterial);
-    barrel.rotation.x = Math.PI / 2; // Rotate to align with gun
-    barrel.position.z = 0.3; // Position at front of gun
-    barrel.position.y = -0.03; // Slightly below center
+    // Create crystal/orb at the top
+    const orbGeometry = new THREE.SphereGeometry(0.06, 12, 12);
+    const orbMaterial = new THREE.MeshPhongMaterial({ 
+      color: 0x6fd5ff,
+      specular: 0xffffff,
+      shininess: 90,
+      transparent: true,
+      opacity: 0.8
+    });
+    const orb = new THREE.Mesh(orbGeometry, orbMaterial);
+    orb.position.z = 0.45;
+    this.weapon.add(orb);
     
-    // Create gun handle
-    const handleGeometry = new THREE.BoxGeometry(0.05, 0.15, 0.08);
-    const handleMaterial = new THREE.MeshPhongMaterial({ color: 0x444444 });
-    const handle = new THREE.Mesh(handleGeometry, handleMaterial);
-    handle.position.y = -0.1; // Below gun body
-    handle.position.z = 0.1; // Slightly forward
+    // Add "roots" at the bottom of the staff
+    const addRoot = (angle, length, thickness) => {
+      const rootGeometry = new THREE.CylinderGeometry(thickness * 0.5, thickness, length, 5, 1);
+      const root = new THREE.Mesh(rootGeometry, woodMaterial);
+      root.position.z = -0.45;
+      root.rotation.x = Math.PI / 2 - 0.3;
+      root.rotation.y = angle;
+      this.weapon.add(root);
+    };
     
-    // Add parts to weapon group
-    this.weapon.add(gun);
-    this.weapon.add(barrel);
-    this.weapon.add(handle);
+    for (let i = 0; i < 3; i++) {
+      addRoot(i * Math.PI * 2/3, 0.08 + Math.random() * 0.03, 0.015);
+    }
     
-    // Position relative to phone
-    this.weapon.rotation.y = Math.PI / 2; // Rotate to align with phone forward direction
-    this.weapon.position.set(0.2, -0.15, 0.6); // Position weapon near the "hand" of the phone model
+    // Position relative to wizard
+    this.weapon.rotation.y = -Math.PI / 2; // Rotate to align with wizard's forward direction (reversed since we flipped the wizard)
+    this.weapon.position.set(-0.15, 0.7, -0.4); // Position staff near the wizard's hand
     
     // Add to parent object
     this.parentObject.add(this.weapon);
@@ -69,32 +108,36 @@ export class RemoteWeapon {
   }
   
   /**
-   * Update weapon orientation based on phone orientation
-   * @param {THREE.Quaternion} quaternion - The quaternion representing phone orientation
+   * Update wizard staff orientation based on wizard orientation
+   * @param {THREE.Quaternion} quaternion - The quaternion representing wizard orientation
    */
   updateOrientation(quaternion) {
     if (this.weapon) {
-      // We need a relative rotation between the phone's pose and the weapon
-      // First, set weapon to a base orientation that looks sensible when phone is in neutral position
+      // We need a relative rotation between the wizard's pose and the staff
+      // First, set staff to a base orientation that looks sensible when wizard is in neutral position
+      // For a wizard staff, we want it slightly angled and more upright than a gun
       const weaponBaseOrientation = new THREE.Quaternion().setFromEuler(
-        new THREE.Euler(Math.PI/2, 0, -Math.PI/2, 'XYZ')
+        new THREE.Euler(Math.PI/2, 0, Math.PI/2, 'XYZ')
       );
       
-      // Apply a slight offset to make the weapon look like it's being held
+      // Apply a slight offset to make the staff look like it's being held
+      // Adjusted for a more "wizardly" staff holding pose
       const positionOffset = new THREE.Quaternion().setFromEuler(
-        new THREE.Euler(0.1, 0.1, 0.0, 'XYZ')
+        new THREE.Euler(0.3, -0.1, 0.1, 'XYZ')
       );
       
-      // When the phone rotates, we want the weapon to rotate in a consistent way
-      const phoneOrientation = quaternion.clone();
+      // When the wizard rotates, we want the staff to rotate in a slightly exaggerated way
+      // This makes wizard movements more dramatic
+      const wizardOrientation = quaternion.clone();
       
       // Apply all rotations in the correct order
       this.weapon.quaternion.copy(weaponBaseOrientation);  // Start with base orientation
       this.weapon.quaternion.multiply(positionOffset);     // Add holding offset
-      this.weapon.quaternion.multiply(phoneOrientation);   // Apply phone rotation
+      this.weapon.quaternion.multiply(wizardOrientation);  // Apply wizard rotation
       
-      // Rescale the weapon to appear appropriate when held
-      this.weapon.scale.set(0.6, 0.6, 0.6);
+      // Rescale the staff to appear appropriate when held
+      // Making the staff slightly longer than the original
+      this.weapon.scale.set(0.7, 0.7, 0.7);
     }
   }
   

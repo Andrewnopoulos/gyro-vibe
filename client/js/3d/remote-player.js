@@ -78,15 +78,22 @@ export class RemotePlayer {
    */
   setPlayerColor(color) {
     if (this.phoneModel) {
-      // Access the model's children to find the screen mesh
+      // Access the model's children to find the glowing eye meshes
       const model = this.phoneModel.getModel();
       if (model) {
-        // Find the screen mesh (second child of the phone model)
+        // Find all meshes with the default eye color (blue by default)
         model.traverse((object) => {
           if (object instanceof THREE.Mesh && object.material) {
-            // Apply color to screen (which is blue by default)
+            // Apply color to glowing eyes (which are blue by default)
             if (object.material.color && object.material.color.getHex() === 0x3355ff) {
               object.material.color.setHex(color);
+            }
+            
+            // Also modify the hat band and belt to match player color
+            if (object.material.color && object.material.color.getHex() === 0xffeb3b) {
+              // Darken the color slightly for better visibility
+              const darkColor = new THREE.Color(color).multiplyScalar(0.8);
+              object.material.color.set(darkColor);
             }
           }
         });
@@ -134,10 +141,10 @@ export class RemotePlayer {
     this.nameSprite = new THREE.Sprite(material);
     this.nameSprite.scale.set(2, 0.5, 1);
     
-    // Position above the phone model
-    this.nameSprite.position.y = 1.5;
+    // Position above the wizard's hat
+    this.nameSprite.position.y = 2.3;
     
-    // Add to the phone model
+    // Add to the wizard model
     this.phoneModel.getModel().add(this.nameSprite);
   }
   

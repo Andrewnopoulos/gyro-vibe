@@ -23,90 +23,167 @@ export class PhoneModel {
   }
 
   /**
-   * Create the 3D phone model
+   * Create the 3D wizard model
    */
   createPhoneModel() {
-    // Phone dimensions
-    const width = 0.8;
-    const height = 1.6;
-    const depth = 0.1;
+    // Wizard dimensions
+    const bodyWidth = 0.6;
+    const bodyHeight = 1.4;
+    const bodyDepth = 0.4;
   
-    // Create phone group
+    // Create wizard group - we still call it 'phone' for compatibility
     this.phone = new THREE.Group();
     this.scene.add(this.phone);
+    
+    // Create a container to apply the 180 degree rotation to fix backward facing issue
+    const wizardContainer = new THREE.Group();
+    // Rotate 180 degrees around Y axis to face forward
+    wizardContainer.rotation.y = Math.PI;
+    this.phone.add(wizardContainer);
   
-    // Create phone body
-    const phoneGeometry = new THREE.BoxGeometry(width, height, depth);
-    const phoneMaterial = new THREE.MeshPhongMaterial({ 
-      color: 0x333333,
-      specular: 0x111111,
-      shininess: 30
+    // Create wizard body (robe)
+    const bodyGeometry = new THREE.ConeGeometry(bodyWidth, bodyHeight, 8);
+    const bodyMaterial = new THREE.MeshPhongMaterial({
+      color: 0x303f9f, // Deep blue for wizard robe
+      specular: 0x222222,
+      shininess: 10
     });
-    const phoneBody = new THREE.Mesh(phoneGeometry, phoneMaterial);
-    this.phone.add(phoneBody);
-  
-    // Add screen to the phone (front side)
-    const screenGeometry = new THREE.BoxGeometry(width * 0.9, height * 0.9, depth * 0.1);
-    const screenMaterial = new THREE.MeshBasicMaterial({ color: 0x3355ff });
-    const screen = new THREE.Mesh(screenGeometry, screenMaterial);
-    screen.position.z = depth / 2 + 0.01;
-    this.phone.add(screen);
-  
-    // Add camera lens
-    const lensGeometry = new THREE.CircleGeometry(0.05, 32);
-    const lensMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
-    const lens = new THREE.Mesh(lensGeometry, lensMaterial);
-    lens.position.set(0, height * 0.35, depth / 2 + 0.01);
-    this.phone.add(lens);
+    const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+    // Position to have point at bottom
+    body.position.y = bodyHeight / 2;
+    wizardContainer.add(body);
     
-    // Add home button at the bottom to indicate orientation
-    const homeButtonGeometry = new THREE.CircleGeometry(0.08, 32);
-    const homeButtonMaterial = new THREE.MeshBasicMaterial({ color: 0x555555 });
-    const homeButton = new THREE.Mesh(homeButtonGeometry, homeButtonMaterial);
-    homeButton.position.set(0, -height * 0.4, depth / 2 + 0.01);
-    this.phone.add(homeButton);
+    // Create robe details - belt/sash
+    const beltGeometry = new THREE.TorusGeometry(bodyWidth * 0.85, 0.05, 8, 16);
+    const beltMaterial = new THREE.MeshPhongMaterial({
+      color: 0xffeb3b, // Gold/yellow belt
+      specular: 0x777733,
+      shininess: 50
+    });
+    const belt = new THREE.Mesh(beltGeometry, beltMaterial);
+    belt.position.y = bodyHeight * 0.25;
+    belt.rotation.x = Math.PI / 2; // Lay flat
+    wizardContainer.add(belt);
     
-    // Add text indicator for front side
-    const frontTextGeometry = new THREE.BoxGeometry(width * 0.5, height * 0.1, depth * 0.05);
-    const frontTextMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    const frontText = new THREE.Mesh(frontTextGeometry, frontTextMaterial);
-    frontText.position.set(0, 0, depth / 2 + 0.02);
-    this.phone.add(frontText);
+    // Add star pattern to the robe
+    const addStar = (x, y, z, size) => {
+      const starGeometry = new THREE.BoxGeometry(size, size, size * 0.1);
+      const starMaterial = new THREE.MeshBasicMaterial({ color: 0xffeb3b }); // Gold stars
+      const star = new THREE.Mesh(starGeometry, starMaterial);
+      star.position.set(x, y, z);
+      body.add(star);
+    };
     
-    // Add indicator for the top of the phone
-    const topIndicatorGeometry = new THREE.BoxGeometry(width * 0.3, height * 0.05, depth * 0.05);
-    const topIndicatorMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    const topIndicator = new THREE.Mesh(topIndicatorGeometry, topIndicatorMaterial);
-    topIndicator.position.set(0, height * 0.45, depth / 2 + 0.02);
-    this.phone.add(topIndicator);
-  
-    // Add X, Y, Z axes indicators for better visualization
+    // Add random stars to the robe
+    for (let i = 0; i < 12; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const radius = bodyWidth * 0.6 * Math.random();
+      const height = bodyHeight * 0.1 + Math.random() * bodyHeight * 0.7;
+      const x = Math.cos(angle) * radius;
+      const z = Math.sin(angle) * radius;
+      addStar(x, height, z, 0.05 + Math.random() * 0.05);
+    }
+    
+    // Create wizard head
+    const headGeometry = new THREE.SphereGeometry(0.25, 16, 16);
+    const headMaterial = new THREE.MeshPhongMaterial({
+      color: 0xffe0bd, // Skin tone
+      specular: 0x222222,
+      shininess: 20
+    });
+    const head = new THREE.Mesh(headGeometry, headMaterial);
+    head.position.y = bodyHeight + 0.05;
+    wizardContainer.add(head);
+    
+    // Create wizard hat
+    const hatBaseGeometry = new THREE.CylinderGeometry(0.3, 0.3, 0.1, 16);
+    const hatConeGeometry = new THREE.ConeGeometry(0.25, 0.6, 16);
+    const hatMaterial = new THREE.MeshPhongMaterial({
+      color: 0x303f9f, // Same as robe
+      specular: 0x222222,
+      shininess: 10
+    });
+    
+    const hatBase = new THREE.Mesh(hatBaseGeometry, hatMaterial);
+    hatBase.position.y = bodyHeight + 0.25;
+    wizardContainer.add(hatBase);
+    
+    const hatCone = new THREE.Mesh(hatConeGeometry, hatMaterial);
+    hatCone.position.y = bodyHeight + 0.6;
+    wizardContainer.add(hatCone);
+    
+    // Add hat decoration
+    const hatBandGeometry = new THREE.TorusGeometry(0.3, 0.03, 8, 16);
+    const hatBandMaterial = new THREE.MeshPhongMaterial({
+      color: 0xffeb3b, // Gold/yellow band
+      specular: 0x777733,
+      shininess: 50
+    });
+    const hatBand = new THREE.Mesh(hatBandGeometry, hatBandMaterial);
+    hatBand.position.y = bodyHeight + 0.25;
+    hatBand.rotation.x = Math.PI / 2; // Lay flat
+    wizardContainer.add(hatBand);
+    
+    // Create wizard beard
+    const beardGeometry = new THREE.ConeGeometry(0.2, 0.4, 16);
+    const beardMaterial = new THREE.MeshPhongMaterial({
+      color: 0xaaaaaa, // Gray beard
+      specular: 0x555555,
+      shininess: 5
+    });
+    const beard = new THREE.Mesh(beardGeometry, beardMaterial);
+    beard.position.set(0, bodyHeight - 0.1, 0.2);
+    beard.rotation.x = -Math.PI / 4; // Angle the beard forward
+    wizardContainer.add(beard);
+    
+    // Create wizard glowing eyes (for screen color replacement)
+    const eyeGeometry = new THREE.SphereGeometry(0.05, 8, 8);
+    const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0x3355ff }); // This will be replaced by player color
+    
+    const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+    leftEye.position.set(-0.1, bodyHeight + 0.05, 0.2);
+    wizardContainer.add(leftEye);
+    
+    const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+    rightEye.position.set(0.1, bodyHeight + 0.05, 0.2);
+    wizardContainer.add(rightEye);
+    
+    // Add small indicators for orientation (phone equivalent)
+    
+    // "Home button" equivalent - small crystal on chest
+    const crystalGeometry = new THREE.OctahedronGeometry(0.1, 0);
+    const crystalMaterial = new THREE.MeshBasicMaterial({ color: 0x555555 });
+    const crystal = new THREE.Mesh(crystalGeometry, crystalMaterial);
+    crystal.position.set(0, bodyHeight * 0.4, bodyDepth * 0.6);
+    wizardContainer.add(crystal);
+    
+    // Keep invisible orientation axes for technical functionality
     const axisLength = 0.4;
     
-    // X axis (red) - points right from the phone's perspective
+    // X axis (red) - points right from the wizard's perspective
     const xAxisGeometry = new THREE.CylinderGeometry(0.02, 0.02, axisLength, 8);
-    const xAxisMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+    const xAxisMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.2 });
     const xAxis = new THREE.Mesh(xAxisGeometry, xAxisMaterial);
     xAxis.rotation.z = Math.PI / 2; // Rotate to point along X axis
-    xAxis.position.set(axisLength/2, 0, 0);
-    this.phone.add(xAxis);
+    xAxis.position.set(axisLength/2, bodyHeight * 0.5, 0);
+    wizardContainer.add(xAxis);
     
-    // Y axis (green) - points up from the phone's perspective
+    // Y axis (green) - points up from the wizard's perspective
     const yAxisGeometry = new THREE.CylinderGeometry(0.02, 0.02, axisLength, 8);
-    const yAxisMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+    const yAxisMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.2 });
     const yAxis = new THREE.Mesh(yAxisGeometry, yAxisMaterial);
-    yAxis.position.set(0, axisLength/2, 0);
-    this.phone.add(yAxis);
+    yAxis.position.set(0, bodyHeight * 0.5 + axisLength/2, 0);
+    wizardContainer.add(yAxis);
     
-    // Z axis (blue) - points out from the phone's screen
+    // Z axis (blue) - points out from the wizard's front
     const zAxisGeometry = new THREE.CylinderGeometry(0.02, 0.02, axisLength, 8);
-    const zAxisMaterial = new THREE.MeshBasicMaterial({ color: 0x0000ff });
+    const zAxisMaterial = new THREE.MeshBasicMaterial({ color: 0x0000ff, transparent: true, opacity: 0.2 });
     const zAxis = new THREE.Mesh(zAxisGeometry, zAxisMaterial);
     zAxis.rotation.x = Math.PI / 2; // Rotate to point along Z axis
-    zAxis.position.set(0, 0, axisLength/2);
-    this.phone.add(zAxis);
+    zAxis.position.set(0, bodyHeight * 0.5, axisLength/2);
+    wizardContainer.add(zAxis);
     
-    console.log('Phone model created successfully');
+    console.log('Wizard model created successfully');
   }
 
   /**
