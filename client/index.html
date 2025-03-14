@@ -65,6 +65,13 @@
       max-width: 300px;
     }
     
+    /* Adjust QR code position when room is active to avoid overlap */
+    body.in-room #qrcode {
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0.8);
+    }
+    
     /* Debug overlay */
     #debugSection {
       bottom: 10px;

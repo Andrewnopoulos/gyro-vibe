@@ -11,6 +11,7 @@ import { CalibrationManager } from './game/calibration-manager.js';
 import { GameStateManager } from './game/game-state-manager.js';
 import { PlayerManager } from './game/player-manager.js';
 import { DebugPanel } from './ui/debug-panel.js';
+import { LobbyManager } from './ui/lobby-manager.js';
 import { DEBUG_CONFIG } from './config.js';
 
 /**
@@ -38,13 +39,20 @@ class App {
     this.gameStateManager = new GameStateManager(this.eventBus, this.socketManager);
     this.playerManager = new PlayerManager(this.eventBus, this.sceneManager);
     
+    // Initialize lobby manager for room management UI
+    this.lobbyManager = new LobbyManager(this.eventBus, this.gameStateManager);
+    
     // Initialize debug panel if debug mode is enabled
+    // (Only used for testing, the lobby manager is the primary multiplayer UI)
     if (DEBUG_CONFIG.ENABLE_MULTIPLAYER_DEBUG) {
       this.debugPanel = new DebugPanel(this.eventBus, this.gameStateManager);
     }
     
     // Setup update loop for game components
     this.setupUpdateLoop();
+    
+    // Automatically request session creation to ensure QR code is generated
+    this.socketManager.emit('create-session');
     
     console.log('Application initialized');
   }

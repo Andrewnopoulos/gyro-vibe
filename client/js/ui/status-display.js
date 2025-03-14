@@ -33,25 +33,25 @@ export class StatusDisplay {
 
     this.eventBus.on('mobile:joined', () => {
       this.setStatus('Mobile connected, establishing WebRTC...', 'connecting');
-      this.showQRCode(false);
+      this.showQRCode(false); // Hide QR code when mobile device connects
     });
 
     this.eventBus.on('mobile:disconnected', () => {
       this.setStatus('Mobile device disconnected', 'disconnected');
       this.setCalibrationButtonState(false);
-      this.showQRCode(true);
+      this.showQRCode(true); // Show QR code when mobile device disconnects
     });
 
     this.eventBus.on('webrtc:connected', () => {
       this.setStatus('Mobile device connected via WebRTC', 'connected');
       this.setCalibrationButtonState(true);
-      this.showQRCode(false);
+      this.showQRCode(false); // Hide QR code when WebRTC connection established
     });
 
     this.eventBus.on('webrtc:disconnected', () => {
       this.setStatus('WebRTC connection lost', 'disconnected');
       this.setCalibrationButtonState(false);
-      this.showQRCode(true);
+      this.showQRCode(true); // Show QR code when WebRTC connection lost
     });
 
     this.eventBus.on('calibration:started', () => {
@@ -66,6 +66,27 @@ export class StatusDisplay {
     this.eventBus.on('calibration:failed', (data) => {
       this.setStatus('Mobile device connected - Calibration failed', 'connected');
       this.showNotification(`Calibration failed: ${data.reason || 'Unknown error'}. Please start sensors on mobile first.`, 'error');
+    });
+    
+    // Multiplayer status updates
+    this.eventBus.on('multiplayer:room-created', (data) => {
+      this.setStatus(`Room Created: ${data.room.roomName}`, 'connected');
+    });
+    
+    this.eventBus.on('multiplayer:room-joined', (data) => {
+      this.setStatus(`Joined Room: ${data.room.roomName}`, 'connected');
+    });
+    
+    this.eventBus.on('multiplayer:room-left', () => {
+      this.setStatus('Left multiplayer room', 'disconnected');
+    });
+    
+    this.eventBus.on('multiplayer:player-joined', (data) => {
+      this.showNotification(`Player ${data.player.username} joined the room`, 'info');
+    });
+    
+    this.eventBus.on('multiplayer:player-left', (data) => {
+      this.showNotification(`Player left the room`, 'info');
     });
     
     // Set up calibration button
@@ -106,6 +127,19 @@ export class StatusDisplay {
   showQRCode(show) {
     if (this.qrcodeElement) {
       this.qrcodeElement.style.display = show ? 'block' : 'none';
+      
+      // When showing the QR code, make sure it's correctly positioned over the scene
+      if (show) {
+        // If z-index is too low, temporarily bring it forward
+        const currentZ = parseInt(getComputedStyle(this.qrcodeElement).zIndex, 10);
+        if (currentZ < 30) {
+          this.qrcodeElement.style.zIndex = '30';
+          // Reset after animation completes
+          setTimeout(() => {
+            this.qrcodeElement.style.zIndex = '20';
+          }, 500);
+        }
+      }
     }
   }
 

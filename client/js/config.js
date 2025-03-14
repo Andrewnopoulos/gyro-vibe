@@ -37,8 +37,9 @@ export const DEBUG_CONFIG = {
   
   /**
    * Auto-join a debug room when in multiplayer debug mode
+   * Disabled now that we have a proper lobby UI
    */
-  AUTO_JOIN_DEBUG_ROOM: true,
+  AUTO_JOIN_DEBUG_ROOM: false,
   
   /**
    * Debug username to use in multiplayer

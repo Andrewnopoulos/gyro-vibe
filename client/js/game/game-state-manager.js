@@ -16,6 +16,11 @@ export class GameStateManager {
     this.gameObjects = [];
     
     this.setupEventListeners();
+    
+    // Request available rooms when initialized
+    setTimeout(() => {
+      this.listRooms();
+    }, 1000);
   }
 
   /**
