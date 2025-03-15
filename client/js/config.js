@@ -19,6 +19,17 @@ export const PLAYER_HEIGHT = 1.6; // Player height in units (average human heigh
 export const MOVE_SPEED = 0.25; // Movement speed
 export const LOOK_SPEED = 0.002; // Look sensitivity
 
+// Physics constants
+export const PHYSICS = {
+  GRAVITY: 20.0, // Gravity acceleration (units/s²) - slightly reduced
+  JUMP_FORCE: 7.0, // Initial jump velocity - slightly reduced
+  MAX_FALL_SPEED: 12.0, // Terminal velocity - reduced for better control
+  PLAYER_RADIUS: 0.4, // Player collision radius - slightly reduced
+  GROUND_FRICTION: 8.0, // Friction when on ground - reduced for smoother movement
+  AIR_RESISTANCE: 1.5, // Air resistance when in air - reduced for better air control
+  GROUND_CHECK_DISTANCE: 0.2 // Distance to check for ground below player
+};
+
 // Weapon view settings
 export const WEAPON_BOBBING = {
   intensity: 0.015,
@@ -54,5 +65,10 @@ export const DEBUG_CONFIG = {
   /**
    * Simulate touch input from gyroscope for debugging
    */
-  SIMULATE_GYRO: false
+  SIMULATE_GYRO: false,
+  
+  /**
+   * Show collision detection for debugging
+   */
+  SHOW_COLLISION_HELPERS: true
 };

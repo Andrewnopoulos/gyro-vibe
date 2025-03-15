@@ -69,7 +69,7 @@ export class SceneManager {
     // }
     
     // Create environment, lighting, and phone model
-    this.environment = new Environment(this.scene);
+    this.environment = new Environment(this.scene, this.eventBus);
     this.lighting = new Lighting(this.scene);
     this.phoneModel = new PhoneModel(this.scene);
     

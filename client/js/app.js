@@ -112,7 +112,11 @@ class App {
               z: camera.quaternion.z,
               w: camera.quaternion.w
             },
-            phoneOrientation: phoneOrientation
+            phoneOrientation: phoneOrientation,
+            // Add physics state
+            isJumping: this.firstPersonController.jump,
+            isGrounded: this.firstPersonController.isGrounded,
+            velocity: this.firstPersonController.velocity.clone()
           });
         }
       }

@@ -220,6 +220,23 @@ export class GameStateManager {
         updateData.phoneOrientation = data.phoneOrientation;
       }
       
+      // Include physics state
+      if (data.isJumping !== undefined) {
+        updateData.isJumping = data.isJumping;
+      }
+      
+      if (data.isGrounded !== undefined) {
+        updateData.isGrounded = data.isGrounded;
+      }
+      
+      if (data.velocity) {
+        updateData.velocity = {
+          x: data.velocity.x,
+          y: data.velocity.y,
+          z: data.velocity.z
+        };
+      }
+      
       this.socketManager.emit('player-update', updateData);
     }
   }

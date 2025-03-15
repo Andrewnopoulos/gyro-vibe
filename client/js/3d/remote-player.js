@@ -42,6 +42,11 @@ export class RemotePlayer {
     this.targetPhoneOrientation = new THREE.Quaternion();
     this.currentPhoneOrientation = new THREE.Quaternion();
     
+    // Physics state
+    this.isJumping = false;
+    this.isGrounded = true;
+    this.velocity = new THREE.Vector3();
+    
     // Set player color based on index
     this.colorIndex = playerIndex % PLAYER_COLORS.length;
     this.playerColor = PLAYER_COLORS[this.colorIndex];
@@ -196,6 +201,23 @@ export class RemotePlayer {
       }
     }
     
+    // Update physics state if provided
+    if (data.isJumping !== undefined) {
+      this.isJumping = data.isJumping;
+    }
+    
+    if (data.isGrounded !== undefined) {
+      this.isGrounded = data.isGrounded;
+    }
+    
+    if (data.velocity) {
+      this.velocity.set(
+        data.velocity.x,
+        data.velocity.y,
+        data.velocity.z
+      );
+    }
+    
     // Calculate forward direction (for making player face the right way in first-person)
     if (data.rotation) {
       const forward = new THREE.Vector3(0, 0, -1);
@@ -216,13 +238,37 @@ export class RemotePlayer {
    * @param {number} delta - Time in seconds since last update
    */
   update(delta) {
-    // Smoothly interpolate position
-    this.currentPosition.lerp(this.targetPosition, Math.min(delta * 10, 1));
-    this.phoneModel.setPosition(
-      this.currentPosition.x,
-      this.currentPosition.y,
-      this.currentPosition.z
-    );
+    // Apply physics effects for visual representation
+    if (!this.isGrounded) {
+      // Apply a small visual bob up and down for jumping/falling players
+      const jumpOffset = Math.sin(Date.now() * 0.005) * 0.05;
+      
+      // Smoothly interpolate position with jumping/falling effects
+      this.currentPosition.lerp(this.targetPosition, Math.min(delta * 10, 1));
+      
+      // Add jump visual effect if jumping
+      if (this.isJumping) {
+        this.phoneModel.setPosition(
+          this.currentPosition.x,
+          this.currentPosition.y + jumpOffset,
+          this.currentPosition.z
+        );
+      } else {
+        this.phoneModel.setPosition(
+          this.currentPosition.x,
+          this.currentPosition.y,
+          this.currentPosition.z
+        );
+      }
+    } else {
+      // Regular ground movement
+      this.currentPosition.lerp(this.targetPosition, Math.min(delta * 10, 1));
+      this.phoneModel.setPosition(
+        this.currentPosition.x,
+        this.currentPosition.y,
+        this.currentPosition.z
+      );
+    }
     
     // Smoothly interpolate rotation
     this.currentRotation.slerp(this.targetRotation, Math.min(delta * 10, 1));

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { PLAYER_HEIGHT, LOOK_SPEED, MOVE_SPEED } from '../config.js';
+import { PLAYER_HEIGHT, LOOK_SPEED, MOVE_SPEED, PHYSICS } from '../config.js';
+import { PhysicsManager } from './physics-manager.js';
 
 /**
  * Manages first-person mode controls
@@ -20,9 +21,15 @@ export class FirstPersonController {
     this.moveBackward = false;
     this.moveLeft = false;
     this.moveRight = false;
+    this.jump = false;
     this.velocity = new THREE.Vector3();
     this.direction = new THREE.Vector3();
     this.enabled = false;
+    
+    // Physics variables
+    this.isGrounded = true;
+    this.canJump = true;
+    this.physicsManager = new PhysicsManager(eventBus, sceneManager.getScene());
     
     // Touch control variables
     this.touchActive = false;
@@ -59,6 +66,7 @@ export class FirstPersonController {
       S/Arrow Down - Move Backward<br>
       A/Arrow Left - Move Left<br>
       D/Arrow Right - Move Right<br>
+      Space - Jump<br>
       Mouse - Look Around<br>
       <strong>Mobile Controls:</strong><br>
       Touch Drag - Look Around
@@ -104,7 +112,29 @@ export class FirstPersonController {
     if (this.enabled) {
       // Enable first-person mode
       this.sceneManager.setFirstPersonMode(true);
+      
+      // Set initial position and physics state
       this.camera.position.y = PLAYER_HEIGHT;
+      this.velocity = new THREE.Vector3(0, 0, 0); // Reset velocity
+      this.isGrounded = true; // Start on the ground
+      this.canJump = true;    // Allow jumping
+      
+      // Ensure we're not falling through the ground on start
+      // By running a ground check
+      setTimeout(() => {
+        // Check ground after a short delay to make sure environment is loaded
+        this.isGrounded = this.physicsManager.isOnGround(this.camera.position, PLAYER_HEIGHT);
+        
+        // If not on ground, move player to a known valid position
+        if (!this.isGrounded) {
+          // Place player at a safe height
+          this.camera.position.y = PLAYER_HEIGHT + 0.1;
+          
+          // Log for debugging
+          console.log('Player not initially grounded, adjusting position');
+        }
+      }, 100);
+      
       this.controlsGuide.style.display = 'block';
       this.requestPointerLock();
       this.eventBus.emit('firstperson:enabled');
@@ -124,9 +154,45 @@ export class FirstPersonController {
   update(delta) {
     if (!this.enabled) return;
     
-    // Apply damping to slow down movement
-    this.velocity.x -= this.velocity.x * 10.0 * delta;
-    this.velocity.z -= this.velocity.z * 10.0 * delta;
+    // First, ensure we're not already below the floor
+    const minHeight = -0.5 + PHYSICS.PLAYER_RADIUS + 0.1;
+    if (this.camera.position.y < minHeight) {
+      this.camera.position.y = minHeight;
+      this.velocity.y = 0;
+      this.isGrounded = true;
+      this.canJump = true;
+      console.log("Emergency position correction applied");
+    }
+    
+    // Check if player is on the ground
+    this.isGrounded = this.physicsManager.isOnGround(this.camera.position, PLAYER_HEIGHT);
+    
+    // Apply damping to slow down movement (different values for air and ground)
+    const friction = this.isGrounded ? PHYSICS.GROUND_FRICTION : PHYSICS.AIR_RESISTANCE;
+    this.velocity.x -= this.velocity.x * friction * delta;
+    this.velocity.z -= this.velocity.z * friction * delta;
+    
+    // Apply gravity if not on the ground
+    if (!this.isGrounded) {
+      this.velocity.y -= PHYSICS.GRAVITY * delta;
+      
+      // Cap fall speed at terminal velocity
+      if (this.velocity.y < -PHYSICS.MAX_FALL_SPEED) {
+        this.velocity.y = -PHYSICS.MAX_FALL_SPEED;
+      }
+    } else {
+      // Reset vertical velocity when on ground
+      this.velocity.y = 0;
+      this.canJump = true;
+    }
+    
+    // Process jump
+    if (this.jump && this.canJump && this.isGrounded) {
+      this.velocity.y = PHYSICS.JUMP_FORCE;
+      this.canJump = false;
+      this.isGrounded = false;
+      console.log("Player jumped");
+    }
     
     // Set movement direction based on key states
     this.direction.z = Number(this.moveForward) - Number(this.moveBackward);
@@ -134,8 +200,12 @@ export class FirstPersonController {
     this.direction.normalize(); // Normalize for consistent movement speed
     
     // Move in the direction the camera is facing
-    if (this.moveForward || this.moveBackward) this.velocity.z -= this.direction.z * MOVE_SPEED * delta * 100;
-    if (this.moveLeft || this.moveRight) this.velocity.x -= this.direction.x * MOVE_SPEED * delta * 100;
+    if (this.moveForward || this.moveBackward) {
+      this.velocity.z -= this.direction.z * MOVE_SPEED * delta * 100;
+    }
+    if (this.moveLeft || this.moveRight) {
+      this.velocity.x -= this.direction.x * MOVE_SPEED * delta * 100;
+    }
     
     // Calculate new camera position based on velocity
     const cameraDirection = new THREE.Vector3();
@@ -145,12 +215,42 @@ export class FirstPersonController {
     const forward = new THREE.Vector3(cameraDirection.x, 0, cameraDirection.z).normalize();
     const right = new THREE.Vector3(forward.z, 0, -forward.x);
     
-    // Apply movement
-    this.camera.position.add(forward.multiplyScalar(-this.velocity.z * delta));
-    this.camera.position.add(right.multiplyScalar(-this.velocity.x * delta));
+    // Store original position for collision detection
+    const originalPosition = this.camera.position.clone();
     
-    // Maintain player height
-    this.camera.position.y = PLAYER_HEIGHT;
+    // Calculate new position after applying velocity
+    const newPosition = originalPosition.clone();
+    newPosition.add(forward.multiplyScalar(-this.velocity.z * delta));
+    newPosition.add(right.multiplyScalar(-this.velocity.x * delta));
+    newPosition.y += this.velocity.y * delta; // Apply vertical velocity for jumping/falling
+    
+    // Check for collision and get adjusted position
+    const adjustedPosition = this.physicsManager.collideAndSlide(
+      originalPosition,
+      newPosition, 
+      PHYSICS.PLAYER_RADIUS
+    );
+    
+    // Apply the adjusted position
+    this.camera.position.copy(adjustedPosition);
+    
+    // If we ended up hitting the ground, reset vertical velocity and set grounded state
+    if (this.camera.position.y <= minHeight) {
+      this.velocity.y = 0;
+      this.isGrounded = true;
+      this.canJump = true;
+    }
+    
+    // If we're moving up but hit something, stop upward velocity
+    if (this.velocity.y > 0 && Math.abs(adjustedPosition.y - newPosition.y) > 0.001) {
+      this.velocity.y = 0;
+    }
+    
+    // Emit player position updated event for multiplayer
+    this.eventBus.emit('player:position-updated', {
+      position: this.camera.position.clone(),
+      rotation: this.camera.quaternion.clone()
+    });
   }
 
   /**
@@ -176,6 +276,9 @@ export class FirstPersonController {
       case 'ArrowRight':
       case 'KeyD':
         this.moveRight = true;
+        break;
+      case 'Space':
+        this.jump = true;
         break;
     }
   }
@@ -203,6 +306,9 @@ export class FirstPersonController {
       case 'ArrowRight':
       case 'KeyD':
         this.moveRight = false;
+        break;
+      case 'Space':
+        this.jump = false;
         break;
     }
   }
@@ -297,6 +403,14 @@ export class FirstPersonController {
       // Update last touch position
       this.lastTouchX = touchData.x;
       this.lastTouchY = touchData.y;
+      
+      // Check for double tap to jump (if touch Y position is in the top half of the screen)
+      if (touchData.doubleTap && touchData.y < 0.5 && this.canJump && this.isGrounded) {
+        this.jump = true;
+        setTimeout(() => {
+          this.jump = false;
+        }, 100);
+      }
     } else {
       // Touch ended
       this.touchActive = false;

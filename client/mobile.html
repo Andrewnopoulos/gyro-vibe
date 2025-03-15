@@ -265,7 +265,8 @@
           x: 0,
           y: 0,
           timestamp: 0,
-          identifier: -1
+          identifier: -1,
+          doubleTap: false
         }
       };
     
@@ -282,6 +283,13 @@
     // Touch event tracking
     let lastTouchUpdate = 0;
     const TOUCH_THROTTLE = 16; // ~60fps in ms
+    
+    // Double-tap detection variables
+    let lastTapTime = 0;
+    const DOUBLE_TAP_DELAY = 300; // milliseconds between taps
+    let lastTapX = 0;
+    let lastTapY = 0;
+    const TAP_DISTANCE_THRESHOLD = 30; // pixels
     
     // Handle touch events on the canvas
     function setupTouchEvents() {
@@ -310,10 +318,38 @@
         const normX = (touch.clientX - rect.left) / rect.width;
         const normY = (touch.clientY - rect.top) / rect.height;
         
-        // Update the sensor data object
-        updateTouchData('start', normX, normY, touch.identifier);
-
-        ctx.fillText(`${JSON.stringify(event.touches)}`, gameCanvas.width / 2, 20);
+        // Check for double tap
+        const now = Date.now();
+        const touchX = touch.clientX;
+        const touchY = touch.clientY;
+        let isDoubleTap = false;
+        
+        // Check if this is a double tap
+        if (now - lastTapTime < DOUBLE_TAP_DELAY) {
+          // Check if tap is close to the previous tap
+          const dx = touchX - lastTapX;
+          const dy = touchY - lastTapY;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          
+          if (distance < TAP_DISTANCE_THRESHOLD) {
+            isDoubleTap = true;
+            visualLog("Double tap detected");
+            
+            // Add visual feedback for double tap
+            ctx.beginPath();
+            ctx.arc(normX * gameCanvas.width, normY * gameCanvas.height, 50, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255, 255, 0, 0.3)';
+            ctx.fill();
+          }
+        }
+        
+        // Store current tap for future comparison
+        lastTapTime = now;
+        lastTapX = touchX;
+        lastTapY = touchY;
+        
+        // Update the sensor data object with doubleTap flag
+        updateTouchData('start', normX, normY, touch.identifier, isDoubleTap);
         
         // Draw touch feedback
         drawTouchFeedback(normX, normY);
@@ -338,7 +374,7 @@
         const normY = (touch.clientY - rect.top) / rect.height;
         
         // Update the sensor data object
-        updateTouchData('move', normX, normY, touch.identifier);
+        updateTouchData('move', normX, normY, touch.identifier, false);
         
         // Draw touch feedback
         drawTouchFeedback(normX, normY);
@@ -350,7 +386,7 @@
       event.preventDefault();
       
       // Update the sensor data object
-      updateTouchData('end', 0, 0, -1);
+      updateTouchData('end', 0, 0, -1, false);
     }
     
     // Handle touch cancel
@@ -358,11 +394,11 @@
       event.preventDefault();
       
       // Update the sensor data object
-      updateTouchData('cancel', 0, 0, -1);
+      updateTouchData('cancel', 0, 0, -1, false);
     }
     
     // Update touch data in the sensor data object
-    function updateTouchData(type, x, y, identifier) {
+    function updateTouchData(type, x, y, identifier, isDoubleTap = false) {
       if (type === 'start' || type === 'move') {
         sensorData.touch = {
           active: true,
@@ -370,7 +406,8 @@
           x: x,
           y: y,
           timestamp: Date.now(),
-          identifier: identifier
+          identifier: identifier,
+          doubleTap: isDoubleTap
         };
       } else {
         sensorData.touch = {
@@ -379,8 +416,18 @@
           x: x,
           y: y,
           timestamp: Date.now(),
-          identifier: identifier
+          identifier: identifier,
+          doubleTap: false
         };
+      }
+      
+      // Reset double tap flag after a short delay
+      if (isDoubleTap) {
+        setTimeout(() => {
+          if (sensorData.touch && sensorData.touch.doubleTap) {
+            sensorData.touch.doubleTap = false;
+          }
+        }, 100);
       }
     }
     
