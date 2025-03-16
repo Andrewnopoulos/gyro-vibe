@@ -40,8 +40,9 @@ export class LobbyManager {
     this.lobbyOverlay.className = 'overlay';
     this.lobbyOverlay.style.display = 'none';
     this.lobbyOverlay.style.top = '50%';
-    this.lobbyOverlay.style.left = '50%';
-    this.lobbyOverlay.style.transform = 'translate(-50%, -50%)';
+    this.lobbyOverlay.style.right = '10%';
+    this.lobbyOverlay.style.left = 'auto';
+    this.lobbyOverlay.style.transform = 'translateY(-50%)';
     this.lobbyOverlay.style.width = '500px';
     this.lobbyOverlay.style.maxWidth = '90%';
     this.lobbyOverlay.style.padding = '20px';
@@ -254,7 +255,9 @@ export class LobbyManager {
     this.roomOverlay.style.display = 'none';
     this.roomOverlay.style.top = '10px';
     this.roomOverlay.style.right = '10px';
-    this.roomOverlay.style.width = '250px';
+    this.roomOverlay.style.left = 'auto';
+    this.roomOverlay.style.transform = 'none';
+    this.roomOverlay.style.width = '300px';
     this.roomOverlay.style.padding = '15px';
     this.roomOverlay.style.borderRadius = '8px';
     this.roomOverlay.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
@@ -696,6 +699,8 @@ export class LobbyManager {
     if (this.lobbyOverlay) {
       this.lobbyOverlay.style.display = 'block';
       this.refreshRoomsList();
+      
+      // Section headers have been removed
     }
   }
   
@@ -705,6 +710,9 @@ export class LobbyManager {
   hideLobby() {
     if (this.lobbyOverlay) {
       this.lobbyOverlay.style.display = 'none';
+      
+      // Keep multiplayer section header visible even when lobby is hidden
+      // This maintains consistency in the side-by-side layout
     }
   }
   

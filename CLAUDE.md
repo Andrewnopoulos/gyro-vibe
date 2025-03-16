@@ -6,7 +6,7 @@
 - `npm test` - Currently not implemented
 
 ## Code Style Guidelines
-- **Module Pattern**: Client uses ES modules, server uses CommonJS
+- **Module Pattern**: Client uses ES modules (import/export), server uses CommonJS (require)
 - **Naming**: camelCase for variables/functions, PascalCase for classes
 - **Documentation**: JSDoc comments for methods and classes
 - **Error Handling**: Use try/catch blocks, log errors to console
@@ -14,7 +14,7 @@
 - **File Organization**: Modular structure with feature-based directories
 
 ## Project Structure
-- `server/` - Express.js backend with Socket.IO
+- `server/` - Express.js backend with Socket.IO and WebRTC signaling
 - `client/` - Frontend HTML/JS with module-based organization
 - `client/js/` - Organized by feature (3d, communication, game, etc.)
 
@@ -23,3 +23,5 @@
 - Prefer async/await over callbacks where possible
 - Use EventBus for cross-component communication
 - Maintain clear separation between UI and business logic
+- 4-space indentation in all code files
+- Mobile detection using comprehensive pattern matching

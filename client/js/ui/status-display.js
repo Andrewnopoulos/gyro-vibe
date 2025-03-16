@@ -128,16 +128,14 @@ export class StatusDisplay {
     if (this.qrcodeElement) {
       this.qrcodeElement.style.display = show ? 'block' : 'none';
       
-      // When showing the QR code, make sure it's correctly positioned over the scene
+      // Section headers have been removed
+      
+      // Ensure z-index is appropriate
       if (show) {
-        // If z-index is too low, temporarily bring it forward
+        // Make sure z-index is consistent with our side-by-side layout
         const currentZ = parseInt(getComputedStyle(this.qrcodeElement).zIndex, 10);
-        if (currentZ < 30) {
-          this.qrcodeElement.style.zIndex = '30';
-          // Reset after animation completes
-          setTimeout(() => {
-            this.qrcodeElement.style.zIndex = '20';
-          }, 500);
+        if (currentZ < 20) {
+          this.qrcodeElement.style.zIndex = '20';
         }
       }
     }
