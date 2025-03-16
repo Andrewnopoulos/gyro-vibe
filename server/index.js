@@ -80,34 +80,44 @@ const GAME_STATE_BROADCAST_INTERVAL = 50; // 20Hz update rate
 
 /**
  * Check if the user agent is a mobile device
- * This function uses a comprehensive pattern to detect most mobile devices
+ * Enhanced with more comprehensive detection patterns
  * @param {string} userAgent - The user agent string
  * @returns {boolean} True if the device is mobile
  */
 function isMobileDevice(userAgent) {
   if (!userAgent) return false;
   
-  // First check common mobile keywords
-  const mobileKeywords = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|Tablet|Mobi/i;
+  // First check common mobile keywords - expanded with more patterns
+  const mobileKeywords = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|Tablet|Mobi|PlayBook|Silk|Kindle|Symbian|webmate|Nexus|Pixel|Nokia|SAMSUNG|SM-|GT-|LG-|HTC/i;
   
   // Also check for specific device patterns
   const mobilePatterns = [
-    // iOS devices
-    /iPhone|iPad|iPod/i,
-    // Android devices
-    /Android/i,
+    // iOS/macOS devices (includes iPadOS & modern iPad user agents that report as Mac)
+    /iPhone|iPad|iPod|iOS|CFNetwork|Darwin/i,
+    // Android devices (more comprehensive)
+    /Android|Samsung|Galaxy|SM-|GT-|Pixel|Nexus|LG-|Motorola|HTC|Xiaomi|OnePlus|OPPO|vivo/i,
     // Windows Phone
-    /Windows Phone/i,
+    /Windows Phone|Windows Mobile|IEMobile|WPDesktop/i,
     // Mobile browsers
-    /Mobile/i,
+    /Mobile|CriOS|Coast|Instagram|FBIOS|FB_IAB|FBAN|FBAV|Pinterest|Snapchat|Twitter|WhatsApp|Line/i,
     // Generic patterns for mobile viewport
-    /Mobile.*Safari|Android.*Chrome/i,
-    // Samsung browser
-    /SamsungBrowser/i
+    /Mobile.*Safari|Android.*Chrome|Instagram|WhatsApp|Snapchat|TikTok/i,
+    // Tablet patterns
+    /Tablet|PlayBook|Silk|iPad|Nexus (7|9|10)/i,
+    // Samsung browser and other vendor-specific browsers
+    /SamsungBrowser|MiuiBrowser|SAMSUNG|SM-|UCBrowser|OPR\/[0-9]+/i,
+    // Devices that don't self-identify as mobile but are
+    /Macintosh.*Mobile/i, // New iPads with iPadOS may report as Mac
   ];
   
-  // Check for common mobile screen resolution pattern
-  const screenPattern = /[0-9]{3,4}x[0-9]{3,4}/i;
+  // Touch detection phrases that appear in some mobile UAs
+  const touchPatterns = /Touch|Multitouch|webTouch/i;
+  
+  // Check for common mobile screen resolution pattern (more comprehensive)
+  const screenPattern = /[0-9]{3,4}x[0-9]{3,4}|WVGA|resolution\s*\(\s*\d+\s*x\s*\d+\s*\)/i;
+  
+  // WebView patterns seen on mobile devices
+  const webViewPatterns = /; wv\)|FBAV\/|Instagram|Snapchat|TikTok|discord|Twitter|WhatsApp|WeChat|Line/i;
   
   if (mobileKeywords.test(userAgent)) {
     return true;
@@ -119,8 +129,18 @@ function isMobileDevice(userAgent) {
     }
   }
   
+  // Check for touch support in UA
+  if (touchPatterns.test(userAgent)) {
+    return true;
+  }
+  
   // Some mobile UAs contain screen resolution
   if (screenPattern.test(userAgent)) {
+    return true;
+  }
+  
+  // Check for webview patterns common on mobile
+  if (webViewPatterns.test(userAgent)) {
     return true;
   }
   
@@ -169,18 +189,53 @@ function generateRoomCode() {
 }
 
 /**
+ * Determine if a socket connection is from a mobile device 
+ * Using multiple detection methods for reliability
+ * @param {Socket} socket - The socket.io socket object
+ * @returns {boolean} True if the socket is from a mobile device
+ */
+function isMobileSocket(socket) {
+  const userAgent = socket.handshake.headers['user-agent'] || '';
+  const referer = socket.handshake.headers.referer || '';
+  const requestPath = socket.handshake.headers[':path'] || '';
+  
+  // Several ways to detect if this is a mobile client:
+  // 1. Check if accessed through play.html or mobile.html (referer)
+  const isPlayOrMobileHtml = referer.includes('/play') || referer.includes('/mobile');
+  
+  // 2. Check if direct request to /play or /mobile endpoint (path)
+  const accessingMobileUrl = requestPath.includes('/play') || requestPath.includes('/mobile');
+  
+  // 3. Check user agent for mobile signatures
+  const hasMobileUserAgent = isMobileDevice(userAgent);
+  
+  // 4. Check if the client explicitly identified itself as mobile 
+  // (can be set through player-update messages)
+  const clientData = socket.data || {};
+  const hasExplicitMobileFlag = clientData.isMobileDevice === true;
+  
+  return isPlayOrMobileHtml || accessingMobileUrl || hasMobileUserAgent || hasExplicitMobileFlag;
+}
+
+/**
  * Create a new player object with default values
  * @param {string} socketId - Socket ID of the player
  * @param {string} username - Player's username
- * @param {string} role - Player's role (desktop or mobile)
+ * @param {Socket} socket - The socket.io socket object
  * @param {string} devicePairId - ID of paired device (if applicable)
  * @returns {Object} New player object
  */
-function createPlayer(socketId, username, role, devicePairId = null) {
-  return {
+function createPlayer(socketId, username, socket, devicePairId = null) {
+  // Determine device type using our enhanced detection
+  const isMobile = isMobileSocket(socket);
+  
+  // Create base player object
+  const player = {
     id: socketId,
     username: username || `Player_${socketId.substring(0, 5)}`,
-    role: role,
+    role: isMobile ? 'mobile' : 'desktop',
+    isMobileDevice: isMobile,
+    deviceType: isMobile ? detectMobileDeviceType(socket.handshake.headers['user-agent'] || '') : 'desktop',
     isConnected: true,
     devicePairId: devicePairId,
     position: { x: 0, y: 0, z: 0 },
@@ -188,6 +243,52 @@ function createPlayer(socketId, username, role, devicePairId = null) {
     phoneOrientation: { x: 0, y: 0, z: 0, w: 1 }, // Default identity quaternion
     lastUpdate: Date.now()
   };
+  
+  // Store the device type in the socket data for future reference
+  socket.data = socket.data || {};
+  socket.data.isMobileDevice = isMobile;
+  socket.data.deviceType = player.deviceType;
+  
+  console.log(`Created player ${socketId} with device type: ${player.deviceType}, role: ${player.role}`);
+  
+  return player;
+}
+
+/**
+ * Detect specific mobile device type for better handling
+ * @param {string} userAgent - The user agent string
+ * @returns {string} Device type category
+ */
+function detectMobileDeviceType(userAgent) {
+  if (!userAgent) return 'unknown-mobile';
+  
+  // iOS detection
+  if (/iPhone|iPad|iPod|iOS/i.test(userAgent)) {
+    if (/iPad/i.test(userAgent) || (
+      /Macintosh/i.test(userAgent) && 
+      typeof navigator !== 'undefined' && 
+      navigator.maxTouchPoints > 1
+    )) {
+      return 'ipad';
+    }
+    return 'iphone';
+  }
+  
+  // Android detection
+  if (/Android/i.test(userAgent)) {
+    if (/tablet|sm-t|gt-p/i.test(userAgent)) {
+      return 'android-tablet';
+    }
+    return 'android-phone';
+  }
+  
+  // Windows mobile
+  if (/Windows Phone|IEMobile/i.test(userAgent)) {
+    return 'windows-mobile';
+  }
+  
+  // Fallback for other mobile devices
+  return 'other-mobile';
 }
 
 /**
@@ -244,7 +345,7 @@ function getSanitizedRoomData(room) {
  */
 function getSanitizedPlayerData(player) {
   // Check if this is a mobile player
-  const isMobilePlayer = player.role === 'mobile';
+  const isMobilePlayer = player.role === 'mobile' || player.isMobileDevice === true;
   
   return {
     id: player.id,
@@ -254,7 +355,9 @@ function getSanitizedPlayerData(player) {
     position: player.position,
     rotation: player.rotation,
     phoneOrientation: player.phoneOrientation,
-    isMobilePlayer: isMobilePlayer // Flag to indicate if this is a mobile player
+    isMobilePlayer: isMobilePlayer, // Flag to indicate if this is a mobile player
+    deviceType: player.deviceType || (isMobilePlayer ? 'mobile' : 'desktop'), // Device type for UI/UX adaptation
+    lastUpdate: player.lastUpdate // Allow clients to implement their own timeout detection
   };
 }
 
@@ -308,12 +411,16 @@ function removePlayerFromRoom(socketId, roomId) {
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
-  // Detect client type for better logging
-  const isMobile = isMobileDevice(socket.handshake.headers['user-agent'] || '') ||
-                  (socket.handshake.headers.referer || '').includes('/play');
-  const clientType = isMobile ? 'Mobile' : 'Desktop';
+  // Use our enhanced mobile detection
+  const isMobile = isMobileSocket(socket);
+  const deviceType = isMobile ? detectMobileDeviceType(socket.handshake.headers['user-agent'] || '') : 'Desktop';
   
-  console.log(`A ${clientType} client connected:`, socket.id);
+  // Store device information in socket data for future reference
+  socket.data = socket.data || {};
+  socket.data.isMobileDevice = isMobile;
+  socket.data.deviceType = deviceType;
+  
+  console.log(`A ${deviceType} client connected:`, socket.id);
   let currentRoomId = null;
   
   // ==================== DESKTOP/MOBILE PAIRING ====================
@@ -408,21 +515,8 @@ io.on('connection', (socket) => {
     // Join the room's socket.io room
     socket.join(room.roomId);
     
-    // More robust device detection
-    const userAgent = socket.handshake.headers['user-agent'] || '';
-    const referer = socket.handshake.headers.referer || '';
-    const isPlayHtml = referer.includes('/play');
-    const requestPath = socket.handshake.headers[':path'] || '';
-    const accessingPlayUrl = requestPath.includes('/play');
-    
-    // Several ways to detect if this is a mobile client:
-    // 1. Check user agent for mobile signatures
-    // 2. Check if accessed through play.html (referer)
-    // 3. Check if direct request to /play endpoint (path)
-    const clientType = (isPlayHtml || accessingPlayUrl || isMobileDevice(userAgent)) ? 'mobile' : 'desktop';
-    
-    // Add player to the room with appropriate client type
-    room.players.set(socket.id, createPlayer(socket.id, username, clientType));
+    // Use our enhanced player creation with automatic device detection
+    room.players.set(socket.id, createPlayer(socket.id, username, socket));
     
     // Track the current room for this socket
     currentRoomId = room.roomId;
@@ -456,21 +550,8 @@ io.on('connection', (socket) => {
     // Join the room's socket.io room
     socket.join(room.roomId);
     
-    // More robust device detection
-    const userAgent = socket.handshake.headers['user-agent'] || '';
-    const referer = socket.handshake.headers.referer || '';
-    const isPlayHtml = referer.includes('/play');
-    const requestPath = socket.handshake.headers[':path'] || '';
-    const accessingPlayUrl = requestPath.includes('/play');
-    
-    // Several ways to detect if this is a mobile client:
-    // 1. Check user agent for mobile signatures
-    // 2. Check if accessed through play.html (referer)
-    // 3. Check if direct request to /play endpoint (path)
-    const clientType = (isPlayHtml || accessingPlayUrl || isMobileDevice(userAgent)) ? 'mobile' : 'desktop';
-    
-    // Add player to the room with appropriate client type
-    room.players.set(socket.id, createPlayer(socket.id, username, clientType));
+    // Use our enhanced player creation with automatic device detection
+    room.players.set(socket.id, createPlayer(socket.id, username, socket));
     
     // Track the current room for this socket
     currentRoomId = room.roomId;
@@ -527,6 +608,20 @@ io.on('connection', (socket) => {
     // Update mobile player flag if provided (ensures role persists across reconnects)
     if (data.isMobilePlayer !== undefined) {
       player.role = data.isMobilePlayer ? 'mobile' : 'desktop';
+      player.isMobileDevice = data.isMobilePlayer;
+      
+      // Update socket data for future reference
+      socket.data = socket.data || {};
+      socket.data.isMobileDevice = data.isMobilePlayer;
+    }
+    
+    // Update device type if provided
+    if (data.deviceType) {
+      player.deviceType = data.deviceType;
+      
+      // Update socket data
+      socket.data = socket.data || {};
+      socket.data.deviceType = data.deviceType;
     }
     
     player.lastUpdate = Date.now();
@@ -571,6 +666,12 @@ io.on('connection', (socket) => {
       mobileClients.delete(socket.id);
       console.log(`Removed mobile client ${socket.id} from session ${sessionId}`);
     }
+  });
+  
+  // Handle ping for connection quality measurement
+  socket.on('ping', (data) => {
+    // Echo back the timestamp for ping calculation
+    socket.emit('pong', { timestamp: data.timestamp });
   });
 });
 

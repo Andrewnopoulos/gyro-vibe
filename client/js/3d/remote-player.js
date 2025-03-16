@@ -249,6 +249,9 @@ export class RemotePlayer {
     // Smoothly interpolate position
     this.currentPosition.lerp(this.targetPosition, Math.min(delta * 10, 1));
     
+    // Track last position for velocity calculation
+    const lastPosition = this.lastPosition || this.currentPosition.clone();
+    
     // Apply position to the appropriate model
     if (this.isMobilePlayer) {
       if (this.airplaneModel) {
@@ -270,6 +273,10 @@ export class RemotePlayer {
       if (this.airplaneModel) {
         this.airplaneModel.quaternion.copy(this.currentRotation);
         
+        // Calculate movement velocity for effects
+        const velocity = this.currentPosition.clone().sub(lastPosition).divideScalar(delta);
+        const speed = velocity.length();
+        
         // Add banking effect for mobile players during turns
         // Calculate the difference in rotation from the last frame to determine turning
         if (this.lastRotation) {
@@ -290,6 +297,39 @@ export class RemotePlayer {
         
         // Store current rotation for next frame comparison
         this.lastRotation = this.currentRotation.clone();
+        
+        // Update particle effects if they exist
+        if (this.exhaustParticles && speed > 1.0) {
+          this.updateExhaustEffect(delta);
+        }
+        
+        // Add flying effects based on device type
+        const deviceType = this.playerData.deviceType || 'mobile';
+        switch (deviceType) {
+          case 'iphone':
+          case 'ipad':
+            // Add subtle oscillation for Apple devices
+            const time = Date.now() * 0.001;
+            const appleOscillation = Math.sin(time * 5) * 0.01;
+            this.airplaneModel.rotation.z += appleOscillation;
+            break;
+            
+          case 'android-phone':
+          case 'android-tablet':
+            // Add more abrupt, digital-looking movements for Android
+            if (Math.random() < 0.05) {
+              const androidTwitch = (Math.random() - 0.5) * 0.02;
+              this.airplaneModel.rotation.x += androidTwitch;
+            }
+            break;
+            
+          default:
+            // Generic subtle drift for other devices
+            if (Math.random() < 0.1) {
+              const drift = (Math.random() - 0.5) * 0.01;
+              this.airplaneModel.rotation.y += drift;
+            }
+        }
       }
     } else {
       this.phoneModel.setQuaternion(this.currentRotation);
@@ -312,7 +352,9 @@ export class RemotePlayer {
       if (camera) {
         // Make the nameSprite always face the camera
         const cameraPos = camera.position.clone();
-        const playerPos = this.phoneModel.getModel().position.clone();
+        const playerPos = this.isMobilePlayer ? 
+          this.airplaneModel.position.clone() : 
+          this.phoneModel.getModel().position.clone();
         const dirToCamera = cameraPos.sub(playerPos).normalize();
         
         // Calculate the angle to rotate the sprite
@@ -325,6 +367,9 @@ export class RemotePlayer {
         this.nameSprite.quaternion.copy(quaternion);
       }
     }
+    
+    // Store the current position for next frame's velocity calculation
+    this.lastPosition = this.currentPosition.clone();
   }
   
   /**
@@ -332,45 +377,381 @@ export class RemotePlayer {
    * @param {THREE.Scene} scene - 3D scene
    */
   createAirplaneModel(scene) {
-    // Create a simple geometric airplane-like shape
-    const bodyGeometry = new THREE.BoxGeometry(0.8, 0.3, 2);
-    const wingGeometry = new THREE.BoxGeometry(3, 0.1, 0.5);
-    const tailGeometry = new THREE.BoxGeometry(0.5, 0.8, 0.1);
-    
-    // Use player color for the body
-    const bodyMaterial = new THREE.MeshStandardMaterial({ 
-      color: this.playerColor,
-      roughness: 0.4,
-      metalness: 0.6
-    });
-    
-    // Use a slightly different color for wings and tail
-    const wingMaterial = new THREE.MeshStandardMaterial({ 
-      color: this.playerColor,
-      roughness: 0.6,
-      metalness: 0.3
-    });
-    
-    // Create meshes
-    const bodyMesh = new THREE.Mesh(bodyGeometry, bodyMaterial);
-    const wingMesh = new THREE.Mesh(wingGeometry, wingMaterial);
-    const tailMesh = new THREE.Mesh(tailGeometry, wingMaterial);
-    
-    // Position wing and tail
-    wingMesh.position.set(0, 0, 0);
-    tailMesh.position.set(0, 0.3, -0.9);
-    
-    // Create a group to hold all parts
+    // Create a more detailed airplane model
     const model = new THREE.Group();
-    model.add(bodyMesh);
-    model.add(wingMesh);
-    model.add(tailMesh);
+    
+    // Device type-based model
+    const deviceType = this.playerData.deviceType || 'mobile';
+    
+    // Choose the appropriate model based on device type
+    switch (deviceType) {
+      case 'iphone':
+      case 'ipad':
+        this.createAppleDeviceModel(model);
+        break;
+      case 'android-phone':
+      case 'android-tablet':
+        this.createAndroidDeviceModel(model);
+        break;
+      default:
+        this.createGenericAirplaneModel(model);
+    }
     
     // Add to scene
     scene.add(model);
     
     // Store the model reference
     this.airplaneModel = model;
+    
+    // Add exhaust particle effect if supported
+    this.addExhaustEffect(model);
+  }
+  
+  /**
+   * Create a generic airplane model
+   * @param {THREE.Group} parentGroup - Parent group to add model parts to
+   */
+  createGenericAirplaneModel(parentGroup) {
+    // Create a more detailed airplane shape with curved surfaces
+    const bodyGeometry = new THREE.CapsuleGeometry(0.4, 1.5, 8, 16);
+    bodyGeometry.rotateZ(Math.PI / 2); // Orient capsule along z-axis
+    
+    const wingGeometry = new THREE.BoxGeometry(3, 0.1, 0.7);
+    // Taper the wings by scaling vertices
+    const wingPositions = wingGeometry.attributes.position;
+    for (let i = 0; i < wingPositions.count; i++) {
+      const x = wingPositions.getX(i);
+      const z = wingPositions.getZ(i);
+      // Scale width based on distance from center
+      const scaleFactor = 1 - Math.abs(x) / 2;
+      wingPositions.setZ(i, z * scaleFactor);
+    }
+    
+    const tailFinGeometry = new THREE.CylinderGeometry(0, 0.4, 0.8, 4);
+    tailFinGeometry.rotateX(Math.PI / 2);
+    
+    // Use player color for materials with environment mapping for shine
+    const bodyMaterial = new THREE.MeshStandardMaterial({ 
+      color: this.playerColor,
+      roughness: 0.2,
+      metalness: 0.8,
+      envMapIntensity: 1
+    });
+    
+    // Create wing material with slightly different properties
+    const wingMaterial = new THREE.MeshStandardMaterial({ 
+      color: this.playerColor,
+      roughness: 0.3,
+      metalness: 0.6
+    });
+    
+    // Create meshes
+    const bodyMesh = new THREE.Mesh(bodyGeometry, bodyMaterial);
+    const wingMesh = new THREE.Mesh(wingGeometry, wingMaterial);
+    const tailFinMesh = new THREE.Mesh(tailFinGeometry, wingMaterial);
+    
+    // Position parts
+    bodyMesh.position.set(0, 0, 0);
+    wingMesh.position.set(0, 0, -0.2);
+    tailFinMesh.position.set(0, 0.3, -0.9);
+    
+    // Add cockpit (slightly transparent dome)
+    const cockpitGeometry = new THREE.SphereGeometry(0.3, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+    const cockpitMaterial = new THREE.MeshStandardMaterial({
+      color: 0x88CCFF,
+      transparent: true,
+      opacity: 0.7,
+      roughness: 0.1,
+      metalness: 0.2
+    });
+    const cockpit = new THREE.Mesh(cockpitGeometry, cockpitMaterial);
+    cockpit.position.set(0, 0.2, 0.3);
+    cockpit.rotation.x = Math.PI;
+    
+    // Add all parts to the group
+    parentGroup.add(bodyMesh);
+    parentGroup.add(wingMesh);
+    parentGroup.add(tailFinMesh);
+    parentGroup.add(cockpit);
+    
+    // Add small details (engines, etc)
+    this.addEngineDetails(parentGroup);
+  }
+  
+  /**
+   * Create an Apple device styled model
+   * @param {THREE.Group} parentGroup - Parent group to add model parts to
+   */
+  createAppleDeviceModel(parentGroup) {
+    // Create a sleek, Apple-inspired design
+    const bodyGeometry = new THREE.CapsuleGeometry(0.4, 1.8, 8, 16);
+    bodyGeometry.rotateZ(Math.PI / 2);
+    
+    // Create sleek swept-back wings
+    const wingGeometry = new THREE.BoxGeometry(2.5, 0.08, 0.7);
+    // Modify wing vertices for sleeker shape
+    const wingPositions = wingGeometry.attributes.position;
+    for (let i = 0; i < wingPositions.count; i++) {
+      const x = wingPositions.getX(i);
+      const z = wingPositions.getZ(i);
+      // Create swept-back effect
+      if (z > 0) {
+        wingPositions.setZ(i, z - Math.abs(x) * 0.2);
+      }
+    }
+    
+    // Create silver-white color scheme with subtle blue accent
+    const bodyMaterial = new THREE.MeshStandardMaterial({ 
+      color: 0xEEEEEE,
+      roughness: 0.1,
+      metalness: 0.9
+    });
+    
+    const accentMaterial = new THREE.MeshStandardMaterial({ 
+      color: this.playerColor,
+      roughness: 0.2,
+      metalness: 0.7
+    });
+    
+    // Create meshes
+    const bodyMesh = new THREE.Mesh(bodyGeometry, bodyMaterial);
+    const wingMesh = new THREE.Mesh(wingGeometry, bodyMaterial);
+    
+    // Add accent strip down the body
+    const accentGeometry = new THREE.BoxGeometry(0.05, 0.05, 2);
+    const accentStrip = new THREE.Mesh(accentGeometry, accentMaterial);
+    accentStrip.position.set(0, 0.4, 0);
+    
+    // Add canopy
+    const canopyGeometry = new THREE.CapsuleGeometry(0.2, 0.8, 8, 8);
+    canopyGeometry.rotateZ(Math.PI / 2);
+    const canopyMaterial = new THREE.MeshStandardMaterial({
+      color: 0x88AACC,
+      transparent: true,
+      opacity: 0.8,
+      roughness: 0.1
+    });
+    const canopy = new THREE.Mesh(canopyGeometry, canopyMaterial);
+    canopy.scale.set(1, 0.5, 1);
+    canopy.position.set(0, 0.2, 0.2);
+    
+    // Position parts
+    bodyMesh.position.set(0, 0, 0);
+    wingMesh.position.set(0, -0.1, -0.2);
+    
+    // Add all parts to the group
+    parentGroup.add(bodyMesh);
+    parentGroup.add(wingMesh);
+    parentGroup.add(accentStrip);
+    parentGroup.add(canopy);
+    
+    // Add small details
+    const tailGeometry = new THREE.BoxGeometry(0.6, 0.3, 0.08);
+    const tail = new THREE.Mesh(tailGeometry, bodyMaterial);
+    tail.position.set(0, 0.2, -0.9);
+    parentGroup.add(tail);
+  }
+  
+  /**
+   * Create an Android device styled model
+   * @param {THREE.Group} parentGroup - Parent group to add model parts to
+   */
+  createAndroidDeviceModel(parentGroup) {
+    // Create a more angular, Android-inspired design
+    const bodyGeometry = new THREE.BoxGeometry(0.8, 0.4, 2);
+    
+    // Create angular wings
+    const wingGeometry = new THREE.BoxGeometry(2.8, 0.1, 0.8);
+    
+    // Use green color scheme for Android
+    const androidGreen = 0x3DDC84; // Official Android green
+    const bodyColor = this.playerColor === 0x33ff55 ? 0x222222 : this.playerColor; // Use black if player color is already green
+    
+    const bodyMaterial = new THREE.MeshStandardMaterial({ 
+      color: bodyColor,
+      roughness: 0.4,
+      metalness: 0.5
+    });
+    
+    const accentMaterial = new THREE.MeshStandardMaterial({ 
+      color: androidGreen,
+      roughness: 0.3,
+      metalness: 0.4
+    });
+    
+    // Create meshes
+    const bodyMesh = new THREE.Mesh(bodyGeometry, bodyMaterial);
+    const wingMesh = new THREE.Mesh(wingGeometry, bodyMaterial);
+    
+    // Add accent elements
+    const accentGeometry = new THREE.BoxGeometry(0.1, 0.1, 1.5);
+    const accentStrip = new THREE.Mesh(accentGeometry, accentMaterial);
+    accentStrip.position.set(0, 0.25, 0);
+    
+    // Add angular canopy
+    const canopyGeometry = new THREE.BoxGeometry(0.6, 0.2, 0.8);
+    const canopyMaterial = new THREE.MeshStandardMaterial({
+      color: 0x88CCAA,
+      transparent: true,
+      opacity: 0.7,
+      roughness: 0.2
+    });
+    const canopy = new THREE.Mesh(canopyGeometry, canopyMaterial);
+    canopy.position.set(0, 0.3, 0.2);
+    
+    // Position parts
+    bodyMesh.position.set(0, 0, 0);
+    wingMesh.position.set(0, 0, -0.1);
+    
+    // Add angular vertical stabilizer
+    const tailGeometry = new THREE.BoxGeometry(0.1, 0.7, 0.4);
+    const tail = new THREE.Mesh(tailGeometry, accentMaterial);
+    tail.position.set(0, 0.35, -0.8);
+    
+    // Add all parts to the group
+    parentGroup.add(bodyMesh);
+    parentGroup.add(wingMesh);
+    parentGroup.add(accentStrip);
+    parentGroup.add(canopy);
+    parentGroup.add(tail);
+    
+    // Add engine details
+    this.addEngineDetails(parentGroup, androidGreen);
+  }
+  
+  /**
+   * Add engine details to the model
+   * @param {THREE.Group} parentGroup - Parent group to add details to
+   * @param {number} accentColor - Optional accent color for engine parts
+   */
+  addEngineDetails(parentGroup, accentColor) {
+    // Create engine geometry
+    const engineGeometry = new THREE.CylinderGeometry(0.15, 0.2, 0.5, 8);
+    engineGeometry.rotateZ(Math.PI / 2);
+    
+    // Create engine material
+    const engineMaterial = new THREE.MeshStandardMaterial({ 
+      color: accentColor || 0x444444,
+      roughness: 0.6,
+      metalness: 0.7
+    });
+    
+    // Create engine meshes
+    const leftEngine = new THREE.Mesh(engineGeometry, engineMaterial);
+    const rightEngine = new THREE.Mesh(engineGeometry, engineMaterial);
+    
+    // Position engines under wings
+    leftEngine.position.set(-1, -0.2, -0.1);
+    rightEngine.position.set(1, -0.2, -0.1);
+    
+    // Add engines to parent group
+    parentGroup.add(leftEngine);
+    parentGroup.add(rightEngine);
+  }
+  
+  /**
+   * Add exhaust effect to engines
+   * @param {THREE.Group} parentGroup - Parent group containing the model
+   */
+  addExhaustEffect(parentGroup) {
+    // Skip effect creation for performance reasons unless specifically enabled
+    const enableEffects = false; // This could be a config option
+    if (!enableEffects) return;
+    
+    // Create two particle systems for the engines
+    const particleCount = 50;
+    const particleGeometry = new THREE.BufferGeometry();
+    
+    // Create positions array for particles (both engines)
+    const positions = new Float32Array(particleCount * 3);
+    
+    // Initialize particle positions
+    for (let i = 0; i < particleCount; i++) {
+      // Alternate between left and right engine
+      const engineX = i % 2 === 0 ? -1 : 1;
+      
+      const baseIndex = i * 3;
+      positions[baseIndex] = engineX;     // X position (left or right engine)
+      positions[baseIndex + 1] = -0.2;    // Y position (below the wings)
+      positions[baseIndex + 2] = -0.3;    // Z position (behind engines)
+    }
+    
+    // Set positions attribute
+    particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    
+    // Create particle material
+    const particleMaterial = new THREE.PointsMaterial({
+      color: 0xFFAA44,
+      size: 0.1,
+      blending: THREE.AdditiveBlending,
+      transparent: true,
+      opacity: 0.7
+    });
+    
+    // Create the particle system
+    this.exhaustParticles = new THREE.Points(particleGeometry, particleMaterial);
+    
+    // Add to parent group
+    parentGroup.add(this.exhaustParticles);
+    
+    // Store data for animation
+    this.exhaustData = {
+      positions: positions,
+      velocities: new Float32Array(particleCount * 3),
+      lifetimes: new Float32Array(particleCount),
+      geometry: particleGeometry
+    };
+    
+    // Initialize velocities and lifetimes
+    for (let i = 0; i < particleCount; i++) {
+      this.exhaustData.velocities[i * 3 + 2] = -Math.random() * 0.1 - 0.05; // Z velocity (backward)
+      this.exhaustData.lifetimes[i] = Math.random();
+    }
+  }
+  
+  /**
+   * Update exhaust particle effect
+   * @param {number} delta - Time delta since last frame
+   */
+  updateExhaustEffect(delta) {
+    if (!this.exhaustParticles || !this.exhaustData) return;
+    
+    const positions = this.exhaustData.positions;
+    const velocities = this.exhaustData.velocities;
+    const lifetimes = this.exhaustData.lifetimes;
+    
+    for (let i = 0; i < lifetimes.length; i++) {
+      // Update lifetime
+      lifetimes[i] -= delta * 2;
+      
+      // Reset particles that have "died"
+      if (lifetimes[i] <= 0) {
+        // Reset position to engine
+        const engineX = i % 2 === 0 ? -1 : 1;
+        positions[i * 3] = engineX;
+        positions[i * 3 + 1] = -0.2;
+        positions[i * 3 + 2] = -0.3;
+        
+        // Reset velocity
+        velocities[i * 3 + 2] = -Math.random() * 0.1 - 0.05;
+        
+        // Reset lifetime
+        lifetimes[i] = 1.0;
+      } else {
+        // Update position based on velocity
+        positions[i * 3 + 2] += velocities[i * 3 + 2];
+        
+        // Add some spread
+        positions[i * 3] += (Math.random() - 0.5) * 0.01;
+        positions[i * 3 + 1] += (Math.random() - 0.5) * 0.01;
+        
+        // Update opacity based on lifetime
+        this.exhaustParticles.material.opacity = Math.min(1, lifetimes[i] * 2);
+      }
+    }
+    
+    // Update the geometry
+    this.exhaustData.geometry.attributes.position.needsUpdate = true;
   }
   
   /**
@@ -432,6 +813,24 @@ export class RemotePlayer {
             }
           }
         });
+        
+        // Clean up particle systems if they exist
+        if (this.exhaustParticles) {
+          if (this.exhaustParticles.parent) {
+            this.exhaustParticles.parent.remove(this.exhaustParticles);
+          }
+          
+          if (this.exhaustParticles.material) {
+            this.exhaustParticles.material.dispose();
+          }
+          
+          if (this.exhaustData && this.exhaustData.geometry) {
+            this.exhaustData.geometry.dispose();
+          }
+          
+          this.exhaustParticles = null;
+          this.exhaustData = null;
+        }
       }
     } else {
       // Dispose of phone model
@@ -455,5 +854,18 @@ export class RemotePlayer {
         this.nameSprite.material.dispose();
       }
     }
+    
+    // Clear references to help garbage collection
+    this.lastPosition = null;
+    this.lastRotation = null;
+    this.currentPosition = null;
+    this.currentRotation = null;
+    this.targetPosition = null;
+    this.targetRotation = null;
+    this.currentPhoneOrientation = null;
+    this.targetPhoneOrientation = null;
+    this.playerData = null;
+    this.forward = null;
+    this.nameSprite = null;
   }
 }
