@@ -76,18 +76,84 @@ const gameRooms = new Map();
 const MAX_PLAYERS_PER_ROOM = 8;
 const GAME_STATE_BROADCAST_INTERVAL = 50; // 20Hz update rate
 
-// Serve static files from the client directory
-app.use(express.static(path.join(__dirname, '../client')));
+// Middleware setup
 
-// Route for PC client
+/**
+ * Check if the user agent is a mobile device
+ * This function uses a comprehensive pattern to detect most mobile devices
+ * @param {string} userAgent - The user agent string
+ * @returns {boolean} True if the device is mobile
+ */
+function isMobileDevice(userAgent) {
+  if (!userAgent) return false;
+  
+  // First check common mobile keywords
+  const mobileKeywords = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|Tablet|Mobi/i;
+  
+  // Also check for specific device patterns
+  const mobilePatterns = [
+    // iOS devices
+    /iPhone|iPad|iPod/i,
+    // Android devices
+    /Android/i,
+    // Windows Phone
+    /Windows Phone/i,
+    // Mobile browsers
+    /Mobile/i,
+    // Generic patterns for mobile viewport
+    /Mobile.*Safari|Android.*Chrome/i,
+    // Samsung browser
+    /SamsungBrowser/i
+  ];
+  
+  // Check for common mobile screen resolution pattern
+  const screenPattern = /[0-9]{3,4}x[0-9]{3,4}/i;
+  
+  if (mobileKeywords.test(userAgent)) {
+    return true;
+  }
+  
+  for (const pattern of mobilePatterns) {
+    if (pattern.test(userAgent)) {
+      return true;
+    }
+  }
+  
+  // Some mobile UAs contain screen resolution
+  if (screenPattern.test(userAgent)) {
+    return true;
+  }
+  
+  return false;
+}
+
+// Define all routes first - before static file middleware
+
+// Route for the main entry point - detects device type and routes accordingly
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, '../client/index.html'));
+  const userAgent = req.headers['user-agent'];
+  
+  // If accessing from a mobile device, redirect to the mobile play page
+  if (isMobileDevice(userAgent)) {
+    return res.redirect('/play');
+  } else {
+    // Desktop experience
+    res.sendFile(path.join(__dirname, '../client/index.html'));
+  }
 });
 
-// Route for mobile client with session ID
+// Route for direct mobile play experience
+app.get('/play', (req, res) => {
+  res.sendFile(path.join(__dirname, '../client/play.html'));
+});
+
+// Route for mobile client with session ID (used for QR code scanning)
 app.get('/mobile', (req, res) => {
   res.sendFile(path.join(__dirname, '../client/mobile.html'));
 });
+
+// Serve static files from the client directory - AFTER routes
+app.use(express.static(path.join(__dirname, '../client')));
 
 /**
  * Generate a random room code
@@ -483,10 +549,12 @@ httpServer.listen(HTTP_PORT, () => {
   if (isRailway) {
     console.log(`Signaling server running on Railway on port ${HTTP_PORT}`);
     console.log(`Application available at https://${PUBLIC_URL}`);
-    console.log(`Mobile client available at https://${PUBLIC_URL}/mobile`);
+    console.log(`Mobile direct play available at https://${PUBLIC_URL}/play`);
+    console.log(`Mobile controller client available at https://${PUBLIC_URL}/mobile`);
   } else {
     console.log(`HTTP signaling server running on http://${LOCAL_IP}:${HTTP_PORT}`);
-    console.log(`Mobile client available at http://${LOCAL_IP}:${HTTP_PORT}/mobile`);
+    console.log(`Mobile direct play available at http://${LOCAL_IP}:${HTTP_PORT}/play`);
+    console.log(`Mobile controller client available at http://${LOCAL_IP}:${HTTP_PORT}/mobile`);
   }
 });
 
@@ -495,6 +563,7 @@ if (!isRailway && httpsAvailable) {
   const HTTPS_PORT = process.env.HTTPS_PORT || 3443;
   httpsServer.listen(HTTPS_PORT, () => {
     console.log(`HTTPS signaling server running on https://${LOCAL_IP}:${HTTPS_PORT}`);
-    console.log(`Mobile client available at https://${LOCAL_IP}:${HTTPS_PORT}/mobile (recommended for sensors)`);
+    console.log(`Mobile direct play available at https://${LOCAL_IP}:${HTTPS_PORT}/play (recommended for sensors)`);
+    console.log(`Mobile controller client available at https://${LOCAL_IP}:${HTTPS_PORT}/mobile (recommended for sensors)`);
   });
 }
