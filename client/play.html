@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Gyro-Vibe - Mobile Play</title>
+  <title>Gyro-Vibe - Play Now</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -38,54 +38,12 @@
       align-items: center;
       padding: 20px;
     }
-    .game-button {
-      background-color: #17a2b8;
-      color: white;
-      border: none;
-      border-radius: 50px;
-      padding: 15px 30px;
-      font-size: 1.2rem;
-      font-weight: bold;
-      margin: 15px;
-      width: 80%;
-      max-width: 300px;
-      cursor: pointer;
-      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-      transition: all 0.2s ease;
-    }
-    .game-button:active {
-      transform: scale(0.98);
-      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-    }
     .info-text {
       margin: 20px;
       text-align: center;
       color: #cccccc;
       font-size: 0.9rem;
       max-width: 300px;
-    }
-    .qr-option {
-      margin-top: 30px;
-      padding: 20px;
-      background-color: #1a1a1a;
-      border-radius: 10px;
-      text-align: center;
-      max-width: 300px;
-    }
-    .qr-option h2 {
-      font-size: 1rem;
-      color: #17a2b8;
-      margin-top: 0;
-    }
-    .secondary-button {
-      background-color: #333333;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      padding: 8px 16px;
-      font-size: 0.9rem;
-      cursor: pointer;
-      margin-top: 10px;
     }
     .canvas-container {
       width: 100%;
@@ -131,26 +89,173 @@
       padding: 8px 15px;
       font-size: 0.9rem;
     }
+    
+    /* Multiplayer Lobby Styles */
+    .lobby-container {
+      width: 90%;
+      max-width: 500px;
+      background-color: rgba(0, 0, 0, 0.9);
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+      color: white;
+    }
+    .lobby-title {
+      margin: 0 0 20px 0;
+      font-size: 24px;
+      color: #4fc3f7;
+      text-align: center;
+    }
+    .username-section {
+      margin-bottom: 20px;
+      text-align: left;
+    }
+    .username-label {
+      display: block;
+      margin-bottom: 5px;
+    }
+    .username-input {
+      width: 100%;
+      padding: 10px;
+      box-sizing: border-box;
+      border: 1px solid #555;
+      border-radius: 4px;
+      background-color: rgba(30, 30, 30, 0.9);
+      color: white;
+      margin-bottom: 10px;
+    }
+    .join-section {
+      margin-bottom: 20px;
+      text-align: left;
+    }
+    .join-by-code {
+      margin-bottom: 20px;
+      padding: 15px;
+      background-color: rgba(80, 50, 100, 0.4);
+      border-radius: 8px;
+    }
+    .section-title {
+      margin: 0 0 10px 0;
+      font-size: 18px;
+    }
+    .code-input-container {
+      display: flex;
+      gap: 10px;
+    }
+    .room-code-input {
+      flex: 1;
+      padding: 8px;
+      border: 1px solid #555;
+      border-radius: 4px;
+      background-color: rgba(30, 30, 30, 0.9);
+      color: white;
+    }
+    .join-button {
+      padding: 8px 15px;
+      background-color: #17a2b8;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .available-rooms {
+      padding: 15px;
+      background-color: rgba(50, 80, 50, 0.4);
+      border-radius: 8px;
+    }
+    .refresh-button {
+      padding: 5px 10px;
+      background-color: #444;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      margin-bottom: 10px;
+      cursor: pointer;
+    }
+    .rooms-list {
+      max-height: 200px;
+      overflow-y: auto;
+      background-color: rgba(0, 0, 0, 0.2);
+      border-radius: 4px;
+      padding: 5px;
+      margin-top: 5px;
+    }
+    .no-rooms-message {
+      padding: 10px;
+      text-align: center;
+      color: #888;
+      font-style: italic;
+    }
+    .room-item {
+      padding: 10px;
+      margin-bottom: 5px;
+      background-color: rgba(50, 50, 80, 0.4);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    .room-item:hover {
+      background-color: rgba(70, 70, 120, 0.6);
+    }
+    .room-name {
+      font-weight: bold;
+    }
+    .room-info {
+      font-size: 12px;
+      margin-top: 3px;
+    }
+    .room-code {
+      float: right;
+      font-family: monospace;
+      color: #aaf;
+    }
+    .status-message {
+      margin-top: 10px;
+      color: #ff5555;
+      min-height: 20px;
+      display: none;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
-      <h1>Gyro-Vibe Mobile</h1>
+      <h1>Gyro-Vibe Multiplayer</h1>
     </div>
     
-    <div class="game-area" id="menuScreen">
-      <button id="singleplayerBtn" class="game-button">Play Solo</button>
-      <button id="multiplayerBtn" class="game-button">Join Multiplayer</button>
-      
-      <div class="info-text">
-        Play directly on your mobile device or connect to a desktop for enhanced experience.
-      </div>
-      
-      <div class="qr-option">
-        <h2>Enhanced Desktop Experience</h2>
-        <p>Use your phone as a controller for the desktop version</p>
-        <button id="desktopLinkBtn" class="secondary-button">Get Desktop Link</button>
+    <div class="game-area" id="lobbyScreen">
+      <div class="lobby-container">
+        <h1 class="lobby-title">Join a Game</h1>
+        
+        <!-- Username input section -->
+        <div class="username-section">
+          <label class="username-label">Your Username:</label>
+          <input id="username-input" type="text" placeholder="Enter your username" class="username-input">
+        </div>
+        
+        <div class="join-section">
+          <!-- Join by code section -->
+          <div class="join-by-code">
+            <h2 class="section-title">Join with Room Code</h2>
+            <label>Room Code:</label>
+            <div class="code-input-container">
+              <input id="room-code-input" type="text" placeholder="Enter room code" class="room-code-input">
+              <button id="join-room-btn" class="join-button">Join</button>
+            </div>
+          </div>
+          
+          <!-- Available rooms section -->
+          <div class="available-rooms">
+            <h2 class="section-title">Available Rooms</h2>
+            <button id="refresh-rooms-btn" class="refresh-button">Refresh List</button>
+            <div id="rooms-list" class="rooms-list">
+              <div id="no-rooms-message" class="no-rooms-message">No rooms available. Refresh the list.</div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Status message area -->
+        <div id="lobby-status-message" class="status-message"></div>
       </div>
     </div>
     
@@ -165,14 +270,22 @@
   </div>
   
   <script src="/socket.io/socket.io.js"></script>
-  <script>
+  <script type="module">
+    import { EventBus } from './js/utils/event-bus.js';
+    import { SocketManager } from './js/communication/socket-manager.js';
+    import { GameStateManager } from './js/game/game-state-manager.js';
+    
     // DOM elements
-    const menuScreen = document.getElementById('menuScreen');
+    const lobbyScreen = document.getElementById('lobbyScreen');
     const gameScreen = document.getElementById('gameScreen');
     const gameCanvas = document.getElementById('gameCanvas');
-    const singleplayerBtn = document.getElementById('singleplayerBtn');
-    const multiplayerBtn = document.getElementById('multiplayerBtn');
-    const desktopLinkBtn = document.getElementById('desktopLinkBtn');
+    const usernameInput = document.getElementById('username-input');
+    const roomCodeInput = document.getElementById('room-code-input');
+    const joinRoomBtn = document.getElementById('join-room-btn');
+    const refreshRoomsBtn = document.getElementById('refresh-rooms-btn');
+    const roomsList = document.getElementById('rooms-list');
+    const noRoomsMessage = document.getElementById('no-rooms-message');
+    const lobbyStatusMessage = document.getElementById('lobby-status-message');
     const backBtn = document.getElementById('backBtn');
     
     // Set up canvas context and resize handling
@@ -192,7 +305,7 @@
     
     // Simple game state
     const gameState = {
-      mode: null, // 'singleplayer' or 'multiplayer'
+      mode: 'multiplayer',
       active: false,
       orientation: {
         alpha: 0,
@@ -218,11 +331,7 @@
       ctx.fillStyle = '#ffffff';
       ctx.font = '18px Arial';
       ctx.textAlign = 'center';
-      ctx.fillText(
-        gameState.mode === 'singleplayer' ? 'Solo Mode' : 'Multiplayer Mode', 
-        gameCanvas.width / 2, 
-        30
-      );
+      ctx.fillText('Multiplayer Mode', gameCanvas.width / 2, 30);
       
       // Draw orientation data if available
       if (gameState.active) {
@@ -267,21 +376,137 @@
       }
     }
     
-    // Start the game
-    function startGame(mode) {
-      gameState.mode = mode;
-      gameState.active = false;
+    class SimpleLobbyManager {
+      constructor() {
+        this.eventBus = new EventBus();
+        this.socketManager = new SocketManager(this.eventBus);
+        this.gameStateManager = new GameStateManager(this.eventBus, this.socketManager);
+        this.availableRooms = [];
+        this.setupEventListeners();
+        
+        // Automatically request session creation
+        this.socketManager.emit('create-session');
+        
+        // Request available rooms when initialized
+        setTimeout(() => {
+          this.refreshRoomsList();
+        }, 1000);
+      }
       
-      // Hide menu, show game
-      menuScreen.style.display = 'none';
-      gameScreen.style.display = 'block';
-      resizeCanvas();
+      setupEventListeners() {
+        // Multiplayer events
+        this.eventBus.on('multiplayer:rooms-list', this.handleRoomsList.bind(this));
+        this.eventBus.on('multiplayer:room-joined', this.handleRoomJoined.bind(this));
+        this.eventBus.on('multiplayer:room-left', this.handleRoomLeft.bind(this));
+        this.eventBus.on('multiplayer:room-error', this.handleRoomError.bind(this));
+        
+        // UI event listeners
+        joinRoomBtn.addEventListener('click', () => this.handleJoinRoom());
+        refreshRoomsBtn.addEventListener('click', () => this.refreshRoomsList());
+        backBtn.addEventListener('click', () => this.handleLeaveRoom());
+        
+      }
       
-      // Start sensor access
-      enableSensors();
+      handleRoomsList(data) {
+        this.availableRooms = data.rooms || [];
+        this.updateRoomsList();
+      }
       
-      // Set up the animation loop
-      requestAnimationFrame(gameLoop);
+      updateRoomsList() {
+        // Clear existing content
+        roomsList.innerHTML = '';
+        
+        if (this.availableRooms.length === 0) {
+          roomsList.appendChild(noRoomsMessage);
+          return;
+        }
+        
+        // Add rooms to list
+        this.availableRooms.forEach(room => {
+          const roomItem = document.createElement('div');
+          roomItem.className = 'room-item';
+          
+          roomItem.innerHTML = `
+            <div class="room-name">${room.roomName}</div>
+            <div class="room-info">
+              <span>Players: ${room.playerCount}/${room.maxPlayers}</span>
+              <span class="room-code">Code: ${room.roomCode}</span>
+            </div>
+          `;
+          
+          roomItem.onclick = () => {
+            const username = usernameInput.value.trim() || 'Player' + Math.floor(Math.random() * 1000);
+            usernameInput.value = username;
+            this.gameStateManager.joinRoom(room.roomCode, username);
+          };
+          
+          roomsList.appendChild(roomItem);
+        });
+      }
+      
+      handleJoinRoom() {
+        const username = usernameInput.value.trim();
+        const roomCode = roomCodeInput.value.trim();
+        
+        if (!username) {
+          this.showLobbyError('Please enter a username');
+          return;
+        }
+        
+        if (!roomCode) {
+          this.showLobbyError('Please enter a room code');
+          return;
+        }
+        
+        this.gameStateManager.joinRoom(roomCode, username);
+      }
+      
+      handleLeaveRoom() {
+        this.gameStateManager.leaveRoom();
+        
+        // Return to menu
+        gameScreen.style.display = 'none';
+        lobbyScreen.style.display = 'flex';
+        
+        // Stop the game
+        gameState.active = false;
+      }
+      
+      refreshRoomsList() {
+        this.gameStateManager.listRooms();
+      }
+      
+      handleRoomJoined(data) {
+        lobbyScreen.style.display = 'none';
+        gameScreen.style.display = 'block';
+        resizeCanvas();
+        
+        // Start sensor access
+        enableSensors();
+        
+        // Set up the animation loop
+        requestAnimationFrame(gameLoop);
+      }
+      
+      handleRoomLeft() {
+        // Return to lobby
+        gameScreen.style.display = 'none';
+        lobbyScreen.style.display = 'flex';
+      }
+      
+      handleRoomError(data) {
+        this.showLobbyError(data.error);
+      }
+      
+      showLobbyError(message) {
+        lobbyStatusMessage.textContent = message;
+        lobbyStatusMessage.style.display = 'block';
+        
+        // Hide after 5 seconds
+        setTimeout(() => {
+          lobbyStatusMessage.style.display = 'none';
+        }, 5000);
+      }
     }
     
     // Game loop
@@ -334,31 +559,10 @@
       });
     }
     
-    // Button event listeners
-    singleplayerBtn.addEventListener('click', () => {
-      startGame('singleplayer');
-    });
-    
-    multiplayerBtn.addEventListener('click', () => {
-      startGame('multiplayer');
-    });
-    
-    desktopLinkBtn.addEventListener('click', () => {
-      // Provide a way to get to desktop version
-      const hostUrl = window.location.origin;
-      alert(`Open this URL on your desktop:\n${hostUrl}\n\nThen scan the QR code with your mobile device.`);
-    });
-    
-    backBtn.addEventListener('click', () => {
-      // Return to menu
-      gameScreen.style.display = 'none';
-      menuScreen.style.display = 'flex';
-      
-      // Stop the game
-      gameState.active = false;
-      gameState.mode = null;
-      
-      // Remove sensor event listeners (not implemented in this basic version)
+    // Initialize the application when the DOM is ready
+    document.addEventListener('DOMContentLoaded', () => {
+      // Initialize the simple lobby manager
+      window.lobbyManager = new SimpleLobbyManager();
     });
   </script>
 </body>
