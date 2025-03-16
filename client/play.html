@@ -274,6 +274,7 @@
     import { EventBus } from './js/utils/event-bus.js';
     import { SocketManager } from './js/communication/socket-manager.js';
     import { GameStateManager } from './js/game/game-state-manager.js';
+    import { MobileGameManager } from './js/game/mobile/index.js';
     
     // DOM elements
     const lobbyScreen = document.getElementById('lobbyScreen');
@@ -288,25 +289,17 @@
     const lobbyStatusMessage = document.getElementById('lobby-status-message');
     const backBtn = document.getElementById('backBtn');
     
-    // Set up canvas context and resize handling
-    const ctx = gameCanvas.getContext('2d');
-    
+    // Set up canvas and resize handling
     function resizeCanvas() {
       const container = gameCanvas.parentElement;
       gameCanvas.width = container.clientWidth;
       gameCanvas.height = container.clientHeight;
-      // Redraw canvas if needed
-      if (gameScreen.style.display === 'block') {
-        drawGameScreen();
-      }
     }
     
     window.addEventListener('resize', resizeCanvas);
     
-    // Simple game state
-    const gameState = {
-      mode: 'multiplayer',
-      active: false,
+    // Mobile device sensor data
+    const sensorData = {
       orientation: {
         alpha: 0,
         beta: 0,
@@ -316,80 +309,31 @@
         x: 0,
         y: 0,
         z: 0
-      }
+      },
+      active: false
     };
     
-    // Draw the game screen
-    function drawGameScreen() {
-      ctx.clearRect(0, 0, gameCanvas.width, gameCanvas.height);
-      
-      // Fill background
-      ctx.fillStyle = '#121212';
-      ctx.fillRect(0, 0, gameCanvas.width, gameCanvas.height);
-      
-      // Draw game mode text
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '18px Arial';
-      ctx.textAlign = 'center';
-      ctx.fillText('Multiplayer Mode', gameCanvas.width / 2, 30);
-      
-      // Draw orientation data if available
-      if (gameState.active) {
-        // Center point
-        const centerX = gameCanvas.width / 2;
-        const centerY = gameCanvas.height / 2;
-        
-        // Draw a crosshair
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(centerX - 50, centerY);
-        ctx.lineTo(centerX + 50, centerY);
-        ctx.moveTo(centerX, centerY - 50);
-        ctx.lineTo(centerX, centerY + 50);
-        ctx.stroke();
-        
-        // Draw orientation indicator
-        const radius = 100;
-        const posX = centerX + (gameState.orientation.gamma / 90) * radius;
-        const posY = centerY + (gameState.orientation.beta / 90) * radius;
-        
-        ctx.beginPath();
-        ctx.arc(posX, posY, 20, 0, Math.PI * 2);
-        ctx.fillStyle = '#17a2b8';
-        ctx.fill();
-        
-        // Display orientation values
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '14px Arial';
-        ctx.textAlign = 'left';
-        ctx.fillText(`Alpha: ${gameState.orientation.alpha.toFixed(1)}°`, 20, gameCanvas.height - 80);
-        ctx.fillText(`Beta: ${gameState.orientation.beta.toFixed(1)}°`, 20, gameCanvas.height - 60);
-        ctx.fillText(`Gamma: ${gameState.orientation.gamma.toFixed(1)}°`, 20, gameCanvas.height - 40);
-      } else {
-        // Show a message to tilt the device
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '16px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('Tilt your device to play', centerX, centerY - 20);
-        ctx.fillText('Allow sensor access when prompted', centerX, centerY + 20);
-      }
-    }
-    
-    class SimpleLobbyManager {
+    class MobileLobbyManager {
       constructor() {
         this.eventBus = new EventBus();
         this.socketManager = new SocketManager(this.eventBus);
         this.gameStateManager = new GameStateManager(this.eventBus, this.socketManager);
+        this.mobileGameManager = null;
         this.availableRooms = [];
+        
         this.setupEventListeners();
         
-        // Automatically request session creation
-        this.socketManager.emit('create-session');
+        // Mobile clients don't need to create sessions
+        // They just need to list rooms
         
         // Request available rooms when initialized
         setTimeout(() => {
           this.refreshRoomsList();
+          
+          // Set up periodic room list refresh
+          this.roomRefreshInterval = setInterval(() => {
+            this.refreshRoomsList();
+          }, 5000); // Refresh every 5 seconds
         }, 1000);
       }
       
@@ -405,6 +349,27 @@
         refreshRoomsBtn.addEventListener('click', () => this.refreshRoomsList());
         backBtn.addEventListener('click', () => this.handleLeaveRoom());
         
+        // Forward sensor events to event bus
+        window.addEventListener('deviceorientation', (event) => {
+          sensorData.orientation.alpha = event.alpha || 0;
+          sensorData.orientation.beta = event.beta || 0;
+          sensorData.orientation.gamma = event.gamma || 0;
+          sensorData.active = true;
+          
+          this.eventBus.emit('sensor:gyro-updated', {
+            alpha: event.alpha || 0,
+            beta: event.beta || 0,
+            gamma: event.gamma || 0
+          });
+        });
+        
+        window.addEventListener('devicemotion', (event) => {
+          if (event.accelerationIncludingGravity) {
+            sensorData.acceleration.x = event.accelerationIncludingGravity.x || 0;
+            sensorData.acceleration.y = event.accelerationIncludingGravity.y || 0;
+            sensorData.acceleration.z = event.accelerationIncludingGravity.z || 0;
+          }
+        });
       }
       
       handleRoomsList(data) {
@@ -468,8 +433,18 @@
         gameScreen.style.display = 'none';
         lobbyScreen.style.display = 'flex';
         
-        // Stop the game
-        gameState.active = false;
+        // Clean up mobile game manager if it exists
+        if (this.mobileGameManager) {
+          this.mobileGameManager.cleanup();
+          this.mobileGameManager = null;
+        }
+        
+        // Resume room list refreshing
+        if (!this.roomRefreshInterval) {
+          this.roomRefreshInterval = setInterval(() => {
+            this.refreshRoomsList();
+          }, 5000);
+        }
       }
       
       refreshRoomsList() {
@@ -479,13 +454,27 @@
       handleRoomJoined(data) {
         lobbyScreen.style.display = 'none';
         gameScreen.style.display = 'block';
+        
+        // Resize canvas to fill container
         resizeCanvas();
         
         // Start sensor access
-        enableSensors();
+        this.enableSensors();
         
-        // Set up the animation loop
-        requestAnimationFrame(gameLoop);
+        // Stop refreshing room list while in a game
+        if (this.roomRefreshInterval) {
+          clearInterval(this.roomRefreshInterval);
+          this.roomRefreshInterval = null;
+        }
+        
+        // Initialize mobile game manager if not already created
+        if (!this.mobileGameManager) {
+          this.mobileGameManager = new MobileGameManager(
+            this.eventBus,
+            this.socketManager,
+            this.gameStateManager
+          );
+        }
       }
       
       handleRoomLeft() {
@@ -507,62 +496,29 @@
           lobbyStatusMessage.style.display = 'none';
         }, 5000);
       }
-    }
-    
-    // Game loop
-    function gameLoop() {
-      drawGameScreen();
-      requestAnimationFrame(gameLoop);
-    }
-    
-    // Enable device sensors
-    async function enableSensors() {
-      // Request permission on iOS
-      if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-        try {
-          const permission = await DeviceOrientationEvent.requestPermission();
-          if (permission === 'granted') {
-            setupSensors();
-          } else {
-            console.log('Permission denied for orientation sensors');
-          }
-        } catch (err) {
-          console.error('Error requesting orientation permission:', err);
-        }
-      } else {
-        // Non-iOS devices
-        setupSensors();
-      }
-    }
-    
-    // Set up sensor event listeners
-    function setupSensors() {
-      // Orientation sensor
-      window.addEventListener('deviceorientation', (event) => {
-        gameState.orientation.alpha = event.alpha || 0;
-        gameState.orientation.beta = event.beta || 0;
-        gameState.orientation.gamma = event.gamma || 0;
-        
-        // Mark game as active once we receive sensor data
-        if (!gameState.active) {
-          gameState.active = true;
-        }
-      });
       
-      // Motion sensor
-      window.addEventListener('devicemotion', (event) => {
-        if (event.accelerationIncludingGravity) {
-          gameState.acceleration.x = event.accelerationIncludingGravity.x || 0;
-          gameState.acceleration.y = event.accelerationIncludingGravity.y || 0;
-          gameState.acceleration.z = event.accelerationIncludingGravity.z || 0;
+      // Enable device sensors with permission handling
+      async enableSensors() {
+        // Request permission on iOS
+        if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+          try {
+            const permission = await DeviceOrientationEvent.requestPermission();
+            if (permission !== 'granted') {
+              console.log('Permission denied for orientation sensors');
+              this.showLobbyError('Sensor access denied. Please allow sensor access for the full experience.');
+            }
+          } catch (err) {
+            console.error('Error requesting orientation permission:', err);
+            this.showLobbyError('Error accessing sensors. Some features may not work correctly.');
+          }
         }
-      });
+      }
     }
     
     // Initialize the application when the DOM is ready
     document.addEventListener('DOMContentLoaded', () => {
-      // Initialize the simple lobby manager
-      window.lobbyManager = new SimpleLobbyManager();
+      // Initialize the mobile lobby manager
+      window.lobbyManager = new MobileLobbyManager();
     });
   </script>
 </body>

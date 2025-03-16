@@ -243,6 +243,9 @@ function getSanitizedRoomData(room) {
  * @returns {Object} Sanitized player data
  */
 function getSanitizedPlayerData(player) {
+  // Check if this is a mobile player
+  const isMobilePlayer = player.role === 'mobile';
+  
   return {
     id: player.id,
     username: player.username,
@@ -250,7 +253,8 @@ function getSanitizedPlayerData(player) {
     isConnected: player.isConnected,
     position: player.position,
     rotation: player.rotation,
-    phoneOrientation: player.phoneOrientation
+    phoneOrientation: player.phoneOrientation,
+    isMobilePlayer: isMobilePlayer // Flag to indicate if this is a mobile player
   };
 }
 
@@ -304,7 +308,12 @@ function removePlayerFromRoom(socketId, roomId) {
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
-  console.log('A client connected:', socket.id);
+  // Detect client type for better logging
+  const isMobile = isMobileDevice(socket.handshake.headers['user-agent'] || '') ||
+                  (socket.handshake.headers.referer || '').includes('/play');
+  const clientType = isMobile ? 'Mobile' : 'Desktop';
+  
+  console.log(`A ${clientType} client connected:`, socket.id);
   let currentRoomId = null;
   
   // ==================== DESKTOP/MOBILE PAIRING ====================
@@ -399,8 +408,21 @@ io.on('connection', (socket) => {
     // Join the room's socket.io room
     socket.join(room.roomId);
     
-    // Add player to the room
-    room.players.set(socket.id, createPlayer(socket.id, username, 'desktop'));
+    // More robust device detection
+    const userAgent = socket.handshake.headers['user-agent'] || '';
+    const referer = socket.handshake.headers.referer || '';
+    const isPlayHtml = referer.includes('/play');
+    const requestPath = socket.handshake.headers[':path'] || '';
+    const accessingPlayUrl = requestPath.includes('/play');
+    
+    // Several ways to detect if this is a mobile client:
+    // 1. Check user agent for mobile signatures
+    // 2. Check if accessed through play.html (referer)
+    // 3. Check if direct request to /play endpoint (path)
+    const clientType = (isPlayHtml || accessingPlayUrl || isMobileDevice(userAgent)) ? 'mobile' : 'desktop';
+    
+    // Add player to the room with appropriate client type
+    room.players.set(socket.id, createPlayer(socket.id, username, clientType));
     
     // Track the current room for this socket
     currentRoomId = room.roomId;
@@ -434,8 +456,21 @@ io.on('connection', (socket) => {
     // Join the room's socket.io room
     socket.join(room.roomId);
     
-    // Add player to the room
-    room.players.set(socket.id, createPlayer(socket.id, username, 'desktop'));
+    // More robust device detection
+    const userAgent = socket.handshake.headers['user-agent'] || '';
+    const referer = socket.handshake.headers.referer || '';
+    const isPlayHtml = referer.includes('/play');
+    const requestPath = socket.handshake.headers[':path'] || '';
+    const accessingPlayUrl = requestPath.includes('/play');
+    
+    // Several ways to detect if this is a mobile client:
+    // 1. Check user agent for mobile signatures
+    // 2. Check if accessed through play.html (referer)
+    // 3. Check if direct request to /play endpoint (path)
+    const clientType = (isPlayHtml || accessingPlayUrl || isMobileDevice(userAgent)) ? 'mobile' : 'desktop';
+    
+    // Add player to the room with appropriate client type
+    room.players.set(socket.id, createPlayer(socket.id, username, clientType));
     
     // Track the current room for this socket
     currentRoomId = room.roomId;
@@ -487,6 +522,11 @@ io.on('connection', (socket) => {
     
     if (data.phoneOrientation) {
       player.phoneOrientation = data.phoneOrientation;
+    }
+    
+    // Update mobile player flag if provided (ensures role persists across reconnects)
+    if (data.isMobilePlayer !== undefined) {
+      player.role = data.isMobilePlayer ? 'mobile' : 'desktop';
     }
     
     player.lastUpdate = Date.now();

@@ -20,7 +20,15 @@ export class SocketManager {
   setupEventListeners() {
     this.socket.on('connect', () => {
       console.log('Connected to signaling server with ID:', this.socket.id);
-      this.socket.emit('register-desktop');
+      
+      // Check if this is the mobile page (play.html)
+      const isMobilePage = window.location.pathname.includes('/play');
+      
+      if (!isMobilePage) {
+        // Only desktop clients should register as desktop
+        this.socket.emit('register-desktop');
+      }
+      
       this.eventBus.emit('socket:connected', { socketId: this.socket.id });
     });
 

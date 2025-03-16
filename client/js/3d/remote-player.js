@@ -29,8 +29,18 @@ export class RemotePlayer {
   constructor(scene, playerId, playerData, playerIndex = 0) {
     this.scene = scene;
     this.playerId = playerId;
-    this.phoneModel = new PhoneModel(scene);
     this.playerData = playerData;
+    
+    // Check if this is a mobile player
+    this.isMobilePlayer = playerData.isMobilePlayer || false;
+    
+    // For mobile players, create an airplane model instead of a phone
+    if (this.isMobilePlayer) {
+      this.createAirplaneModel(scene);
+    } else {
+      // For desktop players, use the regular phone model
+      this.phoneModel = new PhoneModel(scene);
+    }
     
     // For smooth animation
     this.targetPosition = new THREE.Vector3();
@@ -137,8 +147,16 @@ export class RemotePlayer {
     // Position above the phone model
     this.nameSprite.position.y = 1.5;
     
-    // Add to the phone model
-    this.phoneModel.getModel().add(this.nameSprite);
+    // Add to the appropriate model
+    if (this.isMobilePlayer) {
+      if (this.airplaneModel) {
+        this.airplaneModel.add(this.nameSprite);
+        // Position higher for airplanes 
+        this.nameSprite.position.y = 2.5;
+      }
+    } else {
+      this.phoneModel.getModel().add(this.nameSprite);
+    }
   }
   
   /**
@@ -158,11 +176,17 @@ export class RemotePlayer {
       // Initialize current position if not set yet
       if (this.currentPosition.lengthSq() === 0) {
         this.currentPosition.copy(this.targetPosition);
-        this.phoneModel.setPosition(
-          this.currentPosition.x,
-          this.currentPosition.y,
-          this.currentPosition.z
-        );
+        if (this.isMobilePlayer) {
+          if (this.airplaneModel) {
+            this.airplaneModel.position.copy(this.currentPosition);
+          }
+        } else {
+          this.phoneModel.setPosition(
+            this.currentPosition.x,
+            this.currentPosition.y,
+            this.currentPosition.z
+          );
+        }
       }
     }
     
@@ -177,7 +201,13 @@ export class RemotePlayer {
       // Initialize current rotation if not set yet
       if (this.currentRotation.lengthSq() === 0) {
         this.currentRotation.copy(this.targetRotation);
-        this.phoneModel.setQuaternion(this.currentRotation);
+        if (this.isMobilePlayer) {
+          if (this.airplaneModel) {
+            this.airplaneModel.quaternion.copy(this.currentRotation);
+          }
+        } else {
+          this.phoneModel.setQuaternion(this.currentRotation);
+        }
       }
     }
     
@@ -218,15 +248,52 @@ export class RemotePlayer {
   update(delta) {
     // Smoothly interpolate position
     this.currentPosition.lerp(this.targetPosition, Math.min(delta * 10, 1));
-    this.phoneModel.setPosition(
-      this.currentPosition.x,
-      this.currentPosition.y,
-      this.currentPosition.z
-    );
+    
+    // Apply position to the appropriate model
+    if (this.isMobilePlayer) {
+      if (this.airplaneModel) {
+        this.airplaneModel.position.copy(this.currentPosition);
+      }
+    } else {
+      this.phoneModel.setPosition(
+        this.currentPosition.x,
+        this.currentPosition.y,
+        this.currentPosition.z
+      );
+    }
     
     // Smoothly interpolate rotation
     this.currentRotation.slerp(this.targetRotation, Math.min(delta * 10, 1));
-    this.phoneModel.setQuaternion(this.currentRotation);
+    
+    // Apply rotation to the appropriate model
+    if (this.isMobilePlayer) {
+      if (this.airplaneModel) {
+        this.airplaneModel.quaternion.copy(this.currentRotation);
+        
+        // Add banking effect for mobile players during turns
+        // Calculate the difference in rotation from the last frame to determine turning
+        if (this.lastRotation) {
+          const rotationDelta = this.currentRotation.angleTo(this.lastRotation);
+          const rotationSign = Math.sign(
+            this.currentRotation.y * this.lastRotation.z - 
+            this.currentRotation.z * this.lastRotation.y
+          );
+          
+          // Apply banking based on rotation change
+          if (Math.abs(rotationDelta) > 0.001) {
+            this.airplaneModel.rotation.z = -rotationSign * Math.min(rotationDelta * 2, 0.3);
+          } else {
+            // Return to level flight
+            this.airplaneModel.rotation.z *= 0.95;
+          }
+        }
+        
+        // Store current rotation for next frame comparison
+        this.lastRotation = this.currentRotation.clone();
+      }
+    } else {
+      this.phoneModel.setQuaternion(this.currentRotation);
+    }
     
     // Smoothly interpolate phone orientation (for weapon)
     if (this.targetPhoneOrientation.lengthSq() > 0) {
@@ -261,11 +328,61 @@ export class RemotePlayer {
   }
   
   /**
+   * Create an airplane model for mobile players
+   * @param {THREE.Scene} scene - 3D scene
+   */
+  createAirplaneModel(scene) {
+    // Create a simple geometric airplane-like shape
+    const bodyGeometry = new THREE.BoxGeometry(0.8, 0.3, 2);
+    const wingGeometry = new THREE.BoxGeometry(3, 0.1, 0.5);
+    const tailGeometry = new THREE.BoxGeometry(0.5, 0.8, 0.1);
+    
+    // Use player color for the body
+    const bodyMaterial = new THREE.MeshStandardMaterial({ 
+      color: this.playerColor,
+      roughness: 0.4,
+      metalness: 0.6
+    });
+    
+    // Use a slightly different color for wings and tail
+    const wingMaterial = new THREE.MeshStandardMaterial({ 
+      color: this.playerColor,
+      roughness: 0.6,
+      metalness: 0.3
+    });
+    
+    // Create meshes
+    const bodyMesh = new THREE.Mesh(bodyGeometry, bodyMaterial);
+    const wingMesh = new THREE.Mesh(wingGeometry, wingMaterial);
+    const tailMesh = new THREE.Mesh(tailGeometry, wingMaterial);
+    
+    // Position wing and tail
+    wingMesh.position.set(0, 0, 0);
+    tailMesh.position.set(0, 0.3, -0.9);
+    
+    // Create a group to hold all parts
+    const model = new THREE.Group();
+    model.add(bodyMesh);
+    model.add(wingMesh);
+    model.add(tailMesh);
+    
+    // Add to scene
+    scene.add(model);
+    
+    // Store the model reference
+    this.airplaneModel = model;
+  }
+  
+  /**
    * Get player model
    * @returns {THREE.Object3D} The player's 3D model
    */
   getModel() {
-    return this.phoneModel.getModel();
+    if (this.isMobilePlayer) {
+      return this.airplaneModel;
+    } else {
+      return this.phoneModel.getModel();
+    }
   }
   
   /**
@@ -294,13 +411,39 @@ export class RemotePlayer {
       this.weapon = null;
     }
     
-    // Dispose of phone model
-    this.phoneModel.dispose();
+    if (this.isMobilePlayer) {
+      // Clean up airplane model
+      if (this.airplaneModel) {
+        // Remove from scene
+        this.scene.remove(this.airplaneModel);
+        
+        // Dispose of geometries and materials
+        this.airplaneModel.traverse((child) => {
+          if (child instanceof THREE.Mesh) {
+            if (child.geometry) {
+              child.geometry.dispose();
+            }
+            if (child.material) {
+              if (Array.isArray(child.material)) {
+                child.material.forEach(material => material.dispose());
+              } else {
+                child.material.dispose();
+              }
+            }
+          }
+        });
+      }
+    } else {
+      // Dispose of phone model
+      this.phoneModel.dispose();
+    }
     
     // Clean up name sprite
     if (this.nameSprite) {
-      // Remove sprite
-      this.phoneModel.getModel().remove(this.nameSprite);
+      // Remove sprite from its parent
+      if (this.nameSprite.parent) {
+        this.nameSprite.parent.remove(this.nameSprite);
+      }
       
       // Dispose of texture
       if (this.nameSprite.material.map) {
