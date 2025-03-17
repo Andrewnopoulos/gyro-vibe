@@ -76,75 +76,104 @@ export class MobileGameManager {
    * @param {HTMLElement} container - Container element for renderer
    */
   initializeScene(container) {
-    this.container = container;
-    
-    // Create scene
-    this.scene = new THREE.Scene();
-    
-    // Add ambient light
-    const ambientLight = new THREE.AmbientLight(0x404040, 3);
-    this.scene.add(ambientLight);
-    
-    // Add directional light (sunlight)
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 2);
-    directionalLight.position.set(1, 3, 2);
-    directionalLight.castShadow = true;
-    this.scene.add(directionalLight);
-    
-    // Create fog for distance effect
-    this.scene.fog = new THREE.FogExp2(0x87CEEB, 0.005);
-    
-    // Add ground plane
-    const groundGeometry = new THREE.PlaneGeometry(1000, 1000);
-    const groundMaterial = new THREE.MeshStandardMaterial({ 
-      color: 0x72A672,
-      roughness: 0.8,
-      metalness: 0.2
-    });
-    const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-    ground.rotation.x = -Math.PI / 2; // Rotate to be horizontal
-    ground.position.y = 0;
-    ground.receiveShadow = true;
-    this.scene.add(ground);
-    
-    // Create skybox
-    this.createSkybox();
-    
-    // Create renderer
-    this.renderer = new THREE.WebGLRenderer({ 
-      antialias: true,
-      canvas: container
-    });
-    this.renderer.setSize(container.clientWidth, container.clientHeight);
-    this.renderer.setClearColor(0x87CEEB); // Sky blue
-    this.renderer.shadowMap.enabled = true;
-    
-    // Initialize mobile player
-    this.mobilePlayer = new MobilePlayer(this.scene, this.eventBus);
-    
-    // Initialize touch controller
-    this.touchController = new TouchController(this.eventBus, container);
-    this.touchController.enable();
-    
-    // No weapon system in simplified gameplay
-    
-    // Initialize game objects
-    this.initializeGameObjects();
-    
-    // Create game UI elements
-    this.createGameUI();
-    
-    // Handle window resize
-    window.addEventListener('resize', this.onWindowResize.bind(this), false);
-    
-    // Initial resize
-    this.onWindowResize();
-    
-    // Start animation loop
-    this.isActive = true;
-    this.animate();
-    
-    console.log('Enhanced mobile 3D scene initialized');
+    try {
+      if (!container) {
+        console.error("Cannot initialize scene: container is null");
+        return;
+      }
+      
+      // Clean up existing scene if there is one
+      if (this.isActive) {
+        this.cleanup();
+      }
+      
+      this.container = container;
+      
+      // We won't set container.width/height directly to avoid creating a 2D context
+      
+      // Create scene
+      this.scene = new THREE.Scene();
+      
+      // Add ambient light
+      const ambientLight = new THREE.AmbientLight(0x404040, 3);
+      this.scene.add(ambientLight);
+      
+      // Add directional light (sunlight)
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 2);
+      directionalLight.position.set(1, 3, 2);
+      directionalLight.castShadow = true;
+      this.scene.add(directionalLight);
+      
+      // Create fog for distance effect
+      this.scene.fog = new THREE.FogExp2(0x87CEEB, 0.005);
+      
+      // Add ground plane
+      const groundGeometry = new THREE.PlaneGeometry(1000, 1000);
+      const groundMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0x72A672,
+        roughness: 0.8,
+        metalness: 0.2
+      });
+      const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+      ground.rotation.x = -Math.PI / 2; // Rotate to be horizontal
+      ground.position.y = 0;
+      ground.receiveShadow = true;
+      this.scene.add(ground);
+      
+      // Create skybox
+      this.createSkybox();
+      
+      // Create renderer
+      this.renderer = new THREE.WebGLRenderer({ 
+        antialias: true,
+        canvas: container,
+        alpha: true,
+        powerPreference: "high-performance"
+      });
+      
+      // Use clientWidth/Height instead of width/height properties
+      const width = container.clientWidth || (container.parentElement ? container.parentElement.clientWidth : 300);
+      const height = container.clientHeight || (container.parentElement ? container.parentElement.clientHeight : 200);
+      
+      console.log(`Initializing renderer with dimensions: ${width}x${height}`);
+      this.renderer.setSize(width, height);
+      this.renderer.setClearColor(0x87CEEB); // Sky blue
+      this.renderer.shadowMap.enabled = true;
+      
+      // Initialize mobile player
+      this.mobilePlayer = new MobilePlayer(this.scene, this.eventBus);
+      
+      // Initialize touch controller
+      this.touchController = new TouchController(this.eventBus, container);
+      this.touchController.enable();
+      
+      // No weapon system in simplified gameplay
+      
+      // Initialize game objects
+      this.initializeGameObjects();
+      
+      // Create game UI elements
+      this.createGameUI();
+      
+      // Handle window resize
+      window.addEventListener('resize', this.onWindowResize.bind(this), false);
+      
+      // Initial resize
+      this.onWindowResize();
+      
+      // Start animation loop
+      this.isActive = true;
+      this.animate();
+      
+      // Force a render to ensure something appears immediately
+      if (this.renderer && this.mobilePlayer) {
+        this.renderer.render(this.scene, this.mobilePlayer.getCamera());
+      }
+      
+      console.log('Enhanced mobile 3D scene initialized');
+    } catch (error) {
+      console.error("Error initializing 3D scene:", error);
+    }
   }
   
   /**
@@ -290,12 +319,40 @@ export class MobileGameManager {
   onWindowResize() {
     if (!this.mobilePlayer || !this.renderer || !this.container) return;
     
-    const camera = this.mobilePlayer.getCamera();
-    if (!camera) return;
-    
-    camera.aspect = this.container.clientWidth / this.container.clientHeight;
-    camera.updateProjectionMatrix();
-    this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
+    try {
+      const camera = this.mobilePlayer.getCamera();
+      if (!camera) return;
+      
+      // Get container dimensions, with fallbacks to prevent division by zero
+      let width = this.container.clientWidth;
+      let height = this.container.clientHeight;
+      
+      // If dimensions are zero, try to get dimensions from parent or use defaults
+      if (width === 0 || height === 0) {
+        if (this.container.parentElement) {
+          width = this.container.parentElement.clientWidth || 300;
+          height = this.container.parentElement.clientHeight || 200;
+        } else {
+          width = 300;
+          height = 200;
+        }
+        // Don't modify canvas dimensions directly to avoid WebGL context issues
+      }
+      
+      // Update camera aspect ratio
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      
+      // Resize renderer
+      this.renderer.setSize(width, height); 
+      
+      // Force a render after resize
+      if (this.scene && camera) {
+        this.renderer.render(this.scene, camera);
+      }
+    } catch (error) {
+      console.error("Error in window resize handler:", error);
+    }
   }
   
   /**
@@ -735,11 +792,40 @@ export class MobileGameManager {
   handleRoomJoined(data) {
     console.log('Mobile player joined room', data);
     
-    // Initialize scene if not already initialized
-    const gameCanvas = document.getElementById('gameCanvas');
-    if (gameCanvas && !this.isActive) {
-      this.initializeScene(gameCanvas);
-    }
+    // Always reset initialization state when joining a room
+    this.isActive = false;
+    
+    // Clean up any existing scene immediately
+    this.cleanup();
+    
+    // Reset state variables
+    this.mobilePlayer = null;
+    this.touchController = null;
+    this.scene = null;
+    this.renderer = null;
+    
+    // Initialize scene with a delay to ensure DOM is ready
+    setTimeout(() => {
+      try {
+        const gameCanvas = document.getElementById('gameCanvas');
+        if (!gameCanvas) {
+          console.error("Cannot find gameCanvas element");
+          return;
+        }
+        
+        // Make sure canvas dimensions are set correctly
+        // Do not set canvas.width/height directly as it might create a 2D context
+        const container = gameCanvas.parentElement;
+        if (container) {
+          // Instead of setting width/height directly, we'll let the WebGLRenderer do it
+          this.initializeScene(gameCanvas);
+        } else {
+          console.error("Canvas parent element not found");
+        }
+      } catch (error) {
+        console.error("Error in handleRoomJoined:", error);
+      }
+    }, 200); // Increase delay to ensure canvas is properly sized and ready
   }
   
   /**

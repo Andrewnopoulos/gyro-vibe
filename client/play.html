@@ -600,9 +600,24 @@
     
     // Set up canvas and resize handling
     function resizeCanvas() {
-      const container = gameCanvas.parentElement;
-      gameCanvas.width = container.clientWidth;
-      gameCanvas.height = container.clientHeight;
+      try {
+        const container = gameCanvas.parentElement;
+        if (!container) {
+          console.warn("Canvas has no parent element");
+          return;
+        }
+        
+        // Don't set canvas dimensions directly here - let WebGL handle this
+        // This is important to avoid conflicts between 2D and WebGL contexts
+        
+        // Instead, we ensure the canvas has the correct CSS size
+        gameCanvas.style.width = '100%';
+        gameCanvas.style.height = '100%';
+        
+        console.log(`Canvas container dimensions: ${container.clientWidth}x${container.clientHeight}`);
+      } catch (error) {
+        console.error("Error resizing canvas:", error);
+      }
     }
     
     window.addEventListener('resize', resizeCanvas);
@@ -787,6 +802,32 @@
         this.mobileGameManager = null;
         this.availableRooms = [];
         
+        // Reset gameCanvas to ensure a clean slate for WebGL
+        const gameCanvas = document.getElementById('gameCanvas');
+        if (gameCanvas) {
+          // Remove and recreate the canvas to ensure no existing context
+          const canvasContainer = gameCanvas.parentElement;
+          if (canvasContainer) {
+            // Get the old canvas attributes
+            const oldWidth = gameCanvas.style.width;
+            const oldHeight = gameCanvas.style.height;
+            
+            // Remove old canvas
+            canvasContainer.removeChild(gameCanvas);
+            
+            // Create fresh canvas
+            const newCanvas = document.createElement('canvas');
+            newCanvas.id = 'gameCanvas';
+            newCanvas.style.width = oldWidth || '100%';
+            newCanvas.style.height = oldHeight || '100%';
+            
+            // Add to container
+            canvasContainer.appendChild(newCanvas);
+            
+            console.log("Canvas reset for clean WebGL context");
+          }
+        }
+        
         this.setupEventListeners();
         
         // Mobile clients don't need to create sessions
@@ -947,54 +988,106 @@
         // Store local player id for player list highlighting
         window.currentPlayerId = data.playerId;
         
-        // Switch to game screen
+        // IMPORTANT: Switch to game screen FIRST before doing anything with the canvas
         lobbyScreen.style.display = 'none';
         gameScreen.style.display = 'block';
         
-        // Resize canvas to fill container
-        resizeCanvas();
-        
-        // Update connection status indicator
-        updateConnectionIndicator('connected', 100);
-        
-        // Start sensor access
-        this.enableSensors()
-          .then(() => {
-            console.log('Sensors enabled successfully');
-          })
-          .catch(error => {
-            console.warn('Sensor access issue:', error);
-            // Show a non-blocking warning
-            showNotification('Limited sensor access. Some features may not work correctly.', 'warning');
-          });
-        
-        // Stop refreshing room list while in a game
-        if (this.roomRefreshInterval) {
-          clearInterval(this.roomRefreshInterval);
-          this.roomRefreshInterval = null;
-        }
-        
-        // Save room info for potential reconnection
-        this.lastRoomCode = data.room.roomCode;
-        this.lastUsername = data.playerId ? (data.players.find(p => p.id === data.playerId)?.username || '') : '';
-        
-        // Initialize mobile game manager if not already created
-        if (!this.mobileGameManager) {
-          try {
-            this.mobileGameManager = new MobileGameManager(
-              this.eventBus,
-              this.socketManager,
-              this.gameStateManager
-            );
-            console.log('Mobile game manager initialized with room data:', data);
-          } catch (error) {
-            console.error('Failed to initialize mobile game manager:', error);
-            this.showLobbyError('Failed to initialize game view. Please try again.');
-            this.gameStateManager.leaveRoom();
-            return;
+        // Give the browser time to update the DOM before proceeding
+        setTimeout(() => {
+          // Make sure the gameCanvas exists and has a parent
+          let gameCanvas = document.getElementById('gameCanvas');
+          const canvasContainer = document.querySelector('.canvas-container');
+          
+          if (!gameCanvas || !gameCanvas.parentElement) {
+            console.warn("Canvas doesn't have a parent or doesn't exist, recreating it");
+            
+            // If canvas exists but has no parent, remove it
+            if (gameCanvas) {
+              if (gameCanvas.parentElement) {
+                gameCanvas.parentElement.removeChild(gameCanvas);
+              } else if (document.body.contains(gameCanvas)) {
+                document.body.removeChild(gameCanvas);
+              }
+            }
+            
+            // Create a new canvas
+            gameCanvas = document.createElement('canvas');
+            gameCanvas.id = 'gameCanvas';
+            gameCanvas.style.width = '100%';
+            gameCanvas.style.height = '100%';
+            
+            // Add to container if it exists, or to the game screen
+            if (canvasContainer) {
+              canvasContainer.appendChild(gameCanvas);
+              console.log("Canvas added to canvas container");
+            } else {
+              gameScreen.appendChild(gameCanvas);
+              console.log("Canvas added to game screen");
+            }
           }
-        }
-        
+          
+          // Now resize the canvas
+          resizeCanvas();
+          
+          // Update connection status indicator
+          updateConnectionIndicator('connected', 100);
+          
+          // Start sensor access
+          this.enableSensors()
+            .then(() => {
+              console.log('Sensors enabled successfully');
+            })
+            .catch(error => {
+              console.warn('Sensor access issue:', error);
+              // Show a non-blocking warning
+              showNotification('Limited sensor access. Some features may not work correctly.', 'warning');
+            });
+          
+          // Stop refreshing room list while in a game
+          if (this.roomRefreshInterval) {
+            clearInterval(this.roomRefreshInterval);
+            this.roomRefreshInterval = null;
+          }
+          
+          // Save room info for potential reconnection
+          this.lastRoomCode = data.room.roomCode;
+          this.lastUsername = data.playerId ? (data.players.find(p => p.id === data.playerId)?.username || '') : '';
+          
+          // Create mobile game manager with small delay to ensure canvas is ready
+          setTimeout(() => {
+            // Initialize mobile game manager if not already created
+            if (!this.mobileGameManager) {
+              try {
+                this.mobileGameManager = new MobileGameManager(
+                  this.eventBus,
+                  this.socketManager,
+                  this.gameStateManager
+                );
+                console.log('Mobile game manager initialized with room data:', data);
+              } catch (error) {
+                console.error('Failed to initialize mobile game manager:', error);
+                this.showLobbyError('Failed to initialize game view. Please try again.');
+                this.gameStateManager.leaveRoom();
+                return;
+              }
+            }
+            
+            // Update room info panel
+            this.updateRoomInfoPanel(data);
+            
+            // Show notification
+            showNotification(`Joined room: ${data.room.name}`, 'info');
+            
+            // If this is a reconnection, show a specific message
+            if (this.isReconnecting) {
+              showNotification('Successfully reconnected to the room!', 'info');
+              this.isReconnecting = false;
+            }
+          }, 100); // Small delay to make sure canvas is ready
+        }, 100); // Give time for the display change to take effect
+      }
+      
+      updateRoomInfoPanel(data) {
         // Update room info panel
         currentRoomCode.textContent = data.room.roomCode || '----';
         playerCount.textContent = data.room.players && data.room.players.length ? data.room.players.length : 0;
@@ -1022,15 +1115,6 @@
           messageElement.style.zIndex = '100';
           messageElement.style.display = 'none';
           gameScreen.appendChild(messageElement);
-        }
-        
-        // Show welcome notification
-        showNotification(`Joined room: ${data.room.name}`, 'info');
-        
-        // If this is a reconnection, show a specific message
-        if (this.isReconnecting) {
-          showNotification('Successfully reconnected to the room!', 'info');
-          this.isReconnecting = false;
         }
       }
       
