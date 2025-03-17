@@ -299,9 +299,11 @@ export class MobilePlayer {
     // Apply velocity
     this.position.add(this.velocity.clone().multiplyScalar(delta));
     
-    // Apply changes to the model
-    this.playerModel.position.copy(this.position);
-    this.playerModel.rotation.copy(this.rotation);
+    // Apply changes to the model if it exists
+    if (this.playerModel) {
+      this.playerModel.position.copy(this.position);
+      this.playerModel.rotation.copy(this.rotation);
+    }
     
     // Update camera position to follow player
     this.updateCameraPosition();
@@ -342,12 +344,14 @@ export class MobilePlayer {
     );
     
     // Make the model bank slightly during turns for visual effect
-    if (this.touchDeltaX !== 0) {
-      // Bank in the direction of the turn
-      this.playerModel.rotation.z = -this.touchDeltaX * 0.5;
-    } else {
-      // Return to level flight
-      this.playerModel.rotation.z *= 0.95;
+    if (this.playerModel) {
+      if (this.touchDeltaX !== 0) {
+        // Bank in the direction of the turn
+        this.playerModel.rotation.z = -this.touchDeltaX * 0.5;
+      } else {
+        // Return to level flight
+        this.playerModel.rotation.z *= 0.95;
+      }
     }
   }
   
@@ -404,8 +408,9 @@ export class MobilePlayer {
     const lookY = this.controlState.lookY; // -1 (up) to 1 (down)
     
     // Apply rotation based on right joystick or gyro
-    const useGyroForRotation = this.controlState.gyroEnabled && 
-                              !this.rightJoystick?.active;
+    // Since this.rightJoystick is undefined, we'll just use lookX/lookY to determine if right joystick is active
+    const isRightJoystickActive = Math.abs(lookX) > 0.05 || Math.abs(lookY) > 0.05;
+    const useGyroForRotation = this.controlState.gyroEnabled && !isRightJoystickActive;
     
     if (!useGyroForRotation) {
       // Use right joystick for rotation
@@ -423,20 +428,22 @@ export class MobilePlayer {
       this.applyGyroRotation(delta);
     }
     
-    // Apply banking effect during turns
-    const isTurning = Math.abs(lookX) > 0.05 || 
-                     (useGyroForRotation && Math.abs(this.controlState.gyroData.gamma) > 5);
-    
-    if (isTurning) {
-      // Bank in the direction of the turn
-      const bankAmount = useGyroForRotation 
-        ? -this.controlState.gyroData.gamma * 0.01 
-        : -lookX * 0.5;
-        
-      this.playerModel.rotation.z = bankAmount;
-    } else {
-      // Return to level flight
-      this.playerModel.rotation.z *= 0.95;
+    // Apply banking effect during turns - only if playerModel exists
+    if (this.playerModel) {
+      const isTurning = Math.abs(lookX) > 0.05 || 
+                       (useGyroForRotation && Math.abs(this.controlState.gyroData.gamma) > 5);
+      
+      if (isTurning) {
+        // Bank in the direction of the turn
+        const bankAmount = useGyroForRotation 
+          ? -this.controlState.gyroData.gamma * 0.01 
+          : -lookX * 0.5;
+          
+        this.playerModel.rotation.z = bankAmount;
+      } else {
+        // Return to level flight
+        this.playerModel.rotation.z *= 0.95;
+      }
     }
   }
   

@@ -1000,7 +1000,7 @@
         
         // Update room info panel
         currentRoomCode.textContent = data.room.roomCode || '----';
-        playerCount.textContent = data.room.players.length || 0;
+        playerCount.textContent = data.room.players && data.room.players.length ? data.room.players.length : 0;
         maxPlayers.textContent = data.room.maxPlayers || 8;
         
         // Update player list

@@ -641,35 +641,42 @@ export class MobileGameManager {
    * Update UI elements
    */
   updateUI() {
-    if (!this.uiElements) return;
+    if (!this.uiElements || !this.gameState) return;
     
-    // Update health bar
-    const healthPercent = Math.max(0, Math.min(100, this.gameState.health));
-    this.uiElements.healthFill.style.width = `${healthPercent}%`;
-    
-    // Set color based on health
-    if (healthPercent > 60) {
-      this.uiElements.healthFill.style.background = 'linear-gradient(to right, #00cc00, #00ff00)';
-    } else if (healthPercent > 30) {
-      this.uiElements.healthFill.style.background = 'linear-gradient(to right, #cccc00, #ffff00)';
-    } else {
-      this.uiElements.healthFill.style.background = 'linear-gradient(to right, #cc0000, #ff0000)';
+    // Check for health UI elements
+    if (this.uiElements.healthFill) {
+      // Update health bar
+      const healthPercent = Math.max(0, Math.min(100, this.gameState.health));
+      this.uiElements.healthFill.style.width = `${healthPercent}%`;
+      
+      // Set color based on health
+      if (healthPercent > 60) {
+        this.uiElements.healthFill.style.background = 'linear-gradient(to right, #00cc00, #00ff00)';
+      } else if (healthPercent > 30) {
+        this.uiElements.healthFill.style.background = 'linear-gradient(to right, #cccc00, #ffff00)';
+      } else {
+        this.uiElements.healthFill.style.background = 'linear-gradient(to right, #cc0000, #ff0000)';
+      }
     }
     
     // Update score display
-    this.uiElements.scoreDisplay.textContent = `Score: ${this.gameState.score}`;
+    if (this.uiElements.scoreDisplay) {
+      this.uiElements.scoreDisplay.textContent = `Score: ${this.gameState.score || 0}`;
+    }
     
     // Update weapon indicator based on current weapon
-    let weaponName = 'Standard Blaster';
-    switch (this.gameState.playerWeapon) {
-      case 'rapid':
-        weaponName = 'Rapid Blaster';
-        break;
-      case 'heavy':
-        weaponName = 'Heavy Cannon';
-        break;
+    if (this.uiElements.weaponIndicator) {
+      let weaponName = 'Standard Blaster';
+      switch (this.gameState.playerWeapon) {
+        case 'rapid':
+          weaponName = 'Rapid Blaster';
+          break;
+        case 'heavy':
+          weaponName = 'Heavy Cannon';
+          break;
+      }
+      this.uiElements.weaponIndicator.textContent = weaponName;
     }
-    this.uiElements.weaponIndicator.textContent = weaponName;
   }
   
   /**
@@ -898,14 +905,16 @@ export class MobileGameManager {
     // Update weapon
     this.gameState.playerWeapon = nextWeapon;
     
-    // Hide all weapon models
-    Object.values(this.weaponModels).forEach(model => {
-      model.visible = false;
-    });
-    
-    // Show current weapon model
-    if (this.weaponModels[nextWeapon]) {
-      this.weaponModels[nextWeapon].visible = true;
+    // Hide all weapon models if they exist
+    if (this.weaponModels) {
+      Object.values(this.weaponModels).forEach(model => {
+        if (model) model.visible = false;
+      });
+      
+      // Show current weapon model
+      if (this.weaponModels[nextWeapon]) {
+        this.weaponModels[nextWeapon].visible = true;
+      }
     }
     
     // Reset cooldown
@@ -937,60 +946,73 @@ export class MobileGameManager {
    * @param {string} type - Notification type (info, success, warning, error)
    */
   showNotification(message, type = 'info') {
-    // Create notification element
-    const notification = document.createElement('div');
-    notification.className = 'mobile-notification';
-    notification.style.position = 'absolute';
-    notification.style.bottom = '100px';
-    notification.style.left = '50%';
-    notification.style.transform = 'translateX(-50%)';
-    notification.style.padding = '8px 16px';
-    notification.style.borderRadius = '4px';
-    notification.style.color = 'white';
-    notification.style.fontFamily = 'Arial, sans-serif';
-    notification.style.fontSize = '16px';
-    notification.style.textAlign = 'center';
-    notification.style.opacity = '0';
-    notification.style.transition = 'opacity 0.3s, transform 0.3s';
-    notification.style.zIndex = '2000';
-    notification.textContent = message;
-    
-    // Set color based on type
-    switch (type) {
-      case 'success':
-        notification.style.background = 'rgba(0, 180, 0, 0.8)';
-        break;
-      case 'warning':
-        notification.style.background = 'rgba(255, 180, 0, 0.8)';
-        break;
-      case 'error':
-        notification.style.background = 'rgba(200, 0, 0, 0.8)';
-        break;
-      default:
-        notification.style.background = 'rgba(0, 0, 0, 0.7)';
-    }
-    
-    // Add to document
-    document.body.appendChild(notification);
-    
-    // Animate in
-    setTimeout(() => {
-      notification.style.opacity = '1';
-      notification.style.transform = 'translateX(-50%) translateY(0)';
-    }, 10);
-    
-    // Remove after delay
-    setTimeout(() => {
-      notification.style.opacity = '0';
-      notification.style.transform = 'translateX(-50%) translateY(-20px)';
+    try {
+      if (!document || !document.body) {
+        console.warn('Document or body not available for notification');
+        return;
+      }
       
-      // Remove from DOM after animation
+      // Create notification element
+      const notification = document.createElement('div');
+      notification.className = 'mobile-notification';
+      notification.style.position = 'absolute';
+      notification.style.bottom = '100px';
+      notification.style.left = '50%';
+      notification.style.transform = 'translateX(-50%)';
+      notification.style.padding = '8px 16px';
+      notification.style.borderRadius = '4px';
+      notification.style.color = 'white';
+      notification.style.fontFamily = 'Arial, sans-serif';
+      notification.style.fontSize = '16px';
+      notification.style.textAlign = 'center';
+      notification.style.opacity = '0';
+      notification.style.transition = 'opacity 0.3s, transform 0.3s';
+      notification.style.zIndex = '2000';
+      notification.textContent = message || 'Notification';
+      
+      // Set color based on type
+      switch (type) {
+        case 'success':
+          notification.style.background = 'rgba(0, 180, 0, 0.8)';
+          break;
+        case 'warning':
+          notification.style.background = 'rgba(255, 180, 0, 0.8)';
+          break;
+        case 'error':
+          notification.style.background = 'rgba(200, 0, 0, 0.8)';
+          break;
+        default:
+          notification.style.background = 'rgba(0, 0, 0, 0.7)';
+      }
+      
+      // Add to document
+      document.body.appendChild(notification);
+      
+      // Animate in
       setTimeout(() => {
-        if (notification.parentNode) {
-          notification.parentNode.removeChild(notification);
+        if (notification) {
+          notification.style.opacity = '1';
+          notification.style.transform = 'translateX(-50%) translateY(0)';
         }
-      }, 300);
-    }, 3000);
+      }, 10);
+      
+      // Remove after delay
+      setTimeout(() => {
+        if (notification) {
+          notification.style.opacity = '0';
+          notification.style.transform = 'translateX(-50%) translateY(-20px)';
+          
+          // Remove from DOM after animation
+          setTimeout(() => {
+            if (notification && notification.parentNode) {
+              notification.parentNode.removeChild(notification);
+            }
+          }, 300);
+        }
+      }, 3000);
+    } catch (error) {
+      console.error('Error showing notification:', error);
+    }
   }
   
   /**
@@ -1230,7 +1252,7 @@ export class MobileGameManager {
    */
   handleGameStateUpdate(data) {
     // Update remote players
-    if (data.players) {
+    if (data.players && this.scene) {
       data.players.forEach(playerData => {
         if (playerData.id !== this.gameStateManager.getLocalPlayerId()) {
           if (this.remotePlayers.has(playerData.id)) {
@@ -1250,6 +1272,12 @@ export class MobileGameManager {
    * @param {Object} playerData - Player data
    */
   createRemotePlayer(playerData) {
+    // Check if scene is initialized
+    if (!this.scene) {
+      console.error('Cannot create remote player: Scene is not initialized');
+      return;
+    }
+    
     // Determine if this is a desktop or mobile player
     const isMobilePlayer = playerData.isMobilePlayer;
     
@@ -1360,6 +1388,11 @@ export class MobileGameManager {
    * @param {string} username - Player's username
    */
   createUsernameLabel(model, username) {
+    if (!model) {
+      console.error('Cannot create username label: Model is null');
+      return;
+    }
+    
     // Create canvas for text
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');
@@ -1403,6 +1436,11 @@ export class MobileGameManager {
    * @param {Object} playerData - Updated player data
    */
   updateRemotePlayer(playerId, playerData) {
+    // Check if the remote player exists
+    if (!this.remotePlayers || !this.remotePlayers.has(playerId)) {
+      return;
+    }
+    
     const remotePlayer = this.remotePlayers.get(playerId);
     if (!remotePlayer || !remotePlayer.model) return;
     
