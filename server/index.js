@@ -175,6 +175,9 @@ app.get('/mobile', (req, res) => {
 // Serve static files from the client directory - AFTER routes
 app.use(express.static(path.join(__dirname, '../client')));
 
+// Serve static files from node_modules for browser imports
+app.use('/node_modules', express.static(path.join(__dirname, '../node_modules')));
+
 /**
  * Generate a random room code
  * @returns {string} 4-character room code

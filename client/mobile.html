@@ -4,6 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>Gyro-Vibe - Mobile Client</title>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "/node_modules/three/build/three.module.js",
+        "three/addons/": "/node_modules/three/examples/jsm/"
+      }
+    }
+  </script>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -213,6 +221,7 @@
   
   <script src="/socket.io/socket.io.js"></script>
   <script>
+    window.SocketIOLib = window.io;
     // DOM elements
     const connectionStatus = document.getElementById('connectionStatus');
     const sessionInfoDisplay = document.getElementById('sessionInfo');
