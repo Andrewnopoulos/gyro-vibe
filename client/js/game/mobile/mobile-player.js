@@ -185,9 +185,6 @@ export class MobilePlayer {
    */
   onActionStart() {
     this.controlState.action = true;
-    
-    // Fire event for shooting/interaction
-    this.eventBus.emit('player:action', { type: 'fire' });
   }
   
   /**

@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { PhoneModel } from './phone-model.js';
-import { RemoteWeapon } from './remote-weapon.js';
 
 /**
  * Predefined colors for different players
@@ -57,8 +56,7 @@ export class RemotePlayer {
     this.playerColor = PLAYER_COLORS[this.colorIndex];
     this.setPlayerColor(this.playerColor);
     
-    // Create weapon model
-    this.weapon = new RemoteWeapon(this.phoneModel.getModel());
+    // No weapon model for simplified gameplay
     
     // If no position defined, set a default offset position based on index
     if (!playerData.position || (
@@ -335,15 +333,9 @@ export class RemotePlayer {
       this.phoneModel.setQuaternion(this.currentRotation);
     }
     
-    // Smoothly interpolate phone orientation (for weapon)
+    // Phone orientation tracking (simplified without weapon)
     if (this.targetPhoneOrientation.lengthSq() > 0) {
       this.currentPhoneOrientation.slerp(this.targetPhoneOrientation, Math.min(delta * 10, 1));
-      
-      // Update the weapon based on phone orientation
-      if (this.weapon && this.weapon.getModel()) {
-        // Apply the updated phone orientation to the weapon
-        this.weapon.updateOrientation(this.currentPhoneOrientation);
-      }
     }
     
     // Always make the username label face the camera
@@ -786,11 +778,7 @@ export class RemotePlayer {
    * Destroy and clean up
    */
   dispose() {
-    // Dispose of weapon first
-    if (this.weapon) {
-      this.weapon.dispose();
-      this.weapon = null;
-    }
+    // No weapon to dispose in simplified gameplay
     
     if (this.isMobilePlayer) {
       // Clean up airplane model

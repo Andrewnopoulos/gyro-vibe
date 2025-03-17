@@ -32,49 +32,18 @@ export class MobileGameManager {
       score: 0,
       health: 100,
       powerups: [],
-      objectives: [],
-      playerWeapon: 'standard',
-      cooldown: 0,
-      lastFireTime: 0
+      objectives: []
     };
     
-    // Game objects
+    // Game objects (simplified without projectiles)
     this.gameObjects = {
-      projectiles: [],
       collectibles: [],
       obstacles: [],
       effects: []
     };
     
-    // Game configuration
-    this.config = {
-      projectileSpeed: 25,
-      fireRate: 0.5, // seconds between shots
-      fireRange: 50,  // How far projectiles travel
-      weaponTypes: {
-        standard: {
-          damage: 10,
-          speed: 25,
-          cooldown: 0.5,
-          color: 0x00ffff,
-          size: 0.2
-        },
-        rapid: {
-          damage: 5,
-          speed: 30,
-          cooldown: 0.2,
-          color: 0x00ff00,
-          size: 0.15
-        },
-        heavy: {
-          damage: 20,
-          speed: 20,
-          cooldown: 1.2,
-          color: 0xff0000,
-          size: 0.3
-        }
-      }
-    };
+    // Game configuration (simplified without weapons)
+    this.config = {};
     
     // Setup event listeners
     this.setupEventListeners();
@@ -92,12 +61,9 @@ export class MobileGameManager {
     this.eventBus.on('gameState:updated', this.handleGameStateUpdate.bind(this));
     
     // Mobile-specific action events
-    this.eventBus.on('player:action', this.handlePlayerAction.bind(this));
-    this.eventBus.on('mobile:weapon-switch', this.handleWeaponSwitch.bind(this));
     this.eventBus.on('mobile:calibrate-gyro', this.handleCalibrateGyro.bind(this));
     
     // Game event listeners
-    this.eventBus.on('game:hit-player', this.handlePlayerHit.bind(this));
     this.eventBus.on('game:collect-item', this.handleItemCollected.bind(this));
     
     // Game mode events
@@ -160,8 +126,7 @@ export class MobileGameManager {
     this.touchController = new TouchController(this.eventBus, container);
     this.touchController.enable();
     
-    // Initialize weapon system
-    this.initializeWeaponSystem();
+    // No weapon system in simplified gameplay
     
     // Initialize game objects
     this.initializeGameObjects();
@@ -201,110 +166,8 @@ export class MobileGameManager {
   }
   
   /**
-   * Initialize the weapon system for mobile players
+   * Weapon system removed for simplified gameplay
    */
-  initializeWeaponSystem() {
-    // Create weapon container attached to player
-    this.weaponContainer = new THREE.Group();
-    
-    // Create weapon models for each type
-    this.weaponModels = {};
-    
-    // Standard weapon (blaster)
-    const standardWeapon = new THREE.Group();
-    
-    const standardBarrel = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.05, 0.05, 0.8, 8),
-      new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.8 })
-    );
-    standardBarrel.rotation.x = Math.PI / 2;
-    standardBarrel.position.z = -0.4;
-    
-    const standardBody = new THREE.Mesh(
-      new THREE.BoxGeometry(0.2, 0.15, 0.3),
-      new THREE.MeshStandardMaterial({ color: 0x3355FF, metalness: 0.5 })
-    );
-    standardBody.position.z = 0;
-    
-    standardWeapon.add(standardBarrel);
-    standardWeapon.add(standardBody);
-    
-    // Position the weapon in front of the player
-    standardWeapon.position.set(0.3, -0.2, -1.2);
-    
-    this.weaponModels.standard = standardWeapon;
-    
-    // Rapid weapon (double blaster)
-    const rapidWeapon = new THREE.Group();
-    
-    const rapidBarrel1 = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.03, 0.03, 0.7, 8),
-      new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.8 })
-    );
-    rapidBarrel1.rotation.x = Math.PI / 2;
-    rapidBarrel1.position.set(0.06, 0, -0.35);
-    
-    const rapidBarrel2 = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.03, 0.03, 0.7, 8),
-      new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.8 })
-    );
-    rapidBarrel2.rotation.x = Math.PI / 2;
-    rapidBarrel2.position.set(-0.06, 0, -0.35);
-    
-    const rapidBody = new THREE.Mesh(
-      new THREE.BoxGeometry(0.25, 0.12, 0.25),
-      new THREE.MeshStandardMaterial({ color: 0x00FF00, metalness: 0.5 })
-    );
-    rapidBody.position.z = 0;
-    
-    rapidWeapon.add(rapidBarrel1);
-    rapidWeapon.add(rapidBarrel2);
-    rapidWeapon.add(rapidBody);
-    
-    // Position the weapon in front of the player
-    rapidWeapon.position.set(0.3, -0.2, -1.2);
-    rapidWeapon.visible = false; // Initially hidden
-    
-    this.weaponModels.rapid = rapidWeapon;
-    
-    // Heavy weapon (cannon)
-    const heavyWeapon = new THREE.Group();
-    
-    const heavyBarrel = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.1, 0.15, 1.0, 12),
-      new THREE.MeshStandardMaterial({ color: 0x444444, metalness: 0.9 })
-    );
-    heavyBarrel.rotation.x = Math.PI / 2;
-    heavyBarrel.position.z = -0.5;
-    
-    const heavyBody = new THREE.Mesh(
-      new THREE.BoxGeometry(0.3, 0.25, 0.4),
-      new THREE.MeshStandardMaterial({ color: 0xFF0000, metalness: 0.6 })
-    );
-    heavyBody.position.z = 0;
-    
-    heavyWeapon.add(heavyBarrel);
-    heavyWeapon.add(heavyBody);
-    
-    // Position the weapon in front of the player
-    heavyWeapon.position.set(0.3, -0.2, -1.2);
-    heavyWeapon.visible = false; // Initially hidden
-    
-    this.weaponModels.heavy = heavyWeapon;
-    
-    // Add all weapon models to the container
-    this.weaponContainer.add(this.weaponModels.standard);
-    this.weaponContainer.add(this.weaponModels.rapid);
-    this.weaponContainer.add(this.weaponModels.heavy);
-    
-    // Get player model to attach weapon
-    if (this.mobilePlayer) {
-      const playerModel = this.mobilePlayer.getModel();
-      if (playerModel) {
-        playerModel.add(this.weaponContainer);
-      }
-    }
-  }
   
   /**
    * Initialize game objects like pickups and obstacles
@@ -314,9 +177,7 @@ export class MobileGameManager {
     this.objectsContainer = new THREE.Group();
     this.scene.add(this.objectsContainer);
     
-    // Create projectiles container
-    this.projectilesContainer = new THREE.Group();
-    this.scene.add(this.projectilesContainer);
+    // No projectiles in simplified gameplay
     
     // Create effects container
     this.effectsContainer = new THREE.Group();
@@ -375,47 +236,7 @@ export class MobileGameManager {
     
     uiContainer.appendChild(scoreDisplay);
     
-    // Weapon indicator
-    const weaponIndicator = document.createElement('div');
-    weaponIndicator.id = 'weaponIndicator';
-    weaponIndicator.style.position = 'absolute';
-    weaponIndicator.style.bottom = '60px';
-    weaponIndicator.style.left = '10px';
-    weaponIndicator.style.color = 'white';
-    weaponIndicator.style.background = 'rgba(0, 0, 0, 0.5)';
-    weaponIndicator.style.padding = '5px 10px';
-    weaponIndicator.style.borderRadius = '3px';
-    weaponIndicator.style.fontFamily = 'Arial, sans-serif';
-    weaponIndicator.style.fontSize = '14px';
-    weaponIndicator.textContent = 'Standard Blaster';
-    
-    uiContainer.appendChild(weaponIndicator);
-    
-    // Weapon switch button
-    const weaponSwitch = document.createElement('div');
-    weaponSwitch.id = 'weaponSwitch';
-    weaponSwitch.style.position = 'absolute';
-    weaponSwitch.style.bottom = '60px';
-    weaponSwitch.style.left = '150px';
-    weaponSwitch.style.width = '40px';
-    weaponSwitch.style.height = '40px';
-    weaponSwitch.style.background = 'rgba(255, 255, 255, 0.6)';
-    weaponSwitch.style.borderRadius = '50%';
-    weaponSwitch.style.display = 'flex';
-    weaponSwitch.style.alignItems = 'center';
-    weaponSwitch.style.justifyContent = 'center';
-    weaponSwitch.style.fontFamily = 'Arial, sans-serif';
-    weaponSwitch.style.fontSize = '18px';
-    weaponSwitch.style.color = 'black';
-    weaponSwitch.style.pointerEvents = 'auto';
-    weaponSwitch.textContent = '⟳';
-    
-    // Event listener for weapon switching
-    weaponSwitch.addEventListener('click', () => {
-      this.eventBus.emit('mobile:weapon-switch');
-    });
-    
-    uiContainer.appendChild(weaponSwitch);
+    // No weapon indicators in simplified gameplay
     
     // Calibrate gyro button
     const calibrateButton = document.createElement('div');
@@ -491,8 +312,7 @@ export class MobileGameManager {
       }
     }
     
-    // Update projectiles
-    this.updateProjectiles(delta);
+    // No projectiles to update in simplified gameplay
     
     // Update game objects
     this.updateGameObjects(delta);
@@ -509,65 +329,8 @@ export class MobileGameManager {
   }
   
   /**
-   * Update projectiles (position, collision detection, etc.)
-   * @param {number} delta - Time delta since last frame
+   * Projectile handling removed for simplified gameplay
    */
-  updateProjectiles(delta) {
-    // Update existing projectiles
-    for (let i = this.gameObjects.projectiles.length - 1; i >= 0; i--) {
-      const projectile = this.gameObjects.projectiles[i];
-      
-      // Move projectile forward
-      projectile.model.position.add(
-        projectile.direction.clone().multiplyScalar(projectile.speed * delta)
-      );
-      
-      // Update lifetime
-      projectile.lifetime -= delta;
-      
-      // Check for lifetime expiration
-      if (projectile.lifetime <= 0) {
-        // Remove projectile
-        this.projectilesContainer.remove(projectile.model);
-        this.gameObjects.projectiles.splice(i, 1);
-        continue;
-      }
-      
-      // Check for collisions with remote players
-      this.remotePlayers.forEach((remotePlayer, playerId) => {
-        if (!remotePlayer.model) return;
-        
-        // Simplified collision detection using bounding spheres
-        const playerPosition = remotePlayer.model.position.clone();
-        const distance = playerPosition.distanceTo(projectile.model.position);
-        
-        // If distance is less than collision radius
-        if (distance < 1.5) { // Player collision radius
-          // Hit player
-          this.projectilesContainer.remove(projectile.model);
-          this.gameObjects.projectiles.splice(i, 1);
-          
-          // Create hit effect
-          this.createHitEffect(projectile.model.position.clone());
-          
-          // Emit hit event
-          this.eventBus.emit('game:hit-player', {
-            playerId: playerId,
-            damage: projectile.damage,
-            position: projectile.model.position.clone()
-          });
-          
-          // Add to score
-          this.gameState.score += 10;
-          
-          // Send score update to other players
-          this.socketManager.emit('game:score-update', {
-            score: this.gameState.score
-          });
-        }
-      });
-    }
-  }
   
   /**
    * Update game objects like collectibles and effects
@@ -664,268 +427,12 @@ export class MobileGameManager {
       this.uiElements.scoreDisplay.textContent = `Score: ${this.gameState.score || 0}`;
     }
     
-    // Update weapon indicator based on current weapon
-    if (this.uiElements.weaponIndicator) {
-      let weaponName = 'Standard Blaster';
-      switch (this.gameState.playerWeapon) {
-        case 'rapid':
-          weaponName = 'Rapid Blaster';
-          break;
-        case 'heavy':
-          weaponName = 'Heavy Cannon';
-          break;
-      }
-      this.uiElements.weaponIndicator.textContent = weaponName;
-    }
+    // No weapon indicators to update in simplified gameplay
   }
   
   /**
-   * Handle player action event (e.g., firing weapon)
-   * @param {Object} data - Action data
+   * Removed weapon-related functionality for simplified gameplay
    */
-  handlePlayerAction(data) {
-    if (data.type === 'fire') {
-      this.fireWeapon();
-    }
-  }
-  
-  /**
-   * Fire the player's current weapon
-   */
-  fireWeapon() {
-    // Check if weapon is on cooldown
-    if (this.gameState.cooldown > 0) return;
-    
-    // Get weapon configuration
-    const weaponType = this.gameState.playerWeapon;
-    const weaponConfig = this.config.weaponTypes[weaponType];
-    
-    if (!weaponConfig) return;
-    
-    // Set cooldown
-    this.gameState.cooldown = weaponConfig.cooldown;
-    this.gameState.lastFireTime = performance.now();
-    
-    // Get player position and direction
-    if (!this.mobilePlayer) return;
-    
-    const playerPosition = this.mobilePlayer.position.clone();
-    const playerDirection = this.mobilePlayer.direction.clone();
-    
-    // Create projectile based on weapon type
-    if (weaponType === 'rapid') {
-      // Rapid fire creates two offset projectiles
-      this.createProjectile(
-        playerPosition.clone().add(new THREE.Vector3(0.2, 0, 0).applyEuler(this.mobilePlayer.rotation)),
-        playerDirection,
-        weaponConfig
-      );
-      this.createProjectile(
-        playerPosition.clone().add(new THREE.Vector3(-0.2, 0, 0).applyEuler(this.mobilePlayer.rotation)),
-        playerDirection,
-        weaponConfig
-      );
-    } else if (weaponType === 'heavy') {
-      // Heavy weapon creates a larger, slower projectile
-      this.createProjectile(playerPosition, playerDirection, weaponConfig);
-    } else {
-      // Standard weapon
-      this.createProjectile(playerPosition, playerDirection, weaponConfig);
-    }
-    
-    // Create muzzle flash effect
-    this.createMuzzleFlash();
-    
-    // Send firing event to other players
-    this.socketManager.emit('game:player-fired', {
-      position: {
-        x: playerPosition.x,
-        y: playerPosition.y,
-        z: playerPosition.z
-      },
-      direction: {
-        x: playerDirection.x,
-        y: playerDirection.y,
-        z: playerDirection.z
-      },
-      weaponType: weaponType
-    });
-  }
-  
-  /**
-   * Create a projectile
-   * @param {THREE.Vector3} position - Starting position
-   * @param {THREE.Vector3} direction - Direction vector
-   * @param {Object} weaponConfig - Weapon configuration
-   */
-  createProjectile(position, direction, weaponConfig) {
-    // Create projectile geometry based on weapon type
-    const geometry = new THREE.SphereGeometry(weaponConfig.size, 8, 8);
-    const material = new THREE.MeshBasicMaterial({
-      color: weaponConfig.color,
-      emissive: weaponConfig.color,
-      emissiveIntensity: 0.5
-    });
-    
-    // Create projectile mesh
-    const projectileMesh = new THREE.Mesh(geometry, material);
-    projectileMesh.position.copy(position);
-    
-    // Add to scene
-    this.projectilesContainer.add(projectileMesh);
-    
-    // Create projectile data
-    const projectile = {
-      model: projectileMesh,
-      direction: direction.normalize(),
-      speed: weaponConfig.speed,
-      damage: weaponConfig.damage,
-      lifetime: this.config.fireRange / weaponConfig.speed, // Time in seconds to travel fireRange units
-      type: this.gameState.playerWeapon
-    };
-    
-    // Add to projectiles array
-    this.gameObjects.projectiles.push(projectile);
-    
-    return projectile;
-  }
-  
-  /**
-   * Create a muzzle flash effect
-   */
-  createMuzzleFlash() {
-    if (!this.mobilePlayer || !this.weaponContainer) return;
-    
-    // Get current weapon
-    const weaponType = this.gameState.playerWeapon;
-    const weaponModel = this.weaponModels[weaponType];
-    
-    if (!weaponModel) return;
-    
-    // Create point light for flash
-    const flashLight = new THREE.PointLight(
-      this.config.weaponTypes[weaponType].color,
-      2,
-      5
-    );
-    
-    // Position at the end of the barrel
-    flashLight.position.set(0, 0, -1);
-    weaponModel.add(flashLight);
-    
-    // Create flash sprite
-    const flashGeometry = new THREE.PlaneGeometry(0.5, 0.5);
-    const flashMaterial = new THREE.MeshBasicMaterial({
-      color: this.config.weaponTypes[weaponType].color,
-      transparent: true,
-      opacity: 0.8,
-      side: THREE.DoubleSide
-    });
-    
-    const flash = new THREE.Mesh(flashGeometry, flashMaterial);
-    flash.position.set(0, 0, -1.2);
-    flash.rotation.y = Math.PI / 2;
-    weaponModel.add(flash);
-    
-    // Remove after short delay
-    setTimeout(() => {
-      weaponModel.remove(flashLight);
-      weaponModel.remove(flash);
-      
-      // Dispose resources
-      flashGeometry.dispose();
-      flashMaterial.dispose();
-    }, 100);
-  }
-  
-  /**
-   * Create a hit effect at position
-   * @param {THREE.Vector3} position - Effect position
-   */
-  createHitEffect(position) {
-    // Create sphere for explosion
-    const geometry = new THREE.SphereGeometry(0.5, 8, 8);
-    const material = new THREE.MeshBasicMaterial({
-      color: 0xffaa00,
-      transparent: true,
-      opacity: 0.8
-    });
-    
-    const explosion = new THREE.Mesh(geometry, material);
-    explosion.position.copy(position);
-    
-    // Add to scene
-    this.effectsContainer.add(explosion);
-    
-    // Create effect data
-    const effect = {
-      model: explosion,
-      type: 'explosion',
-      lifetime: 0.5, // seconds
-      initialLifetime: 0.5
-    };
-    
-    // Add to effects array
-    this.gameObjects.effects.push(effect);
-    
-    // Create point light for flash
-    const flashLight = new THREE.PointLight(0xffaa00, 1, 10);
-    flashLight.position.copy(position);
-    this.effectsContainer.add(flashLight);
-    
-    // Remove light after short delay
-    setTimeout(() => {
-      this.effectsContainer.remove(flashLight);
-    }, 200);
-  }
-  
-  /**
-   * Handle weapon switch event
-   */
-  handleWeaponSwitch() {
-    // Get current weapon
-    const currentWeapon = this.gameState.playerWeapon;
-    
-    // Switch to next weapon
-    let nextWeapon;
-    switch (currentWeapon) {
-      case 'standard':
-        nextWeapon = 'rapid';
-        break;
-      case 'rapid':
-        nextWeapon = 'heavy';
-        break;
-      case 'heavy':
-        nextWeapon = 'standard';
-        break;
-      default:
-        nextWeapon = 'standard';
-    }
-    
-    // Update weapon
-    this.gameState.playerWeapon = nextWeapon;
-    
-    // Hide all weapon models if they exist
-    if (this.weaponModels) {
-      Object.values(this.weaponModels).forEach(model => {
-        if (model) model.visible = false;
-      });
-      
-      // Show current weapon model
-      if (this.weaponModels[nextWeapon]) {
-        this.weaponModels[nextWeapon].visible = true;
-      }
-    }
-    
-    // Reset cooldown
-    this.gameState.cooldown = 0;
-    
-    // Update UI
-    this.updateUI();
-    
-    // Notify player
-    this.showNotification(`Switched to ${nextWeapon} weapon`);
-  }
   
   /**
    * Handle gyroscope calibration
@@ -1608,24 +1115,10 @@ export class MobileGameManager {
       this.weaponModels = {};
     }
     
-    // Clean up weapon container
-    if (this.weaponContainer) {
-      if (this.mobilePlayer && this.mobilePlayer.getModel()) {
-        this.mobilePlayer.getModel().remove(this.weaponContainer);
-      }
-      this.weaponContainer = null;
-    }
-    
     // Clean up UI elements
     if (this.uiContainer && this.uiContainer.parentNode) {
       this.uiContainer.parentNode.removeChild(this.uiContainer);
       this.uiContainer = null;
-    }
-    
-    // Remove damage overlay
-    const overlay = document.getElementById('damageOverlay');
-    if (overlay && overlay.parentNode) {
-      overlay.parentNode.removeChild(overlay);
     }
     
     // Clean up renderer
