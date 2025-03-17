@@ -189,87 +189,98 @@ export class MobileGameManager {
    */
   createGameUI() {
     // Create container for UI elements
-    const uiContainer = document.createElement('div');
-    uiContainer.id = 'mobileGameUI';
-    uiContainer.style.position = 'absolute';
-    uiContainer.style.top = '0';
-    uiContainer.style.left = '0';
-    uiContainer.style.width = '100%';
-    uiContainer.style.height = '100%';
-    uiContainer.style.pointerEvents = 'none';
-    uiContainer.style.zIndex = '1000';
+    try {
+      const uiContainer = document.createElement('div');
+      uiContainer.id = 'mobileGameUI';
+      uiContainer.style.position = 'absolute';
+      uiContainer.style.top = '0';
+      uiContainer.style.left = '0';
+      uiContainer.style.width = '100%';
+      uiContainer.style.height = '100%';
+      uiContainer.style.pointerEvents = 'none';
+      uiContainer.style.zIndex = '1000';
+      
+      // Health bar
+      const healthBar = document.createElement('div');
+      healthBar.id = 'healthBar';
+      healthBar.style.position = 'absolute';
+      healthBar.style.top = '10px';
+      healthBar.style.left = '10px';
+      healthBar.style.width = '150px';
+      healthBar.style.height = '15px';
+      healthBar.style.background = 'rgba(0, 0, 0, 0.5)';
+      healthBar.style.borderRadius = '3px';
+      
+      const healthFill = document.createElement('div');
+      healthFill.id = 'healthFill';
+      healthFill.style.width = '100%';
+      healthFill.style.height = '100%';
+      healthFill.style.background = 'linear-gradient(to right, #ff0000, #00ff00)';
+      healthFill.style.borderRadius = '3px';
+      
+      healthBar.appendChild(healthFill);
+      uiContainer.appendChild(healthBar);
+      
+      // Score display
+      const scoreDisplay = document.createElement('div');
+      scoreDisplay.id = 'scoreDisplay';
+      scoreDisplay.style.position = 'absolute';
+      scoreDisplay.style.top = '10px';
+      scoreDisplay.style.right = '10px';
+      scoreDisplay.style.color = 'white';
+      scoreDisplay.style.background = 'rgba(0, 0, 0, 0.5)';
+      scoreDisplay.style.padding = '5px 10px';
+      scoreDisplay.style.borderRadius = '3px';
+      scoreDisplay.style.fontFamily = 'Arial, sans-serif';
+      scoreDisplay.style.fontSize = '16px';
+      scoreDisplay.textContent = 'Score: 0';
+      
+      uiContainer.appendChild(scoreDisplay);
+      
+      // No weapon indicators in simplified gameplay
+      
+      // Calibrate gyro button
+      const calibrateButton = document.createElement('div');
+      calibrateButton.id = 'calibrateGyro';
+      calibrateButton.style.position = 'absolute';
+      calibrateButton.style.top = '45px';
+      calibrateButton.style.left = '10px';
+      calibrateButton.style.color = 'white';
+      calibrateButton.style.background = 'rgba(0, 0, 0, 0.5)';
+      calibrateButton.style.padding = '5px 10px';
+      calibrateButton.style.borderRadius = '3px';
+      calibrateButton.style.fontFamily = 'Arial, sans-serif';
+      calibrateButton.style.fontSize = '14px';
+      calibrateButton.style.pointerEvents = 'auto';
+      calibrateButton.textContent = 'Calibrate Gyro';
+      
+      // Event listener for gyro calibration
+      calibrateButton.addEventListener('click', () => {
+        this.eventBus.emit('mobile:calibrate-gyro');
+      });
+      
+      uiContainer.appendChild(calibrateButton);
+      
+      // Add UI container to the document - check if container parent exists
+      if (this.container && this.container.parentElement) {
+        this.container.parentElement.appendChild(uiContainer);
+        this.uiContainer = uiContainer;
+      } else {
+        console.error("Cannot append UI container: container parent element not available");
+        // Try append to document body as fallback
+        document.body.appendChild(uiContainer);
+        this.uiContainer = uiContainer;
+      }
+    } catch (error) {
+      console.error("Error creating game UI:", error);
+    }
     
-    // Health bar
-    const healthBar = document.createElement('div');
-    healthBar.id = 'healthBar';
-    healthBar.style.position = 'absolute';
-    healthBar.style.top = '10px';
-    healthBar.style.left = '10px';
-    healthBar.style.width = '150px';
-    healthBar.style.height = '15px';
-    healthBar.style.background = 'rgba(0, 0, 0, 0.5)';
-    healthBar.style.borderRadius = '3px';
-    
-    const healthFill = document.createElement('div');
-    healthFill.id = 'healthFill';
-    healthFill.style.width = '100%';
-    healthFill.style.height = '100%';
-    healthFill.style.background = 'linear-gradient(to right, #ff0000, #00ff00)';
-    healthFill.style.borderRadius = '3px';
-    
-    healthBar.appendChild(healthFill);
-    uiContainer.appendChild(healthBar);
-    
-    // Score display
-    const scoreDisplay = document.createElement('div');
-    scoreDisplay.id = 'scoreDisplay';
-    scoreDisplay.style.position = 'absolute';
-    scoreDisplay.style.top = '10px';
-    scoreDisplay.style.right = '10px';
-    scoreDisplay.style.color = 'white';
-    scoreDisplay.style.background = 'rgba(0, 0, 0, 0.5)';
-    scoreDisplay.style.padding = '5px 10px';
-    scoreDisplay.style.borderRadius = '3px';
-    scoreDisplay.style.fontFamily = 'Arial, sans-serif';
-    scoreDisplay.style.fontSize = '16px';
-    scoreDisplay.textContent = 'Score: 0';
-    
-    uiContainer.appendChild(scoreDisplay);
-    
-    // No weapon indicators in simplified gameplay
-    
-    // Calibrate gyro button
-    const calibrateButton = document.createElement('div');
-    calibrateButton.id = 'calibrateGyro';
-    calibrateButton.style.position = 'absolute';
-    calibrateButton.style.top = '45px';
-    calibrateButton.style.left = '10px';
-    calibrateButton.style.color = 'white';
-    calibrateButton.style.background = 'rgba(0, 0, 0, 0.5)';
-    calibrateButton.style.padding = '5px 10px';
-    calibrateButton.style.borderRadius = '3px';
-    calibrateButton.style.fontFamily = 'Arial, sans-serif';
-    calibrateButton.style.fontSize = '14px';
-    calibrateButton.style.pointerEvents = 'auto';
-    calibrateButton.textContent = 'Calibrate Gyro';
-    
-    // Event listener for gyro calibration
-    calibrateButton.addEventListener('click', () => {
-      this.eventBus.emit('mobile:calibrate-gyro');
-    });
-    
-    uiContainer.appendChild(calibrateButton);
-    
-    // Add UI container to the document
-    this.container.parentElement.appendChild(uiContainer);
-    this.uiContainer = uiContainer;
-    
-    // Store UI element references
+    // Store UI element references - variables will be undefined if createGameUI failed
     this.uiElements = {
-      healthBar: healthBar,
-      healthFill: healthFill,
-      scoreDisplay: scoreDisplay,
-      weaponIndicator: weaponIndicator
+      healthBar: document.getElementById('healthBar'),
+      healthFill: document.getElementById('healthFill'),
+      scoreDisplay: document.getElementById('scoreDisplay')
+      // No weaponIndicator in simplified gameplay
     };
   }
   
@@ -380,7 +391,7 @@ export class MobileGameManager {
       
       // Bobbing motion
       collectible.model.position.y = collectible.baseY + 
-        Math.sin(time / 500) * 0.2;
+        Math.sin(data.time / 500) * 0.2;
       
       // Check for player collision
       if (this.mobilePlayer) {
@@ -404,30 +415,43 @@ export class MobileGameManager {
    * Update UI elements
    */
   updateUI() {
-    if (!this.uiElements || !this.gameState) return;
+    if (!this.gameState) return;
     
-    // Check for health UI elements
-    if (this.uiElements.healthFill) {
-      // Update health bar
-      const healthPercent = Math.max(0, Math.min(100, this.gameState.health));
-      this.uiElements.healthFill.style.width = `${healthPercent}%`;
-      
-      // Set color based on health
-      if (healthPercent > 60) {
-        this.uiElements.healthFill.style.background = 'linear-gradient(to right, #00cc00, #00ff00)';
-      } else if (healthPercent > 30) {
-        this.uiElements.healthFill.style.background = 'linear-gradient(to right, #cccc00, #ffff00)';
-      } else {
-        this.uiElements.healthFill.style.background = 'linear-gradient(to right, #cc0000, #ff0000)';
+    try {
+      // Refresh UI element references in case they've been added to the DOM since initialization
+      if (!this.uiElements || !this.uiElements.healthFill) {
+        this.uiElements = {
+          healthBar: document.getElementById('healthBar'),
+          healthFill: document.getElementById('healthFill'),
+          scoreDisplay: document.getElementById('scoreDisplay')
+        };
       }
+      
+      // Check for health UI elements
+      if (this.uiElements.healthFill) {
+        // Update health bar
+        const healthPercent = Math.max(0, Math.min(100, this.gameState.health));
+        this.uiElements.healthFill.style.width = `${healthPercent}%`;
+        
+        // Set color based on health
+        if (healthPercent > 60) {
+          this.uiElements.healthFill.style.background = 'linear-gradient(to right, #00cc00, #00ff00)';
+        } else if (healthPercent > 30) {
+          this.uiElements.healthFill.style.background = 'linear-gradient(to right, #cccc00, #ffff00)';
+        } else {
+          this.uiElements.healthFill.style.background = 'linear-gradient(to right, #cc0000, #ff0000)';
+        }
+      }
+      
+      // Update score display
+      if (this.uiElements.scoreDisplay) {
+        this.uiElements.scoreDisplay.textContent = `Score: ${this.gameState.score || 0}`;
+      }
+      
+      // No weapon indicators to update in simplified gameplay
+    } catch (error) {
+      console.error("Error updating UI:", error);
     }
-    
-    // Update score display
-    if (this.uiElements.scoreDisplay) {
-      this.uiElements.scoreDisplay.textContent = `Score: ${this.gameState.score || 0}`;
-    }
-    
-    // No weapon indicators to update in simplified gameplay
   }
   
   /**
