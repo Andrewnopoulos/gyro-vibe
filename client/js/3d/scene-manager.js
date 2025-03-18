@@ -71,7 +71,7 @@ export class SceneManager {
     // Create environment, lighting, and phone model
     this.environment = new Environment(this.scene);
     this.lighting = new Lighting(this.scene);
-    this.phoneModel = new PhoneModel(this.scene);
+    this.phoneModel = new PhoneModel(this.scene, this.eventBus);
     
     // Add orbit controls
     this.orbitControls = new OrbitControls(this.camera, this.renderer.domElement);

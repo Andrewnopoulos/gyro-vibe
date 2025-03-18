@@ -497,6 +497,53 @@ io.on('connection', (socket) => {
     io.to(targetId).emit('request-calibration');
   });
   
+  // Handle rune mode toggle
+  socket.on('game-toggle-rune-mode', (data) => {
+    const { targetId, enabled } = data;
+    console.log(`Rune mode ${enabled ? 'enabled' : 'disabled'} for ${targetId} by ${socket.id}`);
+    io.to(targetId).emit('game-toggle-rune-mode', {
+      sourceId: socket.id,
+      enabled: enabled
+    });
+  });
+  
+  // Handle rune recognition
+  socket.on('game-rune-recognized', (data) => {
+    const { targetId, shape, confidence } = data;
+    console.log(`Rune recognized: ${shape} (${confidence}) for ${targetId} by ${socket.id}`);
+    io.to(targetId).emit('game-rune-recognized', {
+      sourceId: socket.id,
+      shape: shape,
+      confidence: confidence,
+      playerId: socket.id
+    });
+  });
+  
+  // Handle rune cast
+  socket.on('mobile-rune-cast', (data) => {
+    const { targetId, shape, confidence } = data;
+    console.log(`Rune cast: ${shape} (${confidence}) by ${socket.id}`);
+    
+    // If in a game room, broadcast to all players in the room
+    if (currentRoomId) {
+      io.to(currentRoomId).emit('mobile-rune-cast', {
+        sourceId: socket.id,
+        shape: shape,
+        confidence: confidence,
+        playerId: socket.id
+      });
+    } 
+    // If targeting a specific player (usually the paired desktop)
+    else if (targetId) {
+      io.to(targetId).emit('mobile-rune-cast', {
+        sourceId: socket.id,
+        shape: shape,
+        confidence: confidence,
+        playerId: socket.id
+      });
+    }
+  });
+  
   // ==================== MULTIPLAYER ROOM MANAGEMENT ====================
   
   // List available game rooms

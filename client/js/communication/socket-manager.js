@@ -77,6 +77,32 @@ export class SocketManager {
       this.eventBus.emit('calibration:failed', data);
     });
     
+    // Rune mode specific events
+    this.socket.on('game-toggle-rune-mode', (data) => {
+      this.eventBus.emit('game:toggle-rune-mode', {
+        enabled: data.enabled,
+        sourceId: data.sourceId
+      });
+    });
+    
+    this.socket.on('game-rune-recognized', (data) => {
+      this.eventBus.emit('game:rune-recognized', {
+        shape: data.shape,
+        confidence: data.confidence,
+        playerId: data.playerId,
+        sourceId: data.sourceId
+      });
+    });
+    
+    this.socket.on('mobile-rune-cast', (data) => {
+      this.eventBus.emit('mobile:rune-cast', {
+        shape: data.shape,
+        confidence: data.confidence,
+        playerId: data.playerId,
+        sourceId: data.sourceId
+      });
+    });
+    
     // Multiplayer events
     const multiplayer = [
       'game-state-update',
@@ -87,7 +113,10 @@ export class SocketManager {
       'room-error',
       'player-joined',
       'player-left',
-      'host-changed'
+      'host-changed',
+      'game-toggle-rune-mode',
+      'game-rune-recognized',
+      'mobile-rune-cast'
     ];
     
     // Set up handlers for all multiplayer events

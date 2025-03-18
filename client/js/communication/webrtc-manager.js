@@ -46,6 +46,15 @@ export class WebRTCManager {
     this.eventBus.on('calibration:request', () => {
       this.requestCalibration();
     });
+    
+    // Rune mode events
+    this.eventBus.on('game:toggle-rune-mode', (data) => {
+      this.sendRuneModeToggle(data.enabled);
+    });
+    
+    this.eventBus.on('desktop:toggle-rune-mode', (data) => {
+      this.sendRuneModeToggle(data.enabled);
+    });
   }
 
   /**
@@ -114,7 +123,31 @@ export class WebRTCManager {
     };
     
     channel.onmessage = (event) => {
-      this.eventBus.emit('sensor:data-received', event.data);
+      try {
+        // Check if the message is JSON
+        if (typeof event.data === 'string' && event.data.startsWith('{')) {
+          const jsonData = JSON.parse(event.data);
+          
+          // Handle different message types
+          if (jsonData.type === 'sensor-data') {
+            this.eventBus.emit('sensor:data-received', jsonData.data);
+          } else if (jsonData.type === 'rune-recognized') {
+            this.eventBus.emit('game:rune-recognized', jsonData.data);
+          } else if (jsonData.type === 'mobile:rune-cast') {
+            this.eventBus.emit('mobile:rune-cast', jsonData.data);
+          } else {
+            // Default handling for unrecognized types
+            this.eventBus.emit('sensor:data-received', event.data);
+          }
+        } else {
+          // Legacy handling for non-JSON data
+          this.eventBus.emit('sensor:data-received', event.data);
+        }
+      } catch (error) {
+        // If parsing fails, treat as plain sensor data
+        console.warn('Error parsing data channel message:', error);
+        this.eventBus.emit('sensor:data-received', event.data);
+      }
     };
   }
 
@@ -228,6 +261,36 @@ export class WebRTCManager {
     this.connectedWithWebRTC = false;
   }
 
+  /**
+   * Send rune mode toggle to mobile device
+   * @param {boolean} enabled - Whether rune mode is enabled
+   * @returns {boolean} Success status
+   */
+  sendRuneModeToggle(enabled) {
+    const message = {
+      type: 'toggle-rune-mode',
+      data: { enabled }
+    };
+    
+    if (this.connectedWithWebRTC && this.dataChannel && this.dataChannel.readyState === 'open') {
+      // Send via WebRTC for lower latency
+      this.dataChannel.send(JSON.stringify(message));
+      console.log(`Sent rune mode toggle (${enabled ? 'enabled' : 'disabled'}) via WebRTC`);
+      return true;
+    } else if (this.socketManager.isConnected() && this.socketManager.getMobileSocketId()) {
+      // Fallback to signaling server if WebRTC not available
+      this.socketManager.emit('game-toggle-rune-mode', {
+        targetId: this.socketManager.getMobileSocketId(),
+        enabled: enabled
+      });
+      console.log(`Sent rune mode toggle (${enabled ? 'enabled' : 'disabled'}) via Socket.IO`);
+      return true;
+    } else {
+      console.error('Cannot toggle rune mode: No connection to mobile device');
+      return false;
+    }
+  }
+  
   /**
    * Check if WebRTC is connected
    * @returns {boolean} Connection status
