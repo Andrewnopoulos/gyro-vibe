@@ -470,9 +470,174 @@
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
+    
+    /* Splash Screen Styles */
+    .splash-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.85);
+      z-index: 1000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      transition: opacity 0.3s ease;
+    }
+    
+    .splash-container {
+      width: 90%;
+      max-width: 450px;
+      background-color: #1a1a1a;
+      border-radius: 12px;
+      padding: 25px;
+      box-shadow: 0 5px 25px rgba(0, 0, 0, 0.5);
+      transform: translateY(0);
+      animation: splashAppear 0.4s ease;
+    }
+    
+    @keyframes splashAppear {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    .splash-header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    
+    .splash-title {
+      color: #17a2b8;
+      font-size: 24px;
+      margin: 0 0 10px 0;
+    }
+    
+    .splash-subtitle {
+      color: #cccccc;
+      font-size: 16px;
+      margin: 0;
+    }
+    
+    .splash-content {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+    
+    .info-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 15px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .info-icon {
+      width: 35px;
+      height: 35px;
+      background-color: rgba(23, 162, 184, 0.2);
+      border-radius: 50%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 18px;
+      color: #17a2b8;
+      flex-shrink: 0;
+    }
+    
+    .info-text {
+      flex: 1;
+    }
+    
+    .info-title {
+      font-size: 16px;
+      color: white;
+      margin: 0 0 5px 0;
+      font-weight: bold;
+    }
+    
+    .info-description {
+      font-size: 14px;
+      color: #bbbbbb;
+      margin: 0;
+      line-height: 1.4;
+    }
+    
+    .splash-buttons {
+      display: flex;
+      justify-content: center;
+      gap: 15px;
+    }
+    
+    .splash-button {
+      padding: 12px 25px;
+      border-radius: 6px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      border: none;
+      transition: background-color 0.2s, transform 0.1s;
+    }
+    
+    .splash-button:active {
+      transform: scale(0.97);
+    }
+    
+    .splash-button.primary {
+      background-color: #17a2b8;
+      color: white;
+    }
   </style>
 </head>
 <body>
+  <!-- Mobile Experience Splash Screen -->
+  <div id="splashScreen" class="splash-overlay">
+    <div class="splash-container">
+      <div class="splash-header">
+        <h2 class="splash-title">Welcome to Gyro-Vibe</h2>
+        <p class="splash-subtitle">The Ultimate Motion Controller Experience</p>
+      </div>
+      
+      <div class="splash-content">
+        <div class="info-item">
+          <div class="info-icon">🖥️</div>
+          <div class="info-text">
+            <h3 class="info-title">Recommended Setup</h3>
+            <p class="info-description">For the best experience, play on a desktop computer and use your mobile phone as a motion controller.</p>
+          </div>
+        </div>
+        
+        <div class="info-item">
+          <div class="info-icon">📱</div>
+          <div class="info-text">
+            <h3 class="info-title">Mobile Access</h3>
+            <p class="info-description">You can still play directly on your mobile device like you're doing now, though some features may be limited.</p>
+          </div>
+        </div>
+        
+        <div class="info-item">
+          <div class="info-icon">🎮</div>
+          <div class="info-text">
+            <h3 class="info-title">How It Works</h3>
+            <p class="info-description">Join a game room, then tilt and move your device to control your character. For multiplayer, share your room code with friends!</p>
+          </div>
+        </div>
+      </div>
+      
+      <div class="splash-buttons">
+        <button id="splashContinueBtn" class="splash-button primary">Continue to Game</button>
+      </div>
+    </div>
+  </div>
+
   <div class="container">
     <div class="header">
       <h1>Gyro-Vibe Multiplayer</h1>
@@ -566,8 +731,43 @@
     import { GameStateManager } from './js/game/game-state-manager.js';
     import { MobileLobbyManager } from './js/game/mobile/index.js';
     
+    // Handle the splash screen
+    function initSplashScreen() {
+      const splashScreen = document.getElementById('splashScreen');
+      const continueBtn = document.getElementById('splashContinueBtn');
+      
+      // Check if we should show the splash screen
+      // We'll use localStorage to remember if the user has seen it
+      const hasSeenSplash = localStorage.getItem('gyroVibe_hasSeenSplash');
+      
+      if (!hasSeenSplash) {
+        // Show splash screen
+        splashScreen.style.display = 'flex';
+      } else {
+        // Hide splash screen
+        splashScreen.style.display = 'none';
+      }
+      
+      // Handle continue button click
+      continueBtn.addEventListener('click', () => {
+        // Save that user has seen the splash
+        localStorage.setItem('gyroVibe_hasSeenSplash', 'true');
+        
+        // Hide with animation
+        splashScreen.style.opacity = '0';
+        
+        // Remove from DOM after animation
+        setTimeout(() => {
+          splashScreen.style.display = 'none';
+        }, 300);
+      });
+    }
+    
     // Initialize the application when the DOM is ready
     document.addEventListener('DOMContentLoaded', () => {
+      // Initialize splash screen
+      initSplashScreen();
+      
       // Create core services
       const eventBus = new EventBus();
       const socketManager = new SocketManager(eventBus);
