@@ -72,6 +72,61 @@ The Rune Mode feature has been successfully implemented, allowing players to tog
 - Optimize shape recognition for better accuracy
 
 
+# Physics and Gravity Gun Implementation Plan
 
-# ALERT
-- I think that the visual effects are being applied to the wrong device. When i disconnected my phone I saw that the phone in the main scene had a rune effect applied to it, while the one in first person view did not. I need the rune effects to be applied to the mobile device that is used as the first-person "weapon". I think it's the one in weapon-view.js. That all should probably be renamed since calling it a "weapon" probably isn't accurate.
+Please implement a physics system with multiplayer-synchronized rigidbodies and a gravity gun feature. The gravity gun should allow desktop players to pick up physics objects by pointing their gyro controller at them and pressing E.
+
+## Requirements
+
+1. Create a physics system using Cannon.js
+2. Make physics objects visible and synchronized in multiplayer
+3. Implement a gravity gun that locks objects to the gyro controller when activated
+
+## Implementation Steps
+
+1. Add Cannon.js to the project dependencies
+2. Create a PhysicsManager class to handle the physics simulation
+3. Create a GravityGunController class to manage object picking/dropping
+4. Update the networking code to synchronize physics state
+5. Add server-side handlers for physics events
+
+## Code Structure
+
+Please implement the following classes:
+
+1. `PhysicsManager`: Main physics system that simulates rigidbodies
+2. `GravityGunController`: Handles raycast detection and object manipulation
+3. Update `GameStateManager` to handle physics synchronization
+
+## Detailed Class Requirements
+
+### PhysicsManager
+
+- Initialize a Cannon.js physics world
+- Create, update and manage physics objects
+- Synchronize visual meshes with physics bodies
+- Track held objects and apply forces to move them
+- Emit network events for multiplayer synchronization
+
+### GravityGunController
+
+- Cast rays from the phone/weapon to detect physics objects
+- Implement pickup/drop with E key
+- Create visual beam effect when holding objects
+- Update held object position based on phone orientation
+- Support all existing gyroscope functionality
+
+### Network Synchronization
+
+- Send physics object states periodically
+- Handle object creation events
+- Synchronize object pickup/drop between clients
+- Update server to relay physics events
+
+## Additional Notes
+
+- Each physics object should have a unique ID for tracking across the network
+- Use interpolation for smooth remote object movement
+- Create different object types and colors for visual variety
+- Add the physics system to the app initialization code
+- The existing gyroscope controller should remain fully functional

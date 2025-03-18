@@ -10,6 +10,8 @@ import { WeaponView } from './game/weapon-view.js';
 import { CalibrationManager } from './game/calibration-manager.js';
 import { GameStateManager } from './game/game-state-manager.js';
 import { PlayerManager } from './game/player-manager.js';
+import { PhysicsManager } from './physics/physics-manager.js';
+import { GravityGunController } from './game/gravity-gun-controller.js';
 import { DebugPanel } from './ui/debug-panel.js';
 import { LobbyManager } from './ui/lobby-manager.js';
 import { DEBUG_CONFIG } from './config.js';
@@ -38,6 +40,10 @@ class App {
     // Initialize multiplayer components
     this.gameStateManager = new GameStateManager(this.eventBus, this.socketManager);
     this.playerManager = new PlayerManager(this.eventBus, this.sceneManager);
+
+    // Initialize physics system with scene and socket manager for network synchronization
+    this.physicsManager = new PhysicsManager(this.eventBus, this.sceneManager.getScene(), this.socketManager);
+    this.gravityGunController = new GravityGunController(this.eventBus, this.sceneManager);
     
     // Initialize lobby manager for room management UI
     this.lobbyManager = new LobbyManager(this.eventBus, this.gameStateManager);

@@ -21,6 +21,7 @@
   "license": "ISC",
   "description": "Web app that uses WebSockets to connect a mobile device to a PC and transmits gyroscope and accelerometer data",
   "dependencies": {
+    "cannon-es": "^0.20.0",
     "express": "^4.21.2",
     "socket.io": "^4.8.1",
     "three": "^0.174.0",

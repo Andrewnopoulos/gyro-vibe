@@ -41,6 +41,9 @@ export class GameStateManager {
     this.socketManager.on('player-joined', this.handlePlayerJoined.bind(this));
     this.socketManager.on('player-left', this.handlePlayerLeft.bind(this));
     this.socketManager.on('host-changed', this.handleHostChanged.bind(this));
+
+    // Physics event
+    this.socketManager.on('physics:state-update', this.handlePhysicsStateUpdate.bind(this));
     
     // Listen for local player updates to sync with server
     this.eventBus.on('player:local-moved', this.handleLocalPlayerMoved.bind(this));
@@ -202,6 +205,26 @@ export class GameStateManager {
       this.currentRoom.hostId = data.newHostId;
       this.eventBus.emit('multiplayer:host-changed', { newHostId: data.newHostId });
     }
+  }
+
+  handleLocalPlayerMoved(data) {
+    if (this.localPlayerId && this.currentRoom) {
+      const updateData = {
+        position: data.position,
+        rotation: data.rotation
+      };
+      
+      // Include phone orientation if available
+      if (data.phoneOrientation) {
+        updateData.phoneOrientation = data.phoneOrientation;
+      }
+      
+      this.socketManager.emit('player-update', updateData);
+    }
+  }
+  
+  handlePhysicsStateUpdate(data) {
+    this.eventBus.emit('physics:sync', data);
   }
   
   /**
