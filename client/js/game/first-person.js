@@ -105,7 +105,42 @@ export class FirstPersonController {
     
     // Add to document.body for fixed positioning
     document.body.appendChild(this.runeModeIndicator);
-    console.log('Rune mode indicator added to document body');
+    
+    // Create debug visualization canvas for touch paths
+    this.debugCanvas = document.createElement('canvas');
+    this.debugCanvas.style.position = 'fixed';
+    this.debugCanvas.style.bottom = '20px';
+    this.debugCanvas.style.right = '20px';
+    this.debugCanvas.style.width = '300px';
+    this.debugCanvas.style.height = '300px';
+    this.debugCanvas.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+    this.debugCanvas.style.borderRadius = '8px';
+    this.debugCanvas.style.zIndex = '1999';
+    this.debugCanvas.style.display = 'none'; // Hidden by default
+    this.debugCanvas.style.border = '2px solid rgba(255, 255, 255, 0.5)';
+    this.debugCanvas.width = 300; // Actual canvas resolution
+    this.debugCanvas.height = 300;
+    this.debugCanvas.id = 'rune-debug-canvas';
+    
+    // Add debug label
+    const debugLabel = document.createElement('div');
+    debugLabel.style.position = 'absolute';
+    debugLabel.style.top = '-30px';
+    debugLabel.style.left = '0';
+    debugLabel.style.width = '100%';
+    debugLabel.style.textAlign = 'center';
+    debugLabel.style.color = 'white';
+    debugLabel.style.fontFamily = 'Arial, sans-serif';
+    debugLabel.style.fontSize = '14px';
+    debugLabel.style.fontWeight = 'bold';
+    debugLabel.textContent = 'Touch Path Debug';
+    this.debugCanvas.appendChild(debugLabel);
+    
+    // Add to document.body
+    document.body.appendChild(this.debugCanvas);
+    
+    // Get the drawing context
+    this.debugContext = this.debugCanvas.getContext('2d');
   }
 
   /**
@@ -210,8 +245,70 @@ export class FirstPersonController {
       console.error('runeModeIndicator not found in toggleRuneMode!');
     }
     
+    // Show or hide debug canvas
+    if (this.debugCanvas) {
+      this.debugCanvas.style.display = this.runeMode ? 'block' : 'none';
+      
+      // Clear the debug canvas
+      if (this.debugContext) {
+        this.debugContext.clearRect(0, 0, this.debugCanvas.width, this.debugCanvas.height);
+        this.drawDebugGrid();
+      }
+    }
+    
     // Only emit local event - no need to communicate with the phone
     this.eventBus.emit('runeMode:toggled', { active: this.runeMode });
+  }
+  
+  /**
+   * Draw grid for debug canvas
+   */
+  drawDebugGrid() {
+    if (!this.debugContext) return;
+    
+    const ctx = this.debugContext;
+    const width = this.debugCanvas.width;
+    const height = this.debugCanvas.height;
+    
+    // Clear canvas
+    ctx.clearRect(0, 0, width, height);
+    
+    // Draw outer frame
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0, 0, width, height);
+    
+    // Draw grid
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.lineWidth = 1;
+    
+    // Draw horizontal grid lines
+    for (let y = 0; y < height; y += 30) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(width, y);
+      ctx.stroke();
+    }
+    
+    // Draw vertical grid lines
+    for (let x = 0; x < width; x += 30) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, height);
+      ctx.stroke();
+    }
+    
+    // Draw center cross
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.beginPath();
+    ctx.moveTo(width / 2, 0);
+    ctx.lineTo(width / 2, height);
+    ctx.stroke();
+    
+    ctx.beginPath();
+    ctx.moveTo(0, height / 2);
+    ctx.lineTo(width, height / 2);
+    ctx.stroke();
   }
   
   /**
@@ -603,12 +700,53 @@ export class FirstPersonController {
             x: touchData.x,
             y: touchData.y
           });
+          
+          // Start a new path on debug canvas
+          if (this.debugContext) {
+            // Clear the canvas with grid
+            this.drawDebugGrid();
+            
+            // Start new path
+            this.debugContext.beginPath();
+            
+            // Map normalized coordinates (0-1) to canvas coordinates
+            const canvasX = touchData.x * this.debugCanvas.width;
+            const canvasY = touchData.y * this.debugCanvas.height;
+            
+            this.debugContext.moveTo(canvasX, canvasY);
+            this.debugContext.strokeStyle = 'rgba(255, 100, 100, 0.9)';
+            this.debugContext.lineWidth = 3;
+            
+            // Draw the start point
+            this.debugContext.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            this.debugContext.beginPath();
+            this.debugContext.arc(canvasX, canvasY, 5, 0, Math.PI * 2);
+            this.debugContext.fill();
+            
+            // Start the path
+            this.debugContext.beginPath();
+            this.debugContext.moveTo(canvasX, canvasY);
+          }
         } else {
           // Add point to the path
           this.touchPath.push({
             x: touchData.x,
             y: touchData.y
           });
+          
+          // Continue path on debug canvas
+          if (this.debugContext) {
+            // Map normalized coordinates (0-1) to canvas coordinates
+            const canvasX = touchData.x * this.debugCanvas.width;
+            const canvasY = touchData.y * this.debugCanvas.height;
+            
+            this.debugContext.lineTo(canvasX, canvasY);
+            this.debugContext.stroke();
+            
+            // Continue the path
+            this.debugContext.beginPath();
+            this.debugContext.moveTo(canvasX, canvasY);
+          }
         }
         
         // Store current position for next comparison
@@ -618,9 +756,29 @@ export class FirstPersonController {
         // Touch ended - analyze the path for shape recognition
         this.touchActive = false;
         
+        // Add the final point to debug canvas
+        if (this.debugContext && this.touchPath.length > 0) {
+          const lastPoint = this.touchPath[this.touchPath.length - 1];
+          const canvasX = lastPoint.x * this.debugCanvas.width;
+          const canvasY = lastPoint.y * this.debugCanvas.height;
+          
+          this.debugContext.lineTo(canvasX, canvasY);
+          this.debugContext.stroke();
+          
+          // Draw the end point
+          this.debugContext.fillStyle = 'rgba(100, 255, 100, 0.9)';
+          this.debugContext.beginPath();
+          this.debugContext.arc(canvasX, canvasY, 5, 0, Math.PI * 2);
+          this.debugContext.fill();
+        }
+        
         // Only analyze if we have enough points
         if (this.touchPath.length >= 5) {
           const shape = this.recognizeShape(this.touchPath);
+          
+          // Draw the recognized shape
+          this.drawDebugShape(shape);
+          
           if (shape.shape !== 'unknown') {
             this.handleRuneCast({
               shape: shape.shape,
@@ -630,8 +788,7 @@ export class FirstPersonController {
           }
         }
         
-        // Clear the path
-        this.touchPath = [];
+        // Keep the path for visualization
       }
     } else {
       // NORMAL MODE: Process for camera rotation as before
@@ -809,6 +966,107 @@ export class FirstPersonController {
     }
     
     return { shape: 'unknown', confidence: 0.2 };
+  }
+  
+  /**
+   * Draw debug visualization of the recognized shape
+   * @param {Object} shapeResult - Recognition result with shape and confidence
+   */
+  drawDebugShape(shapeResult) {
+    if (!this.debugContext || !this.touchPath || this.touchPath.length === 0) return;
+    
+    const ctx = this.debugContext;
+    const { shape, confidence } = shapeResult;
+    
+    // Get the bounds of the shape
+    const bounds = this.getShapeBounds(this.touchPath);
+    const { center, radius } = bounds;
+    
+    // Map normalized coordinates (0-1) to canvas coordinates
+    const canvasX = center.x * this.debugCanvas.width;
+    const canvasY = center.y * this.debugCanvas.height;
+    const canvasRadius = radius * this.debugCanvas.width;
+    
+    // Draw different overlays based on shape
+    ctx.lineWidth = 2;
+    
+    if (shape === 'circle') {
+      // Draw perfect circle overlay
+      ctx.strokeStyle = confidence > 0.7 ? 'rgba(0, 255, 0, 0.7)' : 'rgba(255, 165, 0, 0.7)';
+      ctx.beginPath();
+      ctx.arc(canvasX, canvasY, canvasRadius, 0, Math.PI * 2);
+      ctx.stroke();
+      
+      // Draw center point
+      ctx.fillStyle = 'rgba(0, 255, 0, 0.7)';
+      ctx.beginPath();
+      ctx.arc(canvasX, canvasY, 4, 0, Math.PI * 2);
+      ctx.fill();
+    } 
+    else if (shape === 'triangle') {
+      // Draw perfect triangle overlay
+      ctx.strokeStyle = confidence > 0.7 ? 'rgba(0, 255, 0, 0.7)' : 'rgba(255, 165, 0, 0.7)';
+      
+      // Equilateral triangle
+      const triangleRadius = canvasRadius * 1.2; // Slightly larger for visibility
+      const height = triangleRadius * Math.sqrt(3);
+      
+      ctx.beginPath();
+      ctx.moveTo(canvasX, canvasY - triangleRadius * 0.7); // Top
+      ctx.lineTo(canvasX - triangleRadius, canvasY + height/2 - triangleRadius * 0.7); // Bottom left
+      ctx.lineTo(canvasX + triangleRadius, canvasY + height/2 - triangleRadius * 0.7); // Bottom right
+      ctx.closePath();
+      ctx.stroke();
+      
+      // Draw center point
+      ctx.fillStyle = 'rgba(0, 255, 0, 0.7)';
+      ctx.beginPath();
+      ctx.arc(canvasX, canvasY, 4, 0, Math.PI * 2);
+      ctx.fill();
+    } 
+    else {
+      // Unknown shape - draw a question mark or X
+      ctx.strokeStyle = 'rgba(255, 0, 0, 0.7)';
+      ctx.beginPath();
+      ctx.moveTo(canvasX - canvasRadius/2, canvasY - canvasRadius/2);
+      ctx.lineTo(canvasX + canvasRadius/2, canvasY + canvasRadius/2);
+      ctx.moveTo(canvasX + canvasRadius/2, canvasY - canvasRadius/2);
+      ctx.lineTo(canvasX - canvasRadius/2, canvasY + canvasRadius/2);
+      ctx.stroke();
+    }
+    
+    // Draw confidence text
+    ctx.font = '14px Arial';
+    ctx.fillStyle = 'white';
+    ctx.textAlign = 'center';
+    ctx.fillText(
+      `${shape} (${Math.round(confidence * 100)}%)`, 
+      canvasX, 
+      canvasY + canvasRadius + 20
+    );
+    
+    // Draw start and end markers
+    if (this.touchPath.length >= 2) {
+      const start = this.touchPath[0];
+      const end = this.touchPath[this.touchPath.length - 1];
+      
+      // Convert to canvas coordinates
+      const startX = start.x * this.debugCanvas.width;
+      const startY = start.y * this.debugCanvas.height;
+      const endX = end.x * this.debugCanvas.width;
+      const endY = end.y * this.debugCanvas.height;
+      
+      // Draw "S" for start
+      ctx.font = 'bold 16px Arial';
+      ctx.fillStyle = 'white';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('S', startX, startY - 15);
+      
+      // Draw "E" for end
+      ctx.fillStyle = 'rgba(100, 255, 100, 0.9)';
+      ctx.fillText('E', endX, endY - 15);
+    }
   }
   
   /**
