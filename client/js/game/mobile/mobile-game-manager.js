@@ -123,7 +123,13 @@ export class MobileGameManager {
       // Create skybox
       this.createSkybox();
       
-      // Create renderer
+      // Create renderer with correct canvas reference
+      // Make sure we're using the actual canvas element, not its container
+      if (!(container instanceof HTMLCanvasElement)) {
+        console.error("Container is not a canvas element");
+        throw new Error("Container must be a canvas element");
+      }
+      
       this.renderer = new THREE.WebGLRenderer({ 
         antialias: true,
         canvas: container,
@@ -804,28 +810,81 @@ export class MobileGameManager {
     this.scene = null;
     this.renderer = null;
     
-    // Initialize scene with a delay to ensure DOM is ready
-    setTimeout(() => {
+    // Initialize scene when canvas is fully ready
+    const initializeSceneWhenReady = () => {
       try {
+        // Get a fresh reference to the canvas element
         const gameCanvas = document.getElementById('gameCanvas');
         if (!gameCanvas) {
           console.error("Cannot find gameCanvas element");
+          // Retry as the canvas might not be in the DOM yet
+          setTimeout(initializeSceneWhenReady, 100);
           return;
         }
         
-        // Make sure canvas dimensions are set correctly
-        // Do not set canvas.width/height directly as it might create a 2D context
+        // Double-check that we have a proper canvas element
+        if (!(gameCanvas instanceof HTMLCanvasElement)) {
+          console.error("Found element with id 'gameCanvas', but it's not a canvas element");
+          setTimeout(initializeSceneWhenReady, 100);
+          return;
+        }
+        
         const container = gameCanvas.parentElement;
-        if (container) {
-          // Instead of setting width/height directly, we'll let the WebGLRenderer do it
-          this.initializeScene(gameCanvas);
-        } else {
+        if (!container) {
           console.error("Canvas parent element not found");
+          setTimeout(initializeSceneWhenReady, 100);
+          return;
+        }
+        
+        // Make sure container has non-zero dimensions before proceeding
+        if (container.clientWidth > 0 && container.clientHeight > 0) {
+          console.log(`Initializing scene with canvas dimensions: ${container.clientWidth}x${container.clientHeight}`);
+          
+          // Force a style update on the canvas before initializing
+          gameCanvas.style.width = '100%';
+          gameCanvas.style.height = '100%';
+          
+          // Initialize the scene with the canvas (not its container)
+          try {
+            this.initializeScene(gameCanvas);
+          } catch (error) {
+            console.error("Failed to initialize scene:", error);
+            // If we get a WebGL context error, try once more with a new canvas
+            if (error.message && (
+                error.message.includes("WebGL") || 
+                error.message.includes("Container must be a canvas element")
+            )) {
+              console.log("WebGL context error, recreating canvas and retrying...");
+              
+              // Create a fresh canvas
+              const oldCanvas = gameCanvas;
+              const newCanvas = document.createElement('canvas');
+              newCanvas.id = 'gameCanvas';
+              newCanvas.style.width = '100%';
+              newCanvas.style.height = '100%';
+              
+              // Replace the old canvas
+              if (oldCanvas.parentElement) {
+                oldCanvas.parentElement.replaceChild(newCanvas, oldCanvas);
+                // Try again after a short delay
+                setTimeout(initializeSceneWhenReady, 100);
+              }
+            }
+          }
+        } else {
+          // Retry after a short delay if dimensions are still zero
+          console.log("Canvas dimensions not ready yet, retrying...");
+          setTimeout(initializeSceneWhenReady, 100);
         }
       } catch (error) {
         console.error("Error in handleRoomJoined:", error);
+        // Still attempt to retry
+        setTimeout(initializeSceneWhenReady, 200);
       }
-    }, 200); // Increase delay to ensure canvas is properly sized and ready
+    };
+    
+    // Start the initialization process
+    setTimeout(initializeSceneWhenReady, 200);
   }
   
   /**
