@@ -33,12 +33,12 @@ export class RemotePlayer {
     // Check if this is a mobile player
     this.isMobilePlayer = playerData.isMobilePlayer || false;
     
-    // For mobile players, create an airplane model instead of a phone
+    // For mobile players, create an airplane model instead of a person
     if (this.isMobilePlayer) {
       this.createAirplaneModel(scene);
     } else {
-      // For desktop players, use the regular phone model
-      this.phoneModel = new PhoneModel(scene);
+      // For desktop players, use a simple person-like model
+      this.createPersonModel(scene);
     }
     
     // For smooth animation
@@ -81,24 +81,72 @@ export class RemotePlayer {
   }
   
   /**
+   * Create a simple person-like model for desktop players
+   * @param {THREE.Scene} scene - 3D scene
+   */
+  createPersonModel(scene) {
+    // Create a simple person-like object
+    const bodyGeometry = new THREE.CapsuleGeometry(0.5, 1, 4, 8);
+    const headGeometry = new THREE.SphereGeometry(0.3, 16, 16);
+    
+    const bodyMaterial = new THREE.MeshStandardMaterial({ 
+      color: this.playerColor,
+      roughness: 0.7,
+      metalness: 0.1
+    });
+    
+    const headMaterial = new THREE.MeshStandardMaterial({ 
+      color: 0xFFCC88,
+      roughness: 0.7,
+      metalness: 0.1
+    });
+    
+    // Create meshes
+    const bodyMesh = new THREE.Mesh(bodyGeometry, bodyMaterial);
+    const headMesh = new THREE.Mesh(headGeometry, headMaterial);
+    
+    // Position head
+    headMesh.position.set(0, 1, 0);
+    
+    // Create a group to hold body parts
+    const model = new THREE.Group();
+    model.add(bodyMesh);
+    model.add(headMesh);
+    
+    // Add to scene
+    scene.add(model);
+    
+    // Store model reference
+    this.personModel = model;
+  }
+  
+  /**
    * Set player's color
    * @param {number} color - Hex color value
    */
   setPlayerColor(color) {
-    if (this.phoneModel) {
-      // Access the model's children to find the screen mesh
-      const model = this.phoneModel.getModel();
-      if (model) {
-        // Find the screen mesh (second child of the phone model)
-        model.traverse((object) => {
+    if (this.isMobilePlayer) {
+      if (this.airplaneModel) {
+        // Find colored parts in airplane model
+        this.airplaneModel.traverse((object) => {
           if (object instanceof THREE.Mesh && object.material) {
-            // Apply color to screen (which is blue by default)
+            // Apply color to body parts (which are blue by default)
             if (object.material.color && object.material.color.getHex() === 0x3355ff) {
               object.material.color.setHex(color);
             }
           }
         });
       }
+    } else if (this.personModel) {
+      // Apply color to body
+      this.personModel.traverse((object) => {
+        if (object instanceof THREE.Mesh && object.material) {
+          // Apply color to body (but not the head which is skin-colored)
+          if (object.material.color && object.material.color.getHex() !== 0xFFCC88) {
+            object.material.color.setHex(color);
+          }
+        }
+      });
     }
   }
   
@@ -142,7 +190,7 @@ export class RemotePlayer {
     this.nameSprite = new THREE.Sprite(material);
     this.nameSprite.scale.set(2, 0.5, 1);
     
-    // Position above the phone model
+    // Position above the model
     this.nameSprite.position.y = 1.5;
     
     // Add to the appropriate model
@@ -152,8 +200,10 @@ export class RemotePlayer {
         // Position higher for airplanes 
         this.nameSprite.position.y = 2.5;
       }
-    } else {
-      this.phoneModel.getModel().add(this.nameSprite);
+    } else if (this.personModel) {
+      this.personModel.add(this.nameSprite);
+      // Position higher for person model (above head)
+      this.nameSprite.position.y = 1.8;
     }
   }
   
@@ -178,12 +228,8 @@ export class RemotePlayer {
           if (this.airplaneModel) {
             this.airplaneModel.position.copy(this.currentPosition);
           }
-        } else {
-          this.phoneModel.setPosition(
-            this.currentPosition.x,
-            this.currentPosition.y,
-            this.currentPosition.z
-          );
+        } else if (this.personModel) {
+          this.personModel.position.copy(this.currentPosition);
         }
       }
     }
@@ -203,8 +249,8 @@ export class RemotePlayer {
           if (this.airplaneModel) {
             this.airplaneModel.quaternion.copy(this.currentRotation);
           }
-        } else {
-          this.phoneModel.setQuaternion(this.currentRotation);
+        } else if (this.personModel) {
+          this.personModel.quaternion.copy(this.currentRotation);
         }
       }
     }
@@ -255,12 +301,8 @@ export class RemotePlayer {
       if (this.airplaneModel) {
         this.airplaneModel.position.copy(this.currentPosition);
       }
-    } else {
-      this.phoneModel.setPosition(
-        this.currentPosition.x,
-        this.currentPosition.y,
-        this.currentPosition.z
-      );
+    } else if (this.personModel) {
+      this.personModel.position.copy(this.currentPosition);
     }
     
     // Smoothly interpolate rotation
@@ -329,8 +371,8 @@ export class RemotePlayer {
             }
         }
       }
-    } else {
-      this.phoneModel.setQuaternion(this.currentRotation);
+    } else if (this.personModel) {
+      this.personModel.quaternion.copy(this.currentRotation);
     }
     
     // Phone orientation tracking (simplified without weapon)
@@ -346,7 +388,7 @@ export class RemotePlayer {
         const cameraPos = camera.position.clone();
         const playerPos = this.isMobilePlayer ? 
           this.airplaneModel.position.clone() : 
-          this.phoneModel.getModel().position.clone();
+          this.personModel.position.clone();
         const dirToCamera = cameraPos.sub(playerPos).normalize();
         
         // Calculate the angle to rotate the sprite
@@ -754,7 +796,7 @@ export class RemotePlayer {
     if (this.isMobilePlayer) {
       return this.airplaneModel;
     } else {
-      return this.phoneModel.getModel();
+      return this.personModel;
     }
   }
   
@@ -820,9 +862,29 @@ export class RemotePlayer {
           this.exhaustData = null;
         }
       }
-    } else {
-      // Dispose of phone model
-      this.phoneModel.dispose();
+    } else if (this.personModel) {
+      // Dispose of person model
+      if (this.scene) {
+        this.scene.remove(this.personModel);
+      }
+      
+      // Dispose of geometries and materials
+      this.personModel.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          if (child.geometry) {
+            child.geometry.dispose();
+          }
+          if (child.material) {
+            if (Array.isArray(child.material)) {
+              child.material.forEach(material => material.dispose());
+            } else {
+              child.material.dispose();
+            }
+          }
+        }
+      });
+      
+      this.personModel = null;
     }
     
     // Clean up name sprite
