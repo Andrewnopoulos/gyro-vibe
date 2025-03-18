@@ -70,3 +70,8 @@ The Rune Mode feature has been successfully implemented, allowing players to tog
 - Add sound effects for drawing and successful recognition
 - Create tutorial for introducing the rune system to players
 - Optimize shape recognition for better accuracy
+
+
+
+# ALERT
+- I think that the visual effects are being applied to the wrong device. When i disconnected my phone I saw that the phone in the main scene had a rune effect applied to it, while the one in first person view did not. I need the rune effects to be applied to the mobile device that is used as the first-person "weapon". I think it's the one in weapon-view.js. That all should probably be renamed since calling it a "weapon" probably isn't accurate.

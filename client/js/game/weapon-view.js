@@ -101,6 +101,11 @@ export class WeaponView {
       this.hide();
     });
     
+    // Listen for rune effect events
+    this.eventBus.on('weapon:apply-rune-effect', (data) => {
+      this.applyRuneEffect(data.shape, data.confidence);
+    });
+    
     // Listen for window resize
     window.addEventListener('resize', this.onWindowResize.bind(this), false);
   }
@@ -142,6 +147,8 @@ export class WeaponView {
     const screenMaterial = new THREE.MeshBasicMaterial({ color: 0x22aaff });
     const screen = new THREE.Mesh(screenGeometry, screenMaterial);
     screen.position.z = depth / 2 + 0.01;
+    // Set a name for the screen to make it easier to find later
+    screen.name = 'phoneScreen';
     phoneContainer.add(screen);
   
     // Add camera lens
@@ -269,5 +276,378 @@ export class WeaponView {
     if (this.weaponContainer) {
       this.weaponContainer.style.display = 'none';
     }
+  }
+  
+  /**
+   * Apply rune effect to the weapon
+   * @param {string} shape - The recognized shape
+   * @param {number} confidence - Recognition confidence (0-1)
+   */
+  applyRuneEffect(shape, confidence) {
+    if (!this.weaponPhone) return;
+    
+    console.log(`Applying rune effect to weapon: ${shape} (${Math.round(confidence * 100)}% confidence)`);
+    
+    // Clear any existing effects
+    this.clearRuneEffects();
+    
+    // Apply different effects based on shape
+    switch (shape.toLowerCase()) {
+      case 'circle':
+        this.applyCircleRuneEffect(confidence);
+        break;
+        
+      case 'triangle':
+        this.applyTriangleRuneEffect(confidence);
+        break;
+        
+      default:
+        this.applyGenericRuneEffect(confidence);
+    }
+  }
+  
+  /**
+   * Clear all rune effects from the weapon
+   */
+  clearRuneEffects() {
+    // Remove any effect meshes
+    this.weaponPhone.traverse((child) => {
+      if (child.userData && child.userData.isRuneEffect) {
+        if (child.parent) {
+          child.parent.remove(child);
+        }
+      }
+    });
+    
+    // Clear any animations or timeouts
+    if (this.runeEffectTimeout) {
+      clearTimeout(this.runeEffectTimeout);
+      this.runeEffectTimeout = null;
+    }
+  }
+  
+  /**
+   * Apply circle rune effect (shield)
+   * @param {number} confidence - Recognition confidence (0-1)
+   */
+  applyCircleRuneEffect(confidence) {
+    // Find the phone screen to apply the effect to
+    let phoneScreen = null;
+    this.weaponPhone.traverse((child) => {
+      if (child.name === 'phoneScreen') {
+        phoneScreen = child;
+      }
+    });
+    
+    // Determine appropriate radius based on phone size
+    let radius = 0.5;
+    let shieldPosition = new THREE.Vector3(0, 0, 0.1);
+    
+    if (phoneScreen) {
+      // Get screen dimensions to scale shield appropriately
+      const box = new THREE.Box3().setFromObject(phoneScreen);
+      const size = box.getSize(new THREE.Vector3());
+      radius = Math.max(size.x, size.y) * 0.6;
+      
+      // Position the shield in front of the screen
+      phoneScreen.getWorldPosition(shieldPosition);
+      this.weaponPhone.worldToLocal(shieldPosition);
+      shieldPosition.z += 0.1; // Position in front of the screen
+    }
+    
+    // Create a circular shield effect
+    const geometry = new THREE.RingGeometry(radius * 0.8, radius, 32);
+    const material = new THREE.MeshBasicMaterial({
+      color: 0x00AAFF,
+      transparent: true,
+      opacity: Math.min(0.7, confidence * 0.9),
+      side: THREE.DoubleSide
+    });
+    
+    const shield = new THREE.Mesh(geometry, material);
+    shield.userData.isRuneEffect = true;
+    
+    // Position in front of the phone
+    shield.position.copy(shieldPosition);
+    
+    // Add a pulsing animation
+    const pulseSpeed = 1.5;
+    const startTime = Date.now();
+    
+    // Create a glow inside the ring
+    const innerGeometry = new THREE.CircleGeometry(radius * 0.75, 32);
+    const innerMaterial = new THREE.MeshBasicMaterial({
+      color: 0x88DDFF,
+      transparent: true,
+      opacity: Math.min(0.4, confidence * 0.6),
+      side: THREE.DoubleSide
+    });
+    
+    const innerShield = new THREE.Mesh(innerGeometry, innerMaterial);
+    innerShield.userData.isRuneEffect = true;
+    innerShield.position.copy(shieldPosition);
+    innerShield.position.z -= 0.01; // Slightly behind the ring
+    
+    // Add to weapon
+    this.weaponPhone.add(shield);
+    this.weaponPhone.add(innerShield);
+    
+    // Animate
+    const animate = () => {
+      const elapsedTime = (Date.now() - startTime) / 1000;
+      const pulse = 1 + Math.sin(elapsedTime * pulseSpeed) * 0.1;
+      
+      if (shield.parent) {
+        shield.scale.set(pulse, pulse, 1);
+        innerShield.scale.set(pulse, pulse, 1);
+        
+        // Rotate slowly
+        shield.rotation.z += 0.005;
+        innerShield.rotation.z -= 0.003;
+        
+        // Update opacity based on confidence
+        material.opacity = Math.min(0.7, confidence * 0.9) * (0.8 + Math.sin(elapsedTime * 2) * 0.2);
+        innerMaterial.opacity = Math.min(0.4, confidence * 0.6) * (0.8 + Math.sin(elapsedTime * 3) * 0.2);
+        
+        // Continue animation
+        requestAnimationFrame(animate);
+      }
+    };
+    
+    // Start animation
+    animate();
+    
+    // Auto-remove effect after a few seconds
+    this.runeEffectTimeout = setTimeout(() => {
+      this.clearRuneEffects();
+    }, 8000);
+  }
+  
+  /**
+   * Apply triangle rune effect (fireball)
+   * @param {number} confidence - Recognition confidence (0-1)
+   */
+  applyTriangleRuneEffect(confidence) {
+    // Find the phone screen to apply the effect to
+    let phoneScreen = null;
+    this.weaponPhone.traverse((child) => {
+      if (child.name === 'phoneScreen') {
+        phoneScreen = child;
+      }
+    });
+    
+    // Find phone screen dimensions from geometry if available
+    let screenWidth = 0.35;
+    let screenHeight = 0.7;
+    let screenDepth = 0.05;
+    
+    if (phoneScreen && phoneScreen.geometry) {
+      const box = new THREE.Box3().setFromObject(phoneScreen);
+      const size = box.getSize(new THREE.Vector3());
+      screenWidth = size.x;
+      screenHeight = size.y;
+      screenDepth = size.z;
+    }
+    
+    // Create a fiery effect on the phone screen
+    const screenGeometry = new THREE.PlaneGeometry(screenWidth * 0.95, screenHeight * 0.95);
+    const screenMaterial = new THREE.MeshBasicMaterial({
+      color: 0xFF5500,
+      transparent: true,
+      opacity: Math.min(0.8, confidence * 0.9)
+    });
+    
+    const fireScreen = new THREE.Mesh(screenGeometry, screenMaterial);
+    fireScreen.userData.isRuneEffect = true;
+    
+    // Position on the phone screen - use the screen's position if available
+    if (phoneScreen) {
+      const screenPos = new THREE.Vector3();
+      phoneScreen.getWorldPosition(screenPos);
+      this.weaponPhone.worldToLocal(screenPos);
+      
+      // Adjust to be slightly in front of the screen
+      const screenNormal = new THREE.Vector3(0, 0, 1);
+      screenNormal.applyQuaternion(phoneScreen.getWorldQuaternion(new THREE.Quaternion()));
+      screenNormal.normalize();
+      
+      // Position the effect just in front of the screen
+      fireScreen.position.copy(screenPos);
+      fireScreen.position.z += 0.03;
+    } else {
+      // Fallback position if we couldn't find the screen
+      fireScreen.position.set(0, 0, 0.05);
+    }
+    
+    // Create fire particles
+    const particleCount = 50;
+    const particleGeometry = new THREE.BufferGeometry();
+    const particlePositions = new Float32Array(particleCount * 3);
+    const particleSizes = new Float32Array(particleCount);
+    
+    // Initialize particles
+    for (let i = 0; i < particleCount; i++) {
+      const i3 = i * 3;
+      // Random position on the screen
+      particlePositions[i3] = (Math.random() - 0.5) * screenWidth * 0.8;
+      particlePositions[i3 + 1] = (Math.random() - 0.5) * screenHeight * 0.8;
+      particlePositions[i3 + 2] = fireScreen.position.z + 0.01;
+      
+      // Random size
+      particleSizes[i] = Math.random() * 0.04 + 0.01;
+    }
+    
+    particleGeometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+    particleGeometry.setAttribute('size', new THREE.BufferAttribute(particleSizes, 1));
+    
+    // Particle material
+    const particleMaterial = new THREE.PointsMaterial({
+      color: 0xFFAA22,
+      size: 0.05,
+      transparent: true,
+      opacity: Math.min(0.9, confidence * 0.95),
+      blending: THREE.AdditiveBlending
+    });
+    
+    const particles = new THREE.Points(particleGeometry, particleMaterial);
+    particles.userData.isRuneEffect = true;
+    
+    // Add to weapon
+    this.weaponPhone.add(fireScreen);
+    this.weaponPhone.add(particles);
+    
+    // Animation variables
+    const startTime = Date.now();
+    
+    // Animate
+    const animate = () => {
+      const elapsedTime = (Date.now() - startTime) / 1000;
+      
+      if (fireScreen.parent) {
+        // Pulsate screen
+        const pulse = 1 + Math.sin(elapsedTime * 3) * 0.1;
+        fireScreen.scale.set(pulse, pulse, 1);
+        
+        // Flicker color
+        const r = 1.0;
+        const g = 0.3 + Math.sin(elapsedTime * 5) * 0.2;
+        const b = 0.1;
+        screenMaterial.color.setRGB(r, g, b);
+        
+        // Animate particles
+        const positions = particleGeometry.attributes.position.array;
+        
+        for (let i = 0; i < particleCount; i++) {
+          const i3 = i * 3;
+          
+          // Move particles upward
+          positions[i3 + 1] += 0.01 * (Math.random() + 0.5);
+          
+          // Add some horizontal movement
+          positions[i3] += (Math.random() - 0.5) * 0.01;
+          
+          // Reset particles that go out of bounds
+          if (positions[i3 + 1] > 0.4) {
+            positions[i3] = (Math.random() - 0.5) * 0.3;
+            positions[i3 + 1] = -0.3;
+          }
+        }
+        
+        particleGeometry.attributes.position.needsUpdate = true;
+        
+        // Continue animation
+        requestAnimationFrame(animate);
+      }
+    };
+    
+    // Start animation
+    animate();
+    
+    // Auto-remove effect after a few seconds
+    this.runeEffectTimeout = setTimeout(() => {
+      this.clearRuneEffects();
+    }, 8000);
+  }
+  
+  /**
+   * Apply generic rune effect for unrecognized shapes
+   * @param {number} confidence - Recognition confidence (0-1)
+   */
+  applyGenericRuneEffect(confidence) {
+    // Find the phone screen for size reference
+    let phoneScreen = null;
+    this.weaponPhone.traverse((child) => {
+      if (child.name === 'phoneScreen') {
+        phoneScreen = child;
+      }
+    });
+    
+    // Determine box dimensions based on phone size
+    let width = 0.45;
+    let height = 0.85;
+    let depth = 0.1;
+    let boxPosition = new THREE.Vector3(0, 0, 0);
+    
+    if (phoneScreen) {
+      // Get screen dimensions to scale box appropriately
+      const box = new THREE.Box3().setFromObject(phoneScreen);
+      const size = box.getSize(new THREE.Vector3());
+      width = size.x * 1.1;   // Slightly larger than the screen
+      height = size.y * 1.1;
+      depth = size.z * 2;
+      
+      // Position around the center of the phone
+      const phoneGeometry = phoneScreen.geometry;
+      if (phoneGeometry) {
+        phoneScreen.getWorldPosition(boxPosition);
+        this.weaponPhone.worldToLocal(boxPosition);
+      }
+    }
+    
+    // Create a simple pulsing glow around the phone
+    const geometry = new THREE.BoxGeometry(width, height, depth);
+    const material = new THREE.MeshBasicMaterial({
+      color: 0xAA88FF,
+      transparent: true,
+      opacity: Math.min(0.5, confidence * 0.6),
+      wireframe: true
+    });
+    
+    const glowEffect = new THREE.Mesh(geometry, material);
+    glowEffect.userData.isRuneEffect = true;
+    
+    // Position around the phone
+    glowEffect.position.copy(boxPosition);
+    
+    // Add to weapon
+    this.weaponPhone.add(glowEffect);
+    
+    // Animation variables
+    const startTime = Date.now();
+    
+    // Animate
+    const animate = () => {
+      const elapsedTime = (Date.now() - startTime) / 1000;
+      
+      if (glowEffect.parent) {
+        // Pulse effect
+        const pulse = 1 + Math.sin(elapsedTime * 2) * 0.1;
+        glowEffect.scale.set(pulse, pulse, pulse);
+        
+        // Rotate slightly
+        glowEffect.rotation.z = Math.sin(elapsedTime) * 0.1;
+        
+        // Continue animation
+        requestAnimationFrame(animate);
+      }
+    };
+    
+    // Start animation
+    animate();
+    
+    // Auto-remove effect after a few seconds
+    this.runeEffectTimeout = setTimeout(() => {
+      this.clearRuneEffects();
+    }, 5000);
   }
 }

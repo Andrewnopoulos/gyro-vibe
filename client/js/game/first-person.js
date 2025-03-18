@@ -440,6 +440,9 @@ export class FirstPersonController {
     // Create visual and audio feedback based on the rune shape
     this.createRuneCastEffect(shape, confidence);
     
+    // Emit an event for the weapon view to apply the rune effect
+    this.eventBus.emit('weapon:apply-rune-effect', { shape, confidence });
+    
     // Apply rune effect based on shape
     switch (shape.toLowerCase()) {
       case 'circle':
@@ -842,6 +845,7 @@ export class FirstPersonController {
    */
   recognizeShape(path) {
     if (path.length < 5) {
+      console.log("Shape recognition failed: not enough points", path.length);
       return { shape: 'unknown', confidence: 0 };
     }
     
@@ -860,11 +864,14 @@ export class FirstPersonController {
     
     // If radius is too small, it's probably just a tap, not a shape
     if (radius < 0.05) {
+      console.log("Shape recognition failed: radius too small", radius);
       return { shape: 'unknown', confidence: 0 };
     }
     
-    // Check if shape is closed
-    const isClosed = distance < radius * 0.3;
+    // Check if shape is closed - increase the threshold for triangles
+    // Triangles are naturally harder to close exactly than circles
+    const isClosed = distance < radius * 0.5; // More lenient threshold (was 0.3)
+    console.log("Shape closed check:", isClosed, "distance:", distance, "threshold:", radius * 0.5);
     
     // Calculate circularity: how close the points are to the circle's perimeter
     let circularityScore = 0;
@@ -886,10 +893,12 @@ export class FirstPersonController {
     const stdDev = Math.sqrt(variance);
     circularityScore = 1 - (stdDev / avgRadius);
     
+    console.log("Circularity score:", circularityScore);
+    
     // Triangularity: check for 3 distinct corners
     // Calculate angle changes along the path
     const angles = [];
-    const angleThreshold = 0.6; // Threshold for significant angle change
+    const angleThreshold = 0.5; // Lower threshold to detect more angles (was 0.6)
     
     for (let i = 2; i < path.length; i++) {
       const prev = path[i-2];
@@ -919,9 +928,11 @@ export class FirstPersonController {
       }
     }
     
+    console.log("Significant angles found:", angles.length, "threshold:", angleThreshold);
+    
     // Simplify angles by merging close ones
     const mergedAngles = [];
-    const mergeThreshold = path.length * 0.1; // Minimum distance between corners
+    const mergeThreshold = path.length * 0.08; // Reduced threshold to allow corners to be closer (was 0.1)
     
     for (const angle of angles) {
       if (mergedAngles.length === 0 || 
@@ -929,6 +940,8 @@ export class FirstPersonController {
         mergedAngles.push(angle);
       }
     }
+    
+    console.log("Merged angles:", mergedAngles.length, "merge threshold:", mergeThreshold);
     
     // Triangle has exactly 3 significant angles that are reasonably evenly spaced
     if (mergedAngles.length === 3 && isClosed) {
@@ -943,26 +956,53 @@ export class FirstPersonController {
         totalPoints - (mergedAngles[2].index - mergedAngles[0].index)
       ];
       
+      console.log("Triangle angle spacing:", spacings, "expected:", expectedSpacing);
+      
       // Calculate how close the spacings are to the expected spacing
       const spacingDeviation = spacings.reduce((sum, spacing) => 
         sum + Math.abs(spacing - expectedSpacing), 0) / (3 * expectedSpacing);
       
-      triangularityScore = 1 - spacingDeviation;
+      // Apply a more forgiving scoring function for triangles
+      triangularityScore = 1 - (spacingDeviation * 0.8); // Reduce the penalty for spacing deviation
+      console.log("Triangle spacing deviation:", spacingDeviation, "score:", triangularityScore);
+    } else {
+      console.log("Triangle detection failed:", 
+                   mergedAngles.length !== 3 ? "wrong number of angles" : "shape not closed");
     }
     
     // Shape analysis completed
+    console.log("Final scores - Circle:", circularityScore, "Triangle:", triangularityScore);
     
-    // Evaluate the scores with the constraint that the shape is closed
+    // Evaluate the scores with more lenient constraints for triangles
     if (isClosed) {
-      if (circularityScore > 0.75 && circularityScore > triangularityScore) {
+      // Make triangles easier to detect
+      const triangleBoost = 1.15; // Boost triangle score a bit to compensate for the difficulty
+      const adjustedTriangleScore = triangularityScore * triangleBoost;
+      
+      // Different logic paths for decision making
+      if (mergedAngles.length === 3 && adjustedTriangleScore > 0.55) {
+        // If we have exactly 3 corners and a decent triangularity score, prefer triangle
+        console.log("Triangle detected based on corner count and score:", adjustedTriangleScore);
+        return { shape: 'triangle', confidence: Math.min(adjustedTriangleScore, 0.95) };
+      } else if (circularityScore > 0.75 && circularityScore > adjustedTriangleScore) {
+        // Clear circle with high circularity
         return { shape: 'circle', confidence: circularityScore };
-      } else if (triangularityScore > 0.6 && triangularityScore > circularityScore) {
-        return { shape: 'triangle', confidence: triangularityScore };
+      } else if (adjustedTriangleScore > 0.55 && adjustedTriangleScore > circularityScore) {
+        // Lower threshold for triangles (was 0.6)
+        return { shape: 'triangle', confidence: Math.min(adjustedTriangleScore, 0.95) };
       } else if (circularityScore > 0.5) {
+        // Fallback for circles
         return { shape: 'circle', confidence: circularityScore * 0.8 };
-      } else if (triangularityScore > 0.4) {
-        return { shape: 'triangle', confidence: triangularityScore * 0.8 };
+      } else if (adjustedTriangleScore > 0.35) {
+        // Lower fallback threshold for triangles (was 0.4)
+        return { shape: 'triangle', confidence: adjustedTriangleScore * 0.8 };
       }
+    } else if (mergedAngles.length === 3 && triangularityScore > 0.5) {
+      // Special case: if it looks like a triangle but isn't quite closed, still accept it
+      console.log("Detected triangle despite not being perfectly closed");
+      return { shape: 'triangle', confidence: triangularityScore * 0.7 };
+    } else {
+      console.log("Shape not closed, rejecting both circle and triangle");
     }
     
     return { shape: 'unknown', confidence: 0.2 };
