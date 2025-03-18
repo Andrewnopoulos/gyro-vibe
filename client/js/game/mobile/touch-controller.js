@@ -802,9 +802,11 @@ export class TouchController {
           y: normalizedY
         });
         
-        this.eventBus.emit('mobile:rune-shape-recognized', {
+        // Use the correct event name that matches what FirstPersonController is listening for
+        this.eventBus.emit('mobile:rune-cast', {
           shape: recognizedShape.shape,
-          confidence: recognizedShape.confidence
+          confidence: recognizedShape.confidence,
+          playerId: 'mobile' // Add playerId to match expected format
         });
         
         // Clear after a delay

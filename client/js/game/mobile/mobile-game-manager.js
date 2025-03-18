@@ -1188,12 +1188,17 @@ export class MobileGameManager {
    * @param {Object} data - Rune mode data, including enabled state
    */
   handleToggleRuneMode(data) {
+    console.log('MobileGameManager.handleToggleRuneMode called with data:', JSON.stringify(data));
+    
     // Update game state
     this.gameState.runeMode = data.enabled;
     
     // Pass rune mode state to touch controller
     if (this.touchController) {
+      console.log('Calling touchController.setRuneMode with:', this.gameState.runeMode);
       this.touchController.setRuneMode(this.gameState.runeMode);
+    } else {
+      console.error('touchController not available when trying to set rune mode');
     }
     
     // Show notification
@@ -1212,6 +1217,8 @@ export class MobileGameManager {
    * @param {Object} data - Recognized rune data
    */
   handleRuneRecognized(data) {
+    console.log('MobileGameManager.handleRuneRecognized called with data:', JSON.stringify(data));
+    
     // data contains shape, confidence, and any additional properties
     
     // Show notification with recognized shape
@@ -1220,12 +1227,32 @@ export class MobileGameManager {
       'success'
     );
     
-    // Emit event to server/desktop to process the recognized rune
-    this.eventBus.emit('mobile:rune-cast', {
+    // Create properly formatted message for WebRTC with the correct event type
+    const message = {
+      type: 'mobile:rune-cast',  // This must match the type the WebRTCManager is handling
       shape: data.shape,
       confidence: data.confidence,
       playerId: this.gameStateManager.getLocalPlayerId()
-    });
+    };
+    
+    console.log('Sending rune cast message via WebRTC:', JSON.stringify(message));
+    
+    // Send via WebRTC directly if possible
+    if (window.webrtcManager && 
+        window.webrtcManager.dataChannel && 
+        window.webrtcManager.dataChannel.readyState === 'open') {
+      
+      window.webrtcManager.dataChannel.send(JSON.stringify(message));
+      console.log('Sent rune cast via WebRTC data channel');
+    } else {
+      // Otherwise emit to event bus - this should match what FirstPersonController listens for
+      console.log('Emitting mobile:rune-cast event via EventBus');
+      this.eventBus.emit('mobile:rune-cast', {
+        shape: data.shape,
+        confidence: data.confidence,
+        playerId: this.gameStateManager.getLocalPlayerId()
+      });
+    }
     
     // Add visual effect for rune casting
     this.createRuneCastEffect(data.shape);
