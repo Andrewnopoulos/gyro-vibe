@@ -142,3 +142,44 @@ We've fundamentally restructured the raycast system to be driven by the weapon's
    - Limited update frequency to prevent performance issues from too many raycasts
 
 This implementation correctly projects the weapon's orientation from its local space into world space, ensuring that the raycast direction matches where the weapon is actually pointing.
+
+## Next Testing (2025-03-19)
+- Nice, I can now see the world-space raycast and it seems to be working pretty much as intended.
+- You can now remove the bulk of the debug logging to do with raycasting, as well as the debug visualisations in the weapon-view space
+- please keep the debug visualisation of the raycast in world space, as well as the highlighting of the rigidbodies
+- Moving onto using the E key to pick up and put down objects...
+- I noticed this error whenever I would try to pick up objects:
+physics-manager.js:318 Uncaught TypeError: Cannot read properties of undefined (reading 'set')
+    at PhysicsManager.pickupObject (physics-manager.js:318:29)
+    at event-bus.js:40:47
+    at Array.forEach (<anonymous>)
+    at EventBus.emit (event-bus.js:40:27)
+    at GravityGunController.pickupObject (gravity-gun-controller.js:344:21)
+    at GravityGunController.onKeyDown (gravity-gun-controller.js:152:14)
+
+## Fixes for Object Pickup (2025-03-19)
+
+1. **Fixed the Error in PhysicsManager:**
+   - Added object ID direct lookup in the physics manager
+   - Created a new approach to find physics bodies by ID rather than just raycasting
+   - Added safety check to ensure bodyOffset is always initialized
+   - Fixed the hitPoint parameter in the gravityGun:pickup event
+
+2. **Removed Debug Logging:**
+   - Removed excessive debug logs related to raycasting
+   - Kept the world-space raycast visualization toggled with 'V' key
+   - Maintained object highlighting for visual feedback
+   - Kept only essential logs for troubleshooting
+
+3. **Improved Event Communication:**
+   - Enhanced gravityGun:pickup event with needed physics data
+   - Made sure required parameters are passed from controller to physics manager
+   - Fixed object highlighting to be consistent between pickup/drop cycles
+   - Streamlined the event flow for better reliability
+
+4. **Improved Error Handling:**
+   - Added fallback mechanism if object ID lookup fails
+   - Added safety checks to prevent undefined property errors
+   - Made the code more robust against missing parameters
+
+These changes should enable the gravity gun to properly pick up objects when pressing E, with the raycast now controlled by the weapon's orientation rather than the camera's view.

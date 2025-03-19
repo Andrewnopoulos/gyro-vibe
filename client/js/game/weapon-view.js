@@ -737,10 +737,7 @@ export class WeaponView {
     const origin = new THREE.Vector3();
     this.raycastOrigin.getWorldPosition(origin);
 
-    // *** KEY CHANGE: Get the actual orientation of the weapon from the phone's gyroscope data ***
-    // We need the full transformation hierarchy to get the correct orientation
-    
-    // First get the weapon's world quaternion that includes all transformations
+    // Get the weapon's world quaternion that includes all transformations
     const weaponWorldQuaternion = new THREE.Quaternion();
     this.raycastOrigin.getWorldQuaternion(weaponWorldQuaternion);
     
@@ -751,16 +748,13 @@ export class WeaponView {
     // Make sure direction is normalized
     direction.normalize();
 
-    // Also store the raw device quaternion for potential direct use
+    // Also store the raw device quaternion for direct use in world transforms
     const [w, x, y, z] = getQuaternion(
       this.lastGyroData.alpha, 
       this.lastGyroData.beta, 
       this.lastGyroData.gamma
     );
     const deviceQuaternion = new THREE.Quaternion(x, y, z, w);
-
-    // Add a debug message
-    console.log("Raycast origin:", origin, "direction:", direction);
 
     return {
       origin,

@@ -272,14 +272,48 @@ export class PhysicsManager {
   }
   
   pickupObject(data) {
-    console.log('PhysicsManager: pickupObject called with data:', data);
-    const { ray, sourceId } = data;
+    const { ray, sourceId, objectId } = data;
+    
+    // If objectId is provided (from gravity gun controller), try to find the body directly
+    if (objectId) {
+      // Find the physics body by ID - more reliable than raycasting
+      for (const [id, entry] of this.physicsBodies.entries()) {
+        if (id === objectId && entry.body.mass > 0) {
+          // Found the body, use it directly
+          this.heldBody = entry.body;
+          this.heldBodyId = id;
+          this.holdingPlayerId = sourceId || 'local';
+          
+          // Create a zero offset (center of object)
+          this.bodyOffset = new CANNON.Vec3(0, 0, 0);
+          
+          // Disable gravity
+          this.heldBody.gravity.set(0, 0, 0);
+          
+          // Store original mass and reduce for holding
+          this.heldBody.originalMass = this.heldBody.mass;
+          this.heldBody.mass = 0.1;
+          this.heldBody.updateMassProperties();
+          
+          // Create visual beam effect
+          this.createGravityBeam(this.heldBodyId);
+          
+          // Emit event for multiplayer sync
+          this.eventBus.emit('physics:object-pickup', {
+            id: this.heldBodyId,
+            playerId: this.holdingPlayerId
+          });
+          
+          return;
+        }
+      }
+    }
+    
+    // Fallback to raycasting if objectId not provided or not found
     
     // Convert ray to Cannon.js format
     const origin = new CANNON.Vec3(ray.origin.x, ray.origin.y, ray.origin.z);
     const direction = new CANNON.Vec3(ray.direction.x, ray.direction.y, ray.direction.z);
-    
-    console.log('Raycasting from origin:', origin, 'in direction:', direction);
     
     // Ray cast in physics world
     const result = new CANNON.RaycastResult();
@@ -289,8 +323,6 @@ export class PhysicsManager {
     scaledDirection.scale(20, scaledDirection); // Extend ray to 20 units to ensure it reaches
     
     this.world.raycastClosest(origin, scaledDirection, { collisionFilterMask: -1, skipBackfaces: true }, result);
-    
-    console.log('Raycast result:', result, 'hasHit:', result.hasHit);
     
     if (result.hasHit) {
       // Find which body was hit

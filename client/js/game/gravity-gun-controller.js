@@ -138,15 +138,11 @@ export class GravityGunController {
    * @param {KeyboardEvent} event - The keyboard event
    */
   onKeyDown(event) {
-    console.log('Key pressed:', event.code, 'Controller enabled:', this.enabled);
     if (!this.enabled) return;
     
     if (event.code === 'KeyE') {
-      console.log('E key pressed, isHolding:', this.isHolding);
-      
       // Force a raycast update right before attempting to pick up
       const raycastResult = this.performRaycast();
-      console.log('E key raycast result:', raycastResult);
       
       if (!this.isHolding) {
         this.pickupObject();
@@ -249,17 +245,11 @@ export class GravityGunController {
     }
     
     // Transform the raycast data from weapon view space to world space
-    // This is a crucial step because the weapon view exists in a different scene
     const mainCamera = this.camera;
     const weaponWorldPosition = this.weaponView.mapToWorldSpace(raycastData.origin, mainCamera);
     
-    // *** KEY CHANGE: Get the direction from the weapon's orientation instead of camera ***
-    // This makes the raycast follow where the weapon is pointing, not just where the camera is looking
+    // Get the direction from the weapon's orientation
     const weaponWorldDirection = this.weaponView.getWorldDirectionFromWeapon(mainCamera.quaternion);
-    
-    // Log the raycast information for debugging
-    console.log('Raycast origin:', weaponWorldPosition);
-    console.log('Raycast direction (from weapon orientation):', weaponWorldDirection);
     
     // Draw a debug line in the main scene to visualize the raycast
     this.drawDebugRaycast(weaponWorldPosition, weaponWorldDirection);
@@ -270,19 +260,6 @@ export class GravityGunController {
     
     // Raycast to find intersected objects
     const intersects = this.raycaster.intersectObjects(this.scene.children, true);
-    
-    // Debug intersects at a more verbose level to help troubleshoot
-    if (intersects.length > 0) {
-      console.log('Raycast intersects found:', intersects.length);
-      intersects.forEach((intersect, index) => {
-        console.log(`Intersect ${index}:`, 
-                    'object:', intersect.object.name || 'unnamed', 
-                    'distance:', intersect.distance,
-                    'physics ID:', intersect.object.userData?.physicsId || 'none');
-      });
-    } else {
-      console.log('No raycast intersects found');
-    }
 
     // Filter out objects without physics
     const physicsIntersects = intersects.filter(intersect => 
@@ -319,26 +296,23 @@ export class GravityGunController {
     const rayResult = this.performRaycast();
     
     if (rayResult.hit) {
-      console.log('Attempting to pick up object with ID:', rayResult.intersection.object.userData.physicsId);
-      
       // Get the physics object ID from the userData
       this.heldObjectId = rayResult.intersection.object.userData.physicsId;
       
       // Create ray data for physics system
       const ray = {
         origin: rayResult.weaponPosition,
-        direction: rayResult.weaponDirection
+        direction: rayResult.weaponDirection,
+        // The collision point in world space is needed by the physics manager
+        hitPoint: rayResult.intersection.point // This was missing before
       };
       
-      // Add more specific debug data to the event
+      // Create pickup data with all necessary information
       const pickupData = { 
         ray, 
         sourceId: 'local',
-        objectId: this.heldObjectId,
-        position: rayResult.intersection.point
+        objectId: this.heldObjectId
       };
-      
-      console.log('Sending pickup event with data:', pickupData);
       
       // Emit pickup event to physics system
       this.eventBus.emit('gravityGun:pickup', pickupData);
@@ -348,8 +322,6 @@ export class GravityGunController {
       
       // Make sure the object is highlighted while held
       this.highlightIntersectedObject(rayResult.intersection.object);
-    } else {
-      console.log('No hit detected in raycast');
     }
   }
   
@@ -359,9 +331,7 @@ export class GravityGunController {
   dropObject() {
     if (!this.isHolding) return;
     
-    console.log('Dropping object with ID:', this.heldObjectId);
-    
-    // Emit drop event with more context
+    // Emit drop event with context
     this.eventBus.emit('gravityGun:drop', {
       objectId: this.heldObjectId,
       playerId: 'local'
@@ -411,7 +381,6 @@ export class GravityGunController {
    */
   handleObjectPickup(data) {
     const { id, playerId } = data;
-    console.log('Object pickup event received:', data);
     
     // If this is our object, update our state
     if (playerId === 'local') {
@@ -421,7 +390,6 @@ export class GravityGunController {
       // Find the object in the scene to highlight it
       this.scene.traverse((object) => {
         if (object.userData && object.userData.physicsId === id) {
-          console.log('Found held object in scene:', object);
           this.highlightIntersectedObject(object);
         }
       });
@@ -434,7 +402,6 @@ export class GravityGunController {
    */
   handleObjectDrop(data) {
     const { id, playerId } = data;
-    console.log('Object drop event received:', data);
     
     // If this is our object, reset our state
     if (playerId === 'local' && this.heldObjectId === id) {
