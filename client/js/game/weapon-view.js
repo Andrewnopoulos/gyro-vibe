@@ -2,6 +2,9 @@ import * as THREE from 'three';
 import { WEAPON_BOBBING } from '../config.js';
 import { getQuaternion } from '../utils/math.js';
 
+// Debug flag - set to false to hide the permanent raycast visualization
+const DEBUG_RAYCAST = false;
+
 /**
  * Manages first-person weapon view
  */
@@ -21,6 +24,10 @@ export class WeaponView {
     this.bobbingTime = 0;
     this.lastGyroData = { alpha: 0, beta: 0, gamma: 0 };
     this.isMoving = false;
+    this.raycastOrigin = null;
+    this.raycastBeam = null;
+    this.debugRaycast = null;
+    this.showDebugRaycast = DEBUG_RAYCAST; // Control debug visualization
     
     // Define the offset quaternion for correct orientation
     this.offsetQuaternion = new THREE.Quaternion().setFromAxisAngle(
@@ -106,6 +113,49 @@ export class WeaponView {
       this.applyRuneEffect(data.shape, data.confidence);
     });
     
+    // Listen for gravity gun events to update visual feedback
+    this.eventBus.on('gravityGun:pickup', () => {
+      // Show beam when picking up an object
+      this.updateGravityBeam(true);
+    });
+    
+    this.eventBus.on('gravityGun:drop', () => {
+      // Hide beam when dropping an object
+      this.updateGravityBeam(false);
+    });
+    
+    this.eventBus.on('gravityGun:update-target', (data) => {
+      // Update beam to point at held object
+      if (data.position) {
+        const targetPos = new THREE.Vector3(
+          data.position.x, 
+          data.position.y, 
+          data.position.z
+        );
+        this.updateGravityBeam(true, targetPos);
+      }
+    });
+    
+    this.eventBus.on('gravityGun:highlight', (data) => {
+      // Visual indicator when pointing at a valid target
+      if (this.raycastOrigin) {
+        const indicator = this.raycastOrigin.getObjectByName('raycastOriginIndicator');
+        if (indicator && indicator.material) {
+          // Make the indicator visible when highlighting
+          indicator.material.visible = true;
+          // Change color based on whether we're pointing at a valid target
+          indicator.material.color.set(data.targetFound ? 0x00ff00 : 0xff0000);
+          
+          // Schedule hiding the indicator after a short delay
+          setTimeout(() => {
+            if (indicator && indicator.material) {
+              indicator.material.visible = false;
+            }
+          }, 100);
+        }
+      }
+    });
+    
     // Listen for window resize
     window.addEventListener('resize', this.onWindowResize.bind(this), false);
   }
@@ -165,6 +215,26 @@ export class WeaponView {
     homeButton.position.set(0, -height * 0.4, depth / 2 + 0.01);
     phoneContainer.add(homeButton);
     
+    // Add raycast origin point at the top of the phone
+    this.raycastOrigin = new THREE.Object3D();
+    this.raycastOrigin.name = 'raycastOrigin';
+    // Position at the top center of the phone, more forward to match visual expectation
+    this.raycastOrigin.position.set(0, height / 2 + 0.05, depth + 0.1);
+    phoneContainer.add(this.raycastOrigin);
+    
+    // Create a smaller, less obtrusive visual indicator for the raycast origin
+    const originIndicator = new THREE.Mesh(
+      new THREE.SphereGeometry(0.01, 8, 8),
+      new THREE.MeshBasicMaterial({ 
+        color: 0x00ff00, 
+        transparent: true,
+        opacity: 0.7,
+        visible: false // Only visible when highlighted
+      })
+    );
+    originIndicator.name = 'raycastOriginIndicator';
+    this.raycastOrigin.add(originIndicator);
+    
     // Position the phone as a weapon in first-person view
     this.weaponPhone.position.set(0.25, -0.2, -0.8);
   }
@@ -184,6 +254,9 @@ export class WeaponView {
     
     // Then apply movement bobbing effect
     this.updateBobbing(delta);
+    
+    // Always update debug raycast to show current aiming direction
+    this.updateDebugRaycast();
     
     // Render the weapon view
     if (this.weaponRenderer && this.weaponScene && this.weaponCamera) {
@@ -649,5 +722,302 @@ export class WeaponView {
     this.runeEffectTimeout = setTimeout(() => {
       this.clearRuneEffects();
     }, 5000);
+  }
+  
+  /**
+   * Get raycast data for the gravity gun
+   * @returns {Object} Object containing origin, direction, and weapon quaternion
+   */
+  getRaycastData() {
+    if (!this.raycastOrigin || !this.weaponPhone) {
+      return null;
+    }
+
+    // Get world position of raycast origin in weapon view space
+    const origin = new THREE.Vector3();
+    this.raycastOrigin.getWorldPosition(origin);
+
+    // Get forward direction from raycast origin
+    // Use a clearly defined forward vector that points out of the top of the phone
+    const direction = new THREE.Vector3(0, 0, -1);
+    
+    // Apply the weapon quaternion to get the actual direction in the weapon view space
+    const weaponQuaternion = this.weaponPhone.quaternion.clone();
+    direction.applyQuaternion(weaponQuaternion);
+
+    // Make sure direction is normalized
+    direction.normalize();
+
+    // Add a debug message
+    console.log("Raycast origin:", origin, "direction:", direction);
+
+    return {
+      origin,
+      direction,
+      weaponQuaternion
+    };
+  }
+
+  /**
+   * Map a point from weapon view space to main scene space
+   * This is an approximation since the weapon view is in a separate scene
+   * @param {THREE.Vector3} weaponSpacePoint - Point in weapon view space
+   * @param {THREE.Camera} mainCamera - Main scene camera
+   * @returns {THREE.Vector3} Approximated point in main scene space
+   */
+  mapToWorldSpace(weaponSpacePoint, mainCamera) {
+    // We need to transform the weapon view point to be relative to the main camera
+    // This is an approximation that works because the weapon view is positioned relative to the screen
+    
+    // Use camera position directly as the base point for raycast origin
+    const worldPoint = mainCamera.position.clone();
+    
+    // Add small offset in front of camera (where the weapon would be)
+    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(mainCamera.quaternion);
+    worldPoint.addScaledVector(forward, 0.3); // Position slightly in front of camera
+    
+    // Add a small vertical offset to match the visual weapon position
+    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(mainCamera.quaternion);
+    worldPoint.addScaledVector(up, 0.1); // Slightly above camera center
+    
+    return worldPoint;
+  }
+
+  /**
+   * Create or update a beam visualization for the gravity gun
+   * @param {boolean} isActive - Whether the beam should be active
+   * @param {THREE.Vector3} targetPosition - Optional target position for the beam
+   */
+  updateGravityBeam(isActive, targetPosition = null) {
+    // If beam should be inactive, remove it
+    if (!isActive) {
+      if (this.raycastBeam) {
+        if (this.raycastBeam.parent) {
+          this.raycastBeam.parent.remove(this.raycastBeam);
+        }
+        if (this.raycastBeam.geometry) {
+          this.raycastBeam.geometry.dispose();
+        }
+        if (this.raycastBeam.material) {
+          this.raycastBeam.material.dispose();
+        }
+        this.raycastBeam = null;
+      }
+      
+      // Keep debug raycast visible even when beam is inactive
+      this.updateDebugRaycast();
+      
+      return;
+    }
+
+    // Get raycast origin position
+    if (!this.raycastOrigin) return;
+    
+    const origin = new THREE.Vector3();
+    this.raycastOrigin.getWorldPosition(origin);
+    
+    // Create beam geometry
+    const beamLength = targetPosition ? 
+      origin.distanceTo(targetPosition) : 
+      5; // Default length if no target
+    
+    // If we don't have a beam yet, create one
+    if (!this.raycastBeam) {
+      const beamGeometry = new THREE.CylinderGeometry(0.005, 0.005, beamLength, 8);
+      // Rotate the cylinder so its length is along the z-axis
+      beamGeometry.rotateX(Math.PI / 2);
+      // Move origin of the cylinder to one end instead of center
+      beamGeometry.translate(0, 0, -beamLength / 2);
+      
+      const beamMaterial = new THREE.MeshBasicMaterial({
+        color: 0x00aaff,
+        transparent: true,
+        opacity: 0.7,
+        blending: THREE.AdditiveBlending
+      });
+      
+      this.raycastBeam = new THREE.Mesh(beamGeometry, beamMaterial);
+      this.raycastOrigin.add(this.raycastBeam);
+    } else {
+      // Update existing beam geometry
+      if (this.raycastBeam.geometry) {
+        this.raycastBeam.geometry.dispose();
+      }
+      
+      const beamGeometry = new THREE.CylinderGeometry(0.005, 0.005, beamLength, 8);
+      beamGeometry.rotateX(Math.PI / 2);
+      beamGeometry.translate(0, 0, -beamLength / 2);
+      
+      this.raycastBeam.geometry = beamGeometry;
+    }
+    
+    // If we have a target position, point the beam at it
+    if (targetPosition) {
+      // Convert target to local space of raycast origin
+      const raycastWorldPos = new THREE.Vector3();
+      this.raycastOrigin.getWorldPosition(raycastWorldPos);
+      
+      const raycastWorldQuat = this.raycastOrigin.getWorldQuaternion(new THREE.Quaternion());
+      
+      // Get the direction to the target
+      const direction = targetPosition.clone().sub(raycastWorldPos).normalize();
+      
+      // Create a quaternion that rotates from the default forward direction to the target direction
+      const quaternion = new THREE.Quaternion().setFromUnitVectors(
+        new THREE.Vector3(0, 0, -1), // Default forward direction
+        direction
+      );
+      
+      // Apply the rotation
+      this.raycastBeam.quaternion.copy(quaternion);
+    }
+    
+    // Pulse effect for the beam
+    const pulse = 0.7 + Math.sin(Date.now() / 200) * 0.3;
+    if (this.raycastBeam.material) {
+      this.raycastBeam.material.opacity = pulse * 0.7;
+    }
+    
+    // Also update debug raycast
+    this.updateDebugRaycast(targetPosition);
+  }
+  
+  /**
+   * Create or update a debug raycast visualization
+   * @param {THREE.Vector3} targetPosition - Optional target position for the beam
+   */
+  updateDebugRaycast(targetPosition = null) {
+    // Return early if debug visualization is disabled
+    if (!this.showDebugRaycast) {
+      // If we have a debug raycast but shouldn't, remove it
+      if (this.debugRaycast && this.debugRaycast.parent) {
+        this.debugRaycast.parent.remove(this.debugRaycast);
+        if (this.debugRaycast.geometry) {
+          this.debugRaycast.geometry.dispose();
+        }
+        if (this.debugRaycast.material) {
+          this.debugRaycast.material.dispose();
+        }
+        this.debugRaycast = null;
+      }
+      return;
+    }
+    
+    // Create debug line if it doesn't exist yet
+    if (!this.debugRaycast && this.raycastOrigin) {
+      // Create line material - very thin, transparent line
+      const material = new THREE.LineBasicMaterial({
+        color: 0xff0000,
+        transparent: true,
+        opacity: 0.3,
+        linewidth: 1
+      });
+      
+      // Create line geometry with default length
+      const points = [
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(0, 0, -10) // Default 10m length
+      ];
+      
+      const geometry = new THREE.BufferGeometry().setFromPoints(points);
+      
+      // Create the line
+      this.debugRaycast = new THREE.Line(geometry, material);
+      this.raycastOrigin.add(this.debugRaycast);
+    }
+    
+    // If we have the debug raycast, update its geometry
+    if (this.debugRaycast) {
+      // Get raycast data
+      const raycastData = this.getRaycastData();
+      if (!raycastData) return;
+      
+      // Default length if no target position provided
+      const length = targetPosition ? 
+        raycastData.origin.distanceTo(targetPosition) : 
+        10;
+      
+      // Create points for the line
+      const points = [
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(0, 0, -length)
+      ];
+      
+      // If there was a previous geometry, dispose it
+      if (this.debugRaycast.geometry) {
+        this.debugRaycast.geometry.dispose();
+      }
+      
+      // Update geometry
+      this.debugRaycast.geometry = new THREE.BufferGeometry().setFromPoints(points);
+      
+      // If we have a target position, point the ray at it
+      if (targetPosition) {
+        const raycastWorldPos = new THREE.Vector3();
+        this.raycastOrigin.getWorldPosition(raycastWorldPos);
+        
+        const direction = targetPosition.clone().sub(raycastWorldPos).normalize();
+        
+        const quaternion = new THREE.Quaternion().setFromUnitVectors(
+          new THREE.Vector3(0, 0, -1),
+          direction
+        );
+        
+        this.debugRaycast.quaternion.copy(quaternion);
+      }
+    }
+  }
+  
+  /**
+   * Toggle debug raycast visualization
+   * @param {boolean} show - Whether to show the debug raycast
+   */
+  toggleDebugRaycast(show) {
+    this.showDebugRaycast = show !== undefined ? show : !this.showDebugRaycast;
+    
+    // Update immediately
+    this.updateDebugRaycast();
+  }
+
+  /**
+   * Clean up resources
+   */
+  dispose() {
+    // Remove raycast beam
+    if (this.raycastBeam) {
+      if (this.raycastBeam.parent) {
+        this.raycastBeam.parent.remove(this.raycastBeam);
+      }
+      if (this.raycastBeam.geometry) {
+        this.raycastBeam.geometry.dispose();
+      }
+      if (this.raycastBeam.material) {
+        this.raycastBeam.material.dispose();
+      }
+      this.raycastBeam = null;
+    }
+    
+    // Remove debug raycast line
+    if (this.debugRaycast) {
+      if (this.debugRaycast.parent) {
+        this.debugRaycast.parent.remove(this.debugRaycast);
+      }
+      if (this.debugRaycast.geometry) {
+        this.debugRaycast.geometry.dispose();
+      }
+      if (this.debugRaycast.material) {
+        this.debugRaycast.material.dispose();
+      }
+      this.debugRaycast = null;
+    }
+    
+    // Clear any animations or timeouts
+    if (this.runeEffectTimeout) {
+      clearTimeout(this.runeEffectTimeout);
+      this.runeEffectTimeout = null;
+    }
+    
+    // Remove event listeners
+    window.removeEventListener('resize', this.onWindowResize.bind(this));
   }
 }

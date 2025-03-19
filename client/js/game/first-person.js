@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { PLAYER_HEIGHT, LOOK_SPEED, MOVE_SPEED } from '../config.js';
+import { GravityGunController } from './gravity-gun-controller.js';
+import { WeaponView } from './weapon-view.js';
 
 /**
  * Manages first-person mode controls
@@ -36,6 +38,12 @@ export class FirstPersonController {
     // UI elements
     this.controlsGuide = null;
     this.runeModeIndicator = null;
+    
+    // Create weapon view for first-person
+    this.weaponView = new WeaponView(eventBus, this.container);
+    
+    // Create gravity gun controller
+    this.gravityGunController = new GravityGunController(eventBus, sceneManager, this.weaponView);
     
     this.createUI();
     this.setupEventListeners();
@@ -79,6 +87,7 @@ export class FirstPersonController {
       Q - Toggle Rune Mode<br>
       E - Gravity Gun (pickup/drop objects)<br>
       T - Spawn Random Object<br>
+      V - Toggle Debug Raycast<br>
       Mouse - Look Around<br>
       <strong>Mobile Controls:</strong><br>
       Touch Drag - Look Around / Draw Runes
@@ -232,6 +241,14 @@ export class FirstPersonController {
     
     // Maintain player height
     this.camera.position.y = PLAYER_HEIGHT;
+    
+    // Determine if player is moving for weapon bob effect
+    const isMoving = this.moveForward || this.moveBackward || this.moveLeft || this.moveRight;
+    
+    // Update weapon view
+    if (this.weaponView) {
+      this.weaponView.update(delta, isMoving);
+    }
   }
 
   /**
@@ -349,6 +366,13 @@ export class FirstPersonController {
         // Only toggle on keydown, not on key hold
         if (!event.repeat) {
           this.toggleRuneMode();
+        }
+        break;
+      case 'KeyV':
+        // Toggle debug raycast visualization
+        if (!event.repeat && this.weaponView) {
+          this.weaponView.toggleDebugRaycast();
+          console.log('Debug raycast visualization toggled');
         }
         break;
     }
@@ -1144,5 +1168,40 @@ export class FirstPersonController {
     const radius = Math.max(maxX - minX, maxY - minY) / 2;
     
     return { center, radius };
+  }
+  
+  /**
+   * Clean up resources and event listeners
+   */
+  dispose() {
+    // Remove event listeners
+    document.removeEventListener('keydown', this.onKeyDown.bind(this));
+    document.removeEventListener('keyup', this.onKeyUp.bind(this));
+    document.removeEventListener('mousemove', this.onMouseMove.bind(this));
+    
+    // Dispose of UI elements
+    if (this.controlsGuide && this.controlsGuide.parentNode) {
+      this.controlsGuide.parentNode.removeChild(this.controlsGuide);
+    }
+    
+    if (this.runeModeIndicator && this.runeModeIndicator.parentNode) {
+      this.runeModeIndicator.parentNode.removeChild(this.runeModeIndicator);
+    }
+    
+    if (this.debugCanvas && this.debugCanvas.parentNode) {
+      this.debugCanvas.parentNode.removeChild(this.debugCanvas);
+    }
+    
+    // Dispose of the gravity gun controller
+    if (this.gravityGunController) {
+      this.gravityGunController.dispose();
+      this.gravityGunController = null;
+    }
+    
+    // Dispose of the weapon view
+    if (this.weaponView) {
+      this.weaponView.dispose();
+      this.weaponView = null;
+    }
   }
 }

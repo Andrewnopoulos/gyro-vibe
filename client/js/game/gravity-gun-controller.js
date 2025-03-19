@@ -7,24 +7,26 @@ export class GravityGunController {
   /**
    * @param {EventBus} eventBus - Application event bus
    * @param {SceneManager} sceneManager - The scene manager
+   * @param {WeaponView} weaponView - The weapon view
    */
-  constructor(eventBus, sceneManager) {
+  constructor(eventBus, sceneManager, weaponView) {
     this.eventBus = eventBus;
     this.sceneManager = sceneManager;
+    this.weaponView = weaponView;
     this.camera = sceneManager.getCamera();
     this.scene = sceneManager.getScene();
     this.enabled = false;
     this.isHolding = false;
     this.raycaster = new THREE.Raycaster();
     
-    // Visual elements
-    this.gravityBeam = null;
-    this.reticle = null;
     this.maxPickupDistance = 10; // Maximum distance to pick up objects
     this.heldObjectId = null;
+    this.highlightedObject = null; // Reference to currently highlighted object
     
-    // Visual feedback for player
-    this.createReticle();
+    // Debug properties 
+    this.debugEnabled = true;
+    this.lastRaycastTime = 0;
+    this.raycastInterval = 100; // ms between debug logs to avoid spam
     
     // Set up event listeners
     this.setupEventListeners();
@@ -37,12 +39,10 @@ export class GravityGunController {
     // Listen for first-person mode toggle
     this.eventBus.on('firstperson:enabled', () => {
       this.enabled = true;
-      if (this.reticle) this.reticle.visible = true;
     });
     
     this.eventBus.on('firstperson:disabled', () => {
       this.enabled = false;
-      if (this.reticle) this.reticle.visible = false;
       this.dropObject();
     });
     
@@ -66,51 +66,6 @@ export class GravityGunController {
   }
   
   /**
-   * Create a reticle/crosshair for aiming
-   */
-  createReticle() {
-    // Create a simple crosshair using lines
-    const material = new THREE.LineBasicMaterial({
-      color: 0x00aaff,
-      transparent: true,
-      opacity: 0.8
-    });
-    
-    const size = 0.01; // Size relative to screen
-    const geometry = new THREE.BufferGeometry();
-    
-    // Create crosshair lines
-    const points = [
-      // Horizontal line
-      new THREE.Vector3(-size, 0, 0),
-      new THREE.Vector3(size, 0, 0),
-      // Vertical line
-      new THREE.Vector3(0, -size, 0),
-      new THREE.Vector3(0, size, 0),
-      // Center dot outline
-      new THREE.Vector3(-size/3, -size/3, 0),
-      new THREE.Vector3(size/3, -size/3, 0),
-      new THREE.Vector3(size/3, size/3, 0),
-      new THREE.Vector3(-size/3, size/3, 0),
-      new THREE.Vector3(-size/3, -size/3, 0)
-    ];
-    
-    geometry.setFromPoints(points);
-    
-    // Create the line
-    this.reticle = new THREE.Line(geometry, material);
-    
-    // Position the reticle in front of the camera so it's always visible
-    this.reticle.position.set(0, 0, -0.5);
-    
-    // Add to camera so it moves with the view
-    this.camera.add(this.reticle);
-    
-    // Initially invisible if not in first person mode
-    this.reticle.visible = this.enabled;
-  }
-  
-  /**
    * Update function called each frame
    * @param {Object} data - Contains delta time
    */
@@ -120,21 +75,13 @@ export class GravityGunController {
     // Check if we're pointing at a physics object (for highlighting)
     const rayResult = this.performRaycast();
     
+    // Feedback is now handled in the weapon view through the beam
     if (rayResult.hit && !this.isHolding) {
-      // Change reticle color to indicate a valid target
-      if (this.reticle && this.reticle.material) {
-        this.reticle.material.color.set(0x00ff00); // Green when over valid object
-      }
+      // Emit an event for the weapon view to update visual feedback
+      this.eventBus.emit('gravityGun:highlight', { targetFound: true });
     } else if (!this.isHolding) {
-      // Reset reticle color
-      if (this.reticle && this.reticle.material) {
-        this.reticle.material.color.set(0x00aaff); // Blue default
-      }
-    } else {
-      // Holding an object - reticle is orange
-      if (this.reticle && this.reticle.material) {
-        this.reticle.material.color.set(0xff9900); // Orange when holding
-      }
+      // No target found
+      this.eventBus.emit('gravityGun:highlight', { targetFound: false });
     }
   }
   
@@ -148,6 +95,11 @@ export class GravityGunController {
     
     if (event.code === 'KeyE') {
       console.log('E key pressed, isHolding:', this.isHolding);
+      
+      // Force a raycast update right before attempting to pick up
+      const raycastResult = this.performRaycast();
+      console.log('E key raycast result:', raycastResult);
+      
       if (!this.isHolding) {
         this.pickupObject();
       } else {
@@ -233,29 +185,46 @@ export class GravityGunController {
    * @returns {Object} Object with hit boolean and raycast results
    */
   performRaycast() {
-    // Get the current weapon position and direction
-    const weaponPhone = this.getWeaponPosition();
-    if (!weaponPhone) return { hit: false };
+    // Get raycast data from the weapon view
+    if (!this.weaponView) {
+      return { hit: false };
+    }
     
-    // Create a ray from the weapon
-    const weaponPosition = new THREE.Vector3();
-    weaponPhone.getWorldPosition(weaponPosition);
+    const raycastData = this.weaponView.getRaycastData();
+    if (!raycastData) {
+      return { hit: false };
+    }
     
-    const weaponDirection = new THREE.Vector3(0, 0, -1);
-    weaponDirection.applyQuaternion(weaponPhone.quaternion);
+    // Transform the raycast data from weapon view space to world space
+    // This is a crucial step because the weapon view exists in a different scene
+    const mainCamera = this.camera;
+    const weaponWorldPosition = this.weaponView.mapToWorldSpace(raycastData.origin, mainCamera);
+    
+    // Get direction directly from camera for more intuitive aiming
+    const weaponWorldDirection = new THREE.Vector3(0, 0, -1).applyQuaternion(mainCamera.quaternion);
+    
+    // Log the raycast information for debugging
+    console.log('Raycast origin:', weaponWorldPosition);
+    console.log('Raycast direction:', weaponWorldDirection);
     
     // Set up raycaster with max distance
-    this.raycaster.set(weaponPosition, weaponDirection);
+    this.raycaster.set(weaponWorldPosition, weaponWorldDirection);
     this.raycaster.far = this.maxPickupDistance;
     
     // Raycast to find intersected objects
     const intersects = this.raycaster.intersectObjects(this.scene.children, true);
     
-    // Debug original intersects
-    console.log('Raycast intersects found:', intersects.length);
+    // Debug intersects at a more verbose level to help troubleshoot
     if (intersects.length > 0) {
-      console.log('First intersect object:', intersects[0].object);
-      console.log('userData:', intersects[0].object.userData);
+      console.log('Raycast intersects found:', intersects.length);
+      intersects.forEach((intersect, index) => {
+        console.log(`Intersect ${index}:`, 
+                    'object:', intersect.object.name || 'unnamed', 
+                    'distance:', intersect.distance,
+                    'physics ID:', intersect.object.userData?.physicsId || 'none');
+      });
+    } else {
+      console.log('No raycast intersects found');
     }
 
     // Filter out objects without physics
@@ -263,22 +232,24 @@ export class GravityGunController {
       intersect.object.userData && intersect.object.userData.physicsId
     );
     
-    console.log('Physics intersects found:', physicsIntersects.length);
-    
     if (physicsIntersects.length > 0) {
-      console.log('Found physics object with ID:', physicsIntersects[0].object.userData.physicsId);
+      console.log('Physics object hit!', physicsIntersects[0].object.userData.physicsId);
+      
+      // Add visual highlight to the intersected object
+      this.highlightIntersectedObject(physicsIntersects[0].object);
+      
       return {
         hit: true,
         intersection: physicsIntersects[0],
-        weaponPosition,
-        weaponDirection
+        weaponPosition: weaponWorldPosition,
+        weaponDirection: weaponWorldDirection
       };
     }
     
     return {
       hit: false,
-      weaponPosition,
-      weaponDirection
+      weaponPosition: weaponWorldPosition,
+      weaponDirection: weaponWorldDirection
     };
   }
   
@@ -286,14 +257,12 @@ export class GravityGunController {
    * Attempt to pick up an object with the gravity gun
    */
   pickupObject() {
-    console.log('pickupObject called, enabled:', this.enabled, 'isHolding:', this.isHolding);
     if (!this.enabled || this.isHolding) return;
     
     const rayResult = this.performRaycast();
-    console.log('Raycast result:', rayResult);
     
     if (rayResult.hit) {
-      console.log('Hit detected, object ID:', rayResult.intersection.object.userData.physicsId);
+      console.log('Attempting to pick up object with ID:', rayResult.intersection.object.userData.physicsId);
       
       // Get the physics object ID from the userData
       this.heldObjectId = rayResult.intersection.object.userData.physicsId;
@@ -304,131 +273,78 @@ export class GravityGunController {
         direction: rayResult.weaponDirection
       };
       
+      // Add more specific debug data to the event
+      const pickupData = { 
+        ray, 
+        sourceId: 'local',
+        objectId: this.heldObjectId,
+        position: rayResult.intersection.point
+      };
+      
+      console.log('Sending pickup event with data:', pickupData);
+      
       // Emit pickup event to physics system
-      console.log('Emitting gravityGun:pickup event with ray:', ray);
-      this.eventBus.emit('gravityGun:pickup', { ray, sourceId: 'local' });
+      this.eventBus.emit('gravityGun:pickup', pickupData);
       
       // Set holding state
       this.isHolding = true;
       
-      // Update reticle to show holding state
-      if (this.reticle && this.reticle.material) {
-        this.reticle.material.color.set(0xff9900); // Orange when holding
-      }
-      
-      // Start pulsing effect on reticle to indicate active gravity gun
-      this.startReticlePulse();
+      // Make sure the object is highlighted while held
+      this.highlightIntersectedObject(rayResult.intersection.object);
     } else {
       console.log('No hit detected in raycast');
     }
   }
   
   /**
-   * Start a pulsing animation on the reticle
-   */
-  startReticlePulse() {
-    if (!this.reticle) return;
-    
-    // Clear any existing animation
-    if (this.reticlePulseAnimation) {
-      clearInterval(this.reticlePulseAnimation);
-    }
-    
-    // Create pulsing effect
-    let pulseValue = 0;
-    let increasing = true;
-    
-    this.reticlePulseAnimation = setInterval(() => {
-      if (!this.isHolding) {
-        clearInterval(this.reticlePulseAnimation);
-        this.reticlePulseAnimation = null;
-        return;
-      }
-      
-      // Update pulse value
-      if (increasing) {
-        pulseValue += 0.05;
-        if (pulseValue >= 1) {
-          pulseValue = 1;
-          increasing = false;
-        }
-      } else {
-        pulseValue -= 0.05;
-        if (pulseValue <= 0.4) {
-          pulseValue = 0.4;
-          increasing = true;
-        }
-      }
-      
-      // Apply scale effect
-      const baseScale = 1;
-      const scale = baseScale * (1 + pulseValue * 0.3);
-      this.reticle.scale.set(scale, scale, scale);
-      
-      // Apply opacity effect
-      if (this.reticle.material) {
-        this.reticle.material.opacity = 0.5 + pulseValue * 0.5;
-      }
-    }, 30);
-  }
-  
-  /**
    * Drop the currently held object
    */
   dropObject() {
-    console.log('dropObject called, isHolding:', this.isHolding);
     if (!this.isHolding) return;
     
-    // Emit drop event
-    console.log('Emitting gravityGun:drop event');
-    this.eventBus.emit('gravityGun:drop');
+    console.log('Dropping object with ID:', this.heldObjectId);
+    
+    // Emit drop event with more context
+    this.eventBus.emit('gravityGun:drop', {
+      objectId: this.heldObjectId,
+      playerId: 'local'
+    });
+    
+    // Remove highlight
+    this.removeObjectHighlights();
     
     // Reset holding state
     this.isHolding = false;
     this.heldObjectId = null;
-    
-    // Reset reticle
-    if (this.reticle && this.reticle.material) {
-      this.reticle.material.color.set(0x00aaff);
-      this.reticle.material.opacity = 0.8;
-      this.reticle.scale.set(1, 1, 1);
-    }
-    
-    // Clear pulse animation
-    if (this.reticlePulseAnimation) {
-      clearInterval(this.reticlePulseAnimation);
-      this.reticlePulseAnimation = null;
-    }
   }
   
   /**
    * Update the target position for held objects
    */
   updateTargetPosition() {
-    if (!this.isHolding) return;
+    if (!this.isHolding || !this.weaponView) return;
     
-    // Get weapon position and direction
-    const weaponPhone = this.getWeaponPosition();
-    if (!weaponPhone) return;
+    // Get raycast data from the weapon view
+    const raycastData = this.weaponView.getRaycastData();
+    if (!raycastData) return;
     
-    const weaponPosition = new THREE.Vector3();
-    weaponPhone.getWorldPosition(weaponPosition);
-    
-    const weaponDirection = new THREE.Vector3(0, 0, -1);
-    weaponDirection.applyQuaternion(weaponPhone.quaternion);
+    // Transform to world space
+    const mainCamera = this.camera;
+    const weaponWorldPosition = this.weaponView.mapToWorldSpace(raycastData.origin, mainCamera);
+    const weaponWorldDirection = raycastData.direction.clone().applyQuaternion(mainCamera.quaternion);
     
     // Update target position (held 2-4 meters in front of weapon)
     // The physics system will handle the actual movement
     const holdDistance = 3; // meters
-    const targetPosition = weaponPosition.clone().add(
-      weaponDirection.multiplyScalar(holdDistance)
+    const targetPosition = weaponWorldPosition.clone().add(
+      weaponWorldDirection.multiplyScalar(holdDistance)
     );
     
-    // Send to physics system (it will update the visual beam)
+    // Send to physics system
     this.eventBus.emit('gravityGun:update-target', {
       objectId: this.heldObjectId,
       position: targetPosition,
-      rotation: weaponPhone.quaternion
+      rotation: mainCamera.quaternion
     });
   }
   
@@ -438,11 +354,20 @@ export class GravityGunController {
    */
   handleObjectPickup(data) {
     const { id, playerId } = data;
+    console.log('Object pickup event received:', data);
     
     // If this is our object, update our state
     if (playerId === 'local') {
       this.heldObjectId = id;
       this.isHolding = true;
+      
+      // Find the object in the scene to highlight it
+      this.scene.traverse((object) => {
+        if (object.userData && object.userData.physicsId === id) {
+          console.log('Found held object in scene:', object);
+          this.highlightIntersectedObject(object);
+        }
+      });
     }
   }
   
@@ -452,18 +377,15 @@ export class GravityGunController {
    */
   handleObjectDrop(data) {
     const { id, playerId } = data;
+    console.log('Object drop event received:', data);
     
     // If this is our object, reset our state
     if (playerId === 'local' && this.heldObjectId === id) {
       this.heldObjectId = null;
       this.isHolding = false;
       
-      // Reset reticle
-      if (this.reticle && this.reticle.material) {
-        this.reticle.material.color.set(0x00aaff);
-        this.reticle.material.opacity = 0.8;
-        this.reticle.scale.set(1, 1, 1);
-      }
+      // Remove object highlight when dropped
+      this.removeObjectHighlights();
     }
   }
   
@@ -579,42 +501,62 @@ export class GravityGunController {
   }
   
   /**
-   * Get the phone model object
-   * @returns {THREE.Object3D} The phone model object
+   * Highlight an intersected physics object to provide visual feedback
+   * @param {THREE.Object3D} object - The intersected object
    */
-  getWeaponPosition() {
-    // Get position and rotation of phone model in first person view
-    const phoneModel = this.scene.getObjectByName('phoneModel');
+  highlightIntersectedObject(object) {
+    // Remove any existing highlight from previous objects
+    this.removeObjectHighlights();
     
-    if (!phoneModel) {
-      console.warn('Phone model not found in scene, falling back to camera');
-      // Fallback to camera if phone model not found
-      return this.camera;
+    // If the object has a material, store original color and change to highlight color
+    if (object.material) {
+      // Store original color if not already stored
+      if (!object.userData.originalColor) {
+        object.userData.originalColor = object.material.color.clone();
+      }
+      
+      // Change to highlight color
+      object.material.emissive = new THREE.Color(0x33ff33);
+      object.material.emissiveIntensity = 0.5;
+      object.material.needsUpdate = true;
+      
+      // Store reference to highlighted object
+      this.highlightedObject = object;
+      
+      // Clear highlight after a short delay
+      setTimeout(() => {
+        if (this.highlightedObject === object && !this.isHolding) {
+          this.removeObjectHighlights();
+        }
+      }, 500);
     }
-    
-    return phoneModel;
+  }
+  
+  /**
+   * Remove highlight from previously highlighted objects
+   */
+  removeObjectHighlights() {
+    if (this.highlightedObject) {
+      // Restore original material properties
+      if (this.highlightedObject.material) {
+        this.highlightedObject.material.emissive = new THREE.Color(0x000000);
+        this.highlightedObject.material.emissiveIntensity = 0;
+        this.highlightedObject.material.needsUpdate = true;
+      }
+      
+      this.highlightedObject = null;
+    }
   }
   
   /**
    * Clean up resources
    */
   dispose() {
+    // Remove any object highlights
+    this.removeObjectHighlights();
+    
     // Remove event listeners
     document.removeEventListener('keydown', this.boundOnKeyDown);
     document.removeEventListener('keyup', this.boundOnKeyUp);
-    
-    // Clear reticle pulse animation
-    if (this.reticlePulseAnimation) {
-      clearInterval(this.reticlePulseAnimation);
-      this.reticlePulseAnimation = null;
-    }
-    
-    // Clean up reticle
-    if (this.reticle) {
-      this.camera.remove(this.reticle);
-      if (this.reticle.geometry) this.reticle.geometry.dispose();
-      if (this.reticle.material) this.reticle.material.dispose();
-      this.reticle = null;
-    }
   }
 }
