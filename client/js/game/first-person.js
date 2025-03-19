@@ -77,6 +77,8 @@ export class FirstPersonController {
       A/Arrow Left - Move Left<br>
       D/Arrow Right - Move Right<br>
       Q - Toggle Rune Mode<br>
+      E - Gravity Gun (pickup/drop objects)<br>
+      T - Spawn Random Object<br>
       Mouse - Look Around<br>
       <strong>Mobile Controls:</strong><br>
       Touch Drag - Look Around / Draw Runes

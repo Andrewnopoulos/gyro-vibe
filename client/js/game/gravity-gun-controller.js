@@ -46,9 +46,13 @@ export class GravityGunController {
       this.dropObject();
     });
     
+    // Store bound functions to use for both adding and removing event listeners
+    this.boundOnKeyDown = this.onKeyDown.bind(this);
+    this.boundOnKeyUp = this.onKeyUp.bind(this);
+    
     // Listen for key presses
-    document.addEventListener('keydown', this.onKeyDown.bind(this));
-    document.addEventListener('keyup', this.onKeyUp.bind(this));
+    document.addEventListener('keydown', this.boundOnKeyDown);
+    document.addEventListener('keyup', this.boundOnKeyUp);
     
     // Listen for weapon orientation updates
     this.eventBus.on('sensor:gyro-updated', this.updateOrientation.bind(this));
@@ -139,9 +143,11 @@ export class GravityGunController {
    * @param {KeyboardEvent} event - The keyboard event
    */
   onKeyDown(event) {
+    console.log('Key pressed:', event.code, 'Controller enabled:', this.enabled);
     if (!this.enabled) return;
     
     if (event.code === 'KeyE') {
+      console.log('E key pressed, isHolding:', this.isHolding);
       if (!this.isHolding) {
         this.pickupObject();
       } else {
@@ -245,12 +251,22 @@ export class GravityGunController {
     // Raycast to find intersected objects
     const intersects = this.raycaster.intersectObjects(this.scene.children, true);
     
+    // Debug original intersects
+    console.log('Raycast intersects found:', intersects.length);
+    if (intersects.length > 0) {
+      console.log('First intersect object:', intersects[0].object);
+      console.log('userData:', intersects[0].object.userData);
+    }
+
     // Filter out objects without physics
     const physicsIntersects = intersects.filter(intersect => 
       intersect.object.userData && intersect.object.userData.physicsId
     );
     
+    console.log('Physics intersects found:', physicsIntersects.length);
+    
     if (physicsIntersects.length > 0) {
+      console.log('Found physics object with ID:', physicsIntersects[0].object.userData.physicsId);
       return {
         hit: true,
         intersection: physicsIntersects[0],
@@ -270,11 +286,15 @@ export class GravityGunController {
    * Attempt to pick up an object with the gravity gun
    */
   pickupObject() {
+    console.log('pickupObject called, enabled:', this.enabled, 'isHolding:', this.isHolding);
     if (!this.enabled || this.isHolding) return;
     
     const rayResult = this.performRaycast();
+    console.log('Raycast result:', rayResult);
     
     if (rayResult.hit) {
+      console.log('Hit detected, object ID:', rayResult.intersection.object.userData.physicsId);
+      
       // Get the physics object ID from the userData
       this.heldObjectId = rayResult.intersection.object.userData.physicsId;
       
@@ -285,7 +305,8 @@ export class GravityGunController {
       };
       
       // Emit pickup event to physics system
-      this.eventBus.emit('gravityGun:pickup', { ray });
+      console.log('Emitting gravityGun:pickup event with ray:', ray);
+      this.eventBus.emit('gravityGun:pickup', { ray, sourceId: 'local' });
       
       // Set holding state
       this.isHolding = true;
@@ -297,6 +318,8 @@ export class GravityGunController {
       
       // Start pulsing effect on reticle to indicate active gravity gun
       this.startReticlePulse();
+    } else {
+      console.log('No hit detected in raycast');
     }
   }
   
@@ -353,9 +376,11 @@ export class GravityGunController {
    * Drop the currently held object
    */
   dropObject() {
+    console.log('dropObject called, isHolding:', this.isHolding);
     if (!this.isHolding) return;
     
     // Emit drop event
+    console.log('Emitting gravityGun:drop event');
     this.eventBus.emit('gravityGun:drop');
     
     // Reset holding state
@@ -559,7 +584,15 @@ export class GravityGunController {
    */
   getWeaponPosition() {
     // Get position and rotation of phone model in first person view
-    return this.scene.getObjectByName('phoneModel');
+    const phoneModel = this.scene.getObjectByName('phoneModel');
+    
+    if (!phoneModel) {
+      console.warn('Phone model not found in scene, falling back to camera');
+      // Fallback to camera if phone model not found
+      return this.camera;
+    }
+    
+    return phoneModel;
   }
   
   /**
@@ -567,8 +600,8 @@ export class GravityGunController {
    */
   dispose() {
     // Remove event listeners
-    document.removeEventListener('keydown', this.onKeyDown.bind(this));
-    document.removeEventListener('keyup', this.onKeyUp.bind(this));
+    document.removeEventListener('keydown', this.boundOnKeyDown);
+    document.removeEventListener('keyup', this.boundOnKeyUp);
     
     // Clear reticle pulse animation
     if (this.reticlePulseAnimation) {

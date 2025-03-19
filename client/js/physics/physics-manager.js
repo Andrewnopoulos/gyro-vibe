@@ -272,27 +272,43 @@ export class PhysicsManager {
   }
   
   pickupObject(data) {
+    console.log('PhysicsManager: pickupObject called with data:', data);
     const { ray, sourceId } = data;
     
     // Convert ray to Cannon.js format
     const origin = new CANNON.Vec3(ray.origin.x, ray.origin.y, ray.origin.z);
     const direction = new CANNON.Vec3(ray.direction.x, ray.direction.y, ray.direction.z);
     
+    console.log('Raycasting from origin:', origin, 'in direction:', direction);
+    
     // Ray cast in physics world
     const result = new CANNON.RaycastResult();
-    this.world.raycastClosest(origin, direction, { collisionFilterMask: -1, skipBackfaces: true }, result);
+    
+    // Scale up the ray length to ensure it can reach objects
+    const scaledDirection = direction.clone();
+    scaledDirection.scale(20, scaledDirection); // Extend ray to 20 units to ensure it reaches
+    
+    this.world.raycastClosest(origin, scaledDirection, { collisionFilterMask: -1, skipBackfaces: true }, result);
+    
+    console.log('Raycast result:', result, 'hasHit:', result.hasHit);
     
     if (result.hasHit) {
       // Find which body was hit
       const hitBody = result.body;
+      console.log('Hit body:', hitBody, 'mass:', hitBody.mass);
       
       // Don't pick up static bodies
-      if (hitBody.mass <= 0) return;
+      if (hitBody.mass <= 0) {
+        console.log('Cannot pickup static body with mass 0');
+        return;
+      }
       
       // Store the hit body as the held body
       this.heldBody = hitBody;
       this.heldBodyId = this.getIdFromBody(hitBody);
       this.holdingPlayerId = sourceId || 'local';
+      
+      console.log('Setting held body ID:', this.heldBodyId, 'player:', this.holdingPlayerId);
       
       // Store the offset from the hit point
       this.bodyOffset.copy(result.hitPointWorld);
@@ -310,6 +326,7 @@ export class PhysicsManager {
       this.createGravityBeam(this.heldBodyId);
       
       // Emit event for multiplayer sync
+      console.log('Emitting physics:object-pickup event');
       this.eventBus.emit('physics:object-pickup', {
         id: this.heldBodyId,
         playerId: this.holdingPlayerId
@@ -317,11 +334,14 @@ export class PhysicsManager {
       
       // Network sync if in multiplayer mode
       if (this.socketManager) {
+        console.log('Sending physics:object-pickup via socket');
         this.socketManager.emit('physics:object-pickup', {
           id: this.heldBodyId,
           playerId: this.holdingPlayerId
         });
       }
+    } else {
+      console.log('No physics body hit by raycast');
     }
   }
   
@@ -428,11 +448,15 @@ export class PhysicsManager {
   
   // Create a visual beam connecting the phone to the held object
   createGravityBeam(objectId) {
+    console.log('Creating gravity beam for object:', objectId);
     // Remove any existing beam
     this.removeGravityBeam();
     
     const physicsObj = this.physicsBodies.get(objectId);
-    if (!physicsObj) return;
+    if (!physicsObj) {
+      console.warn('Physics object not found for ID:', objectId);
+      return;
+    }
     
     // Create a glowy line to represent the gravity beam
     const material = new THREE.LineBasicMaterial({
@@ -442,17 +466,32 @@ export class PhysicsManager {
       linewidth: 2
     });
     
-    // Create initial geometry (will be updated each frame)
+    // Get the phone model position (source of beam)
+    const phoneModel = this.scene.getObjectByName('phoneModel');
+    if (!phoneModel) {
+      console.warn('Phone model not found in scene, cannot create beam');
+      return;
+    }
+    
+    const sourcePosition = new THREE.Vector3();
+    phoneModel.getWorldPosition(sourcePosition);
+    
+    // Get object position for the target end of the beam
+    const targetPosition = new THREE.Vector3(
+      physicsObj.body.position.x,
+      physicsObj.body.position.y,
+      physicsObj.body.position.z
+    );
+    
+    // Create initial geometry with actual positions
     const geometry = new THREE.BufferGeometry();
-    const points = [
-      new THREE.Vector3(0, 0, 0),
-      new THREE.Vector3(0, 0, 0)
-    ];
+    const points = [sourcePosition, targetPosition];
     geometry.setFromPoints(points);
     
     // Create the line
     this.gravityBeam = new THREE.Line(geometry, material);
     this.scene.add(this.gravityBeam);
+    console.log('Gravity beam created and added to scene');
   }
   
   // Update the gravity beam position

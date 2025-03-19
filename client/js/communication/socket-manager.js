@@ -116,7 +116,12 @@ export class SocketManager {
       'host-changed',
       'game-toggle-rune-mode',
       'game-rune-recognized',
-      'mobile-rune-cast'
+      'mobile-rune-cast',
+      'physics:state',
+      'physics:object-created',
+      'physics:object-pickup',
+      'physics:object-drop',
+      'physics:apply-force'
     ];
     
     // Set up handlers for all multiplayer events

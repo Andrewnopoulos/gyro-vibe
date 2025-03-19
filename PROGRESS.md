@@ -1,132 +1,45 @@
-## Rune Mode Feature - Implemented!
+Physics progress:
 
-The Rune Mode feature has been successfully implemented, allowing players to toggle between standard control mode and a special "rune drawing" mode for casting magical effects by drawing shapes.
+- can spawn rigidbodies
+- can't pick them up with E
 
-### Feature Overview:
-- Desktop players can press the Q key to toggle rune mode on/off
-- When rune mode is active:
-  - Visual indicators appear on both desktop and mobile interfaces
-  - The mobile touch input is used for drawing shapes instead of rotating the view
-  - A canvas visualization shows the touch path as it's being drawn
-  - Shape recognition system detects circles and triangles
-  - Successful shape recognition triggers visual effects on both devices
+## Gravity Gun & Weapon View Integration Plan
 
-## Implementation Details
+### Current Understanding
+1. The gravity gun controller currently performs raycasts from the `phoneModel` in the main scene
+2. The weapon view renders the weapon in a separate scene with its own camera and renderer
+3. The weapon in the weapon-view isn't physically present in the main world space
 
-### 1. ✅ Key Handling in FirstPersonController
-- Added 'Q' key detection to toggle rune mode
-- Implemented runeMode boolean flag to track state
-- Created toggleRuneMode method with proper event emissions
-- Added visual UI indicator on desktop view when rune mode is active
-- Implemented effects for recognized shapes (shield, fireball, particles)
+### Integration Plan
 
-### 2. ✅ Visual Indicator on Phone Model
-- Added glowing visual indicator to the 3D phone model
-- Implemented animations for the rune mode indicator
-- Connected indicator to the rune mode toggle events
-- Created smooth transitions between modes
+#### Step 1: Create Weapon-to-World Space Mapping
+- Modify the `WeaponView` class to expose the weapon position/orientation in a way the gravity gun can use
+- Add a method in `WeaponView` to calculate the world-space equivalent of a point in the weapon-view's local space
+- Expose the top of the weapon as the raycast origin point
 
-### 3. ✅ Touch Input Handling
-- Updated TouchController to handle different modes
-- Implemented path capturing in rune mode
-- Created touch point storage for shape analysis
-- Added event emissions for path data
+#### Step 2: Update GravityGunController to Use WeaponView for Raycasting
+- Modify the `performRaycast()` method to get raycast origin and direction from the weapon view
+- Update the `getWeaponPosition()` method to use the weapon-view's position instead of looking for "phoneModel"
+- Ensure raycasts are properly transformed from weapon-view space to world space
 
-### 4. ✅ Touch Path Visualization
-- Added canvas overlay for drawing on mobile
-- Implemented glowing path visualization
-- Added trailing effect for better visual feedback
-- Implemented touch path clearing after shape recognition
+#### Step 3: Add Visual Feedback in Weapon View
+- Add a method to show raycast visual effects on the weapon in weapon-view
+- Create a beam/laser effect that extends from the weapon when using the gravity gun
+- Ensure the beam visually aligns with where objects are being picked up in the main scene
 
-### 5. ✅ Shape Recognition System
-- Implemented algorithms for detecting:
-  - Circles (using circularity score)
-  - Triangles (using angle detection)
-- Added confidence scoring for recognition
-- Created thresholds to handle imprecise drawing
-- Implemented event system for recognized shapes
+#### Step 4: Handle Communication Between Components
+- Set up event listeners to synchronize weapon-view and gravity gun states
+- Update both components when orientation changes
+- Ensure the visual effects in both scenes are properly aligned
 
-### 6. ✅ Desktop-Mobile Communication
-- Updated WebRTC manager to handle rune mode events
-- Enhanced Socket.IO manager with rune events
-- Implemented server-side handling of rune events
-- Created bidirectional communication for shape recognition
+#### Step 5: Testing and Optimization
+- Test raycasting from different positions and orientations
+- Verify that objects can be picked up correctly
+- Optimize any performance bottlenecks in the coordinate transformations
+- Ensure consistent behavior in different screen sizes and orientations
 
-### 7. ✅ User Feedback System
-- Added visual feedback for recognized shapes
-- Implemented notifications on both desktop and mobile
-- Created visual effects for different recognized shapes
-- Added animations for successful shape recognition
-
-### 8. ✅ Mobile Game Manager Integration
-- Added rune mode handling to MobileGameManager
-- Implemented shape visualization on mobile device
-- Created effects for recognized runes
-- Added game state tracking for rune mode
-
-### Next Improvement Ideas
-- Add more complex shapes (squares, stars, etc.)
-- Implement practical game effects for each rune shape
-- Add sound effects for drawing and successful recognition
-- Create tutorial for introducing the rune system to players
-- Optimize shape recognition for better accuracy
-
-
-# Physics and Gravity Gun Implementation Plan
-
-Please implement a physics system with multiplayer-synchronized rigidbodies and a gravity gun feature. The gravity gun should allow desktop players to pick up physics objects by pointing their gyro controller at them and pressing E.
-
-## Requirements
-
-1. Create a physics system using Cannon.js
-2. Make physics objects visible and synchronized in multiplayer
-3. Implement a gravity gun that locks objects to the gyro controller when activated
-
-## Implementation Steps
-
-1. Add Cannon.js to the project dependencies
-2. Create a PhysicsManager class to handle the physics simulation
-3. Create a GravityGunController class to manage object picking/dropping
-4. Update the networking code to synchronize physics state
-5. Add server-side handlers for physics events
-
-## Code Structure
-
-Please implement the following classes:
-
-1. `PhysicsManager`: Main physics system that simulates rigidbodies
-2. `GravityGunController`: Handles raycast detection and object manipulation
-3. Update `GameStateManager` to handle physics synchronization
-
-## Detailed Class Requirements
-
-### PhysicsManager
-
-- Initialize a Cannon.js physics world
-- Create, update and manage physics objects
-- Synchronize visual meshes with physics bodies
-- Track held objects and apply forces to move them
-- Emit network events for multiplayer synchronization
-
-### GravityGunController
-
-- Cast rays from the phone/weapon to detect physics objects
-- Implement pickup/drop with E key
-- Create visual beam effect when holding objects
-- Update held object position based on phone orientation
-- Support all existing gyroscope functionality
-
-### Network Synchronization
-
-- Send physics object states periodically
-- Handle object creation events
-- Synchronize object pickup/drop between clients
-- Update server to relay physics events
-
-## Additional Notes
-
-- Each physics object should have a unique ID for tracking across the network
-- Use interpolation for smooth remote object movement
-- Create different object types and colors for visual variety
-- Add the physics system to the app initialization code
-- The existing gyroscope controller should remain fully functional
+### Implementation Details
+- Add a reference point to the top of the weapon in `WeaponView` (e.g., "raycastOrigin")
+- Create a transformation matrix to convert between weapon view space and world space
+- Use vector math to ensure the raycast direction aligns between both scenes
+- Add debug visualization options to help verify correct alignment
