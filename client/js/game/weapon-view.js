@@ -937,85 +937,19 @@ export class WeaponView {
    * @param {THREE.Vector3} targetPosition - Optional target position for the beam
    */
   updateDebugRaycast(targetPosition = null) {
-    // Return early if debug visualization is disabled
-    if (!this.showDebugRaycast) {
-      // If we have a debug raycast but shouldn't, remove it
-      if (this.debugRaycast && this.debugRaycast.parent) {
-        this.debugRaycast.parent.remove(this.debugRaycast);
-        if (this.debugRaycast.geometry) {
-          this.debugRaycast.geometry.dispose();
-        }
-        if (this.debugRaycast.material) {
-          this.debugRaycast.material.dispose();
-        }
-        this.debugRaycast = null;
-      }
-      return;
-    }
-    
-    // Create debug line if it doesn't exist yet
-    if (!this.debugRaycast && this.raycastOrigin) {
-      // Create line material - very thin, transparent line
-      const material = new THREE.LineBasicMaterial({
-        color: 0xff0000,
-        transparent: true,
-        opacity: 0.3,
-        linewidth: 1
-      });
-      
-      // Create line geometry with default length
-      const points = [
-        new THREE.Vector3(0, 0, 0),
-        new THREE.Vector3(0, 0, -10) // Default 10m length
-      ];
-      
-      const geometry = new THREE.BufferGeometry().setFromPoints(points);
-      
-      // Create the line
-      this.debugRaycast = new THREE.Line(geometry, material);
-      this.raycastOrigin.add(this.debugRaycast);
-    }
-    
-    // If we have the debug raycast, update its geometry
-    if (this.debugRaycast) {
-      // Get raycast data
-      const raycastData = this.getRaycastData();
-      if (!raycastData) return;
-      
-      // Default length if no target position provided
-      const length = targetPosition ? 
-        raycastData.origin.distanceTo(targetPosition) : 
-        10;
-      
-      // Create points for the line
-      const points = [
-        new THREE.Vector3(0, 0, 0),
-        new THREE.Vector3(0, 0, -length)
-      ];
-      
-      // If there was a previous geometry, dispose it
+    // Always ensure any existing debug visualization is removed
+    if (this.debugRaycast && this.debugRaycast.parent) {
+      this.debugRaycast.parent.remove(this.debugRaycast);
       if (this.debugRaycast.geometry) {
         this.debugRaycast.geometry.dispose();
       }
-      
-      // Update geometry
-      this.debugRaycast.geometry = new THREE.BufferGeometry().setFromPoints(points);
-      
-      // If we have a target position, point the ray at it
-      if (targetPosition) {
-        const raycastWorldPos = new THREE.Vector3();
-        this.raycastOrigin.getWorldPosition(raycastWorldPos);
-        
-        const direction = targetPosition.clone().sub(raycastWorldPos).normalize();
-        
-        const quaternion = new THREE.Quaternion().setFromUnitVectors(
-          new THREE.Vector3(0, 0, -1),
-          direction
-        );
-        
-        this.debugRaycast.quaternion.copy(quaternion);
+      if (this.debugRaycast.material) {
+        this.debugRaycast.material.dispose();
       }
+      this.debugRaycast = null;
     }
+    
+    // No longer create or update debug visualizations in weapon view
   }
   
   /**
@@ -1023,9 +957,10 @@ export class WeaponView {
    * @param {boolean} show - Whether to show the debug raycast
    */
   toggleDebugRaycast(show) {
-    this.showDebugRaycast = show !== undefined ? show : !this.showDebugRaycast;
+    // Debug visualization in weapon view has been disabled
+    this.showDebugRaycast = false;
     
-    // Update immediately
+    // Clean up any existing visualization
     this.updateDebugRaycast();
   }
 

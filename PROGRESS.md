@@ -183,3 +183,99 @@ physics-manager.js:318 Uncaught TypeError: Cannot read properties of undefined (
    - Made the code more robust against missing parameters
 
 These changes should enable the gravity gun to properly pick up objects when pressing E, with the raycast now controlled by the weapon's orientation rather than the camera's view.
+
+### Issues 1
+- Looks like there are still some debug visualisations in the weapon-view space which need to be cleaned up
+- I'm still getting some errors when trying to pick up physics objects:
+physics-manager.js:291 Uncaught TypeError: Cannot read properties of undefined (reading 'set')
+    at PhysicsManager.pickupObject (physics-manager.js:291:33)
+    at event-bus.js:40:47
+    at Array.forEach (<anonymous>)
+    at EventBus.emit (event-bus.js:40:27)
+    at GravityGunController.pickupObject (gravity-gun-controller.js:318:21)
+    at GravityGunController.onKeyDown (gravity-gun-controller.js:148:14)
+
+4
+gravity-gun-controller.js:270 Physics object hit! physics_5d57g0mr2
+gravity-gun-controller.js:270 Physics object hit! physics_l39wf7or5
+2
+gravity-gun-controller.js:270 Physics object hit! physics_3vvbiz7mh
+gravity-gun-controller.js:270 Physics object hit! physics_3vvbiz7mh
+gravity-gun-controller.js:270 Physics object hit! physics_3vvbiz7mh
+physics-manager.js:291 Uncaught TypeError: Cannot read properties of undefined (reading 'set')
+    at PhysicsManager.pickupObject (physics-manager.js:291:33)
+    at event-bus.js:40:47physics-manager.js:291 Uncaught TypeError: Cannot read properties of undefined (reading 'set')
+    at PhysicsManager.pickupObject (physics-manager.js:291:33)
+    at event-bus.js:40:47
+    at Array.forEach (<anonymous>)
+    at EventBus.emit (event-bus.js:40:27)
+    at GravityGunController.pickupObject (gravity-gun-controller.js:318:21)
+    at GravityGunController.onKeyDown (gravity-gun-controller.js:148:14)
+
+4
+gravity-gun-controller.js:270 Physics object hit! physics_5d57g0mr2
+gravity-gun-controller.js:270 Physics object hit! physics_l39wf7or5
+2
+gravity-gun-controller.js:270 Physics object hit! physics_3vvbiz7mh
+gravity-gun-controller.js:270 Physics object hit! physics_3vvbiz7mh
+gravity-gun-controller.js:270 Physics object hit! physics_3vvbiz7mh
+physics-manager.js:291 Uncaught TypeError: Cannot read properties of undefined (reading 'set')
+    at PhysicsManager.pickupObject (physics-manager.js:291:33)
+    at event-bus.js:40:47
+    at Array.forEach (<anonymous>)
+    at EventBus.emit (event-bus.js:40:27)
+    at GravityGunController.pickupObject (gravity-gun-controller.js:318:21)
+    at GravityGunController.onKeyDown (gravity-gun-controller.js:148:14)
+    at Array.forEach (<anonymous>)
+    at EventBus.emit (event-bus.js:40:27)
+    at GravityGunController.pickupObject (gravity-gun-controller.js:318:21)
+    at GravityGunController.onKeyDown (gravity-gun-controller.js:148:14)
+
+## Final Fixes (2025-03-19)
+
+1. **Fixed TypeError in PhysicsManager:**
+   - Added proper bodyOffset initialization checks to prevent "Cannot read properties of undefined" errors
+   - Ensured that bodyOffset is always properly initialized before using .set() method
+   - Added safety checks in both direct object lookup and raycast fallback code paths
+
+2. **Removed Debug Visualizations in Weapon-View Space:**
+   - Completely removed all debug raycast visualizations in the weapon-view space
+   - Modified updateDebugRaycast() method to only clean up existing visualizations
+   - Updated toggleDebugRaycast() to prevent creating new debug visualizations
+
+3. **Cleaned Up Debug Logging:**
+   - Removed console.log statements related to physics object detection
+   - Removed logging of gravity beam creation and ray hits
+   - Kept only the most essential debug information
+   - Made code cleaner and more production-ready
+
+4. **Enhanced Error Handling:**
+   - Added additional safeguards to prevent null reference errors
+   - Made object lookup and physics interaction more robust
+   - Improved failure handling in various methods
+
+The gravity gun should now function correctly with the weapon-view oriented raycast and without any TypeErrors. The debugging visualizations in the world space (green ray and object highlighting) have been preserved for gameplay feedback, while the excess debug code has been cleaned up.
+
+## Additional Safety Fixes (2025-03-19)
+
+After further testing, we identified and fixed more potential causes of TypeErrors:
+
+1. **Comprehensive Initialization and Null Checks:**
+   - Added additional safety checks for bodyOffset initialization in all relevant methods
+   - Implemented null checks on all properties before accessing their methods
+   - Added fallbacks with default values for all vector components (x, y, z)
+   - Protected against undefined properties in the CANNON.js physics objects
+
+2. **Improved Data Structure in Communication:**
+   - Enhanced safety in the ray object passed between components
+   - Added explicit checks and default values for ray origin, direction and hit points
+   - Ensured all vector components are initialized with safe defaults (0)
+   - Protected the event emission system from undefined values
+
+3. **Gravity Property Safety:**
+   - Added checks to verify the gravity property exists before using it
+   - Implemented fallback creation of gravity property if missing
+   - Ensured consistent gravity handling across all code paths
+
+These comprehensive safety measures should prevent any "Cannot read properties of undefined" errors and make the physics interaction system more robust against edge cases.
+

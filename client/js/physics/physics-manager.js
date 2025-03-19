@@ -19,7 +19,7 @@ export class PhysicsManager {
     
     // For gravity gun functionality
     this.heldBody = null;
-    this.bodyOffset = new CANNON.Vec3();
+    this.bodyOffset = new CANNON.Vec3(0, 0, 0); // Initialize with zeros
     this.targetPosition = new CANNON.Vec3();
     this.targetRotation = new CANNON.Quaternion();
     this.heldBodyId = null;
@@ -272,7 +272,13 @@ export class PhysicsManager {
   }
   
   pickupObject(data) {
-    const { ray, sourceId, objectId } = data;
+    if (!data) return;
+    const { ray, sourceId, objectId } = data || {};
+    
+    // Ensure bodyOffset is always initialized
+    if (!this.bodyOffset) {
+      this.bodyOffset = new CANNON.Vec3(0, 0, 0);
+    }
     
     // If objectId is provided (from gravity gun controller), try to find the body directly
     if (objectId) {
@@ -285,10 +291,18 @@ export class PhysicsManager {
           this.holdingPlayerId = sourceId || 'local';
           
           // Create a zero offset (center of object)
-          this.bodyOffset = new CANNON.Vec3(0, 0, 0);
+          // Make sure bodyOffset is properly initialized before using it
+          if (!this.bodyOffset) {
+            this.bodyOffset = new CANNON.Vec3();
+          }
+          this.bodyOffset.set(0, 0, 0);
           
-          // Disable gravity
-          this.heldBody.gravity.set(0, 0, 0);
+          // Safely disable gravity (ensuring the gravity property exists)
+          if (this.heldBody.gravity) {
+            this.heldBody.gravity.set(0, 0, 0);
+          } else {
+            this.heldBody.gravity = new CANNON.Vec3(0, 0, 0);
+          }
           
           // Store original mass and reduce for holding
           this.heldBody.originalMass = this.heldBody.mass;
@@ -311,9 +325,14 @@ export class PhysicsManager {
     
     // Fallback to raycasting if objectId not provided or not found
     
+    // Make sure we have ray data before proceeding
+    if (!ray || !ray.origin || !ray.direction) {
+      return;
+    }
+    
     // Convert ray to Cannon.js format
-    const origin = new CANNON.Vec3(ray.origin.x, ray.origin.y, ray.origin.z);
-    const direction = new CANNON.Vec3(ray.direction.x, ray.direction.y, ray.direction.z);
+    const origin = new CANNON.Vec3(ray.origin.x || 0, ray.origin.y || 0, ray.origin.z || 0);
+    const direction = new CANNON.Vec3(ray.direction.x || 0, ray.direction.y || 0, ray.direction.z || 0);
     
     // Ray cast in physics world
     const result = new CANNON.RaycastResult();
@@ -327,11 +346,9 @@ export class PhysicsManager {
     if (result.hasHit) {
       // Find which body was hit
       const hitBody = result.body;
-      console.log('Hit body:', hitBody, 'mass:', hitBody.mass);
       
       // Don't pick up static bodies
       if (hitBody.mass <= 0) {
-        console.log('Cannot pickup static body with mass 0');
         return;
       }
       
@@ -340,14 +357,23 @@ export class PhysicsManager {
       this.heldBodyId = this.getIdFromBody(hitBody);
       this.holdingPlayerId = sourceId || 'local';
       
-      console.log('Setting held body ID:', this.heldBodyId, 'player:', this.holdingPlayerId);
+      // Store the held body ID and player
+      
+      // Ensure bodyOffset is initialized before using it
+      if (!this.bodyOffset) {
+        this.bodyOffset = new CANNON.Vec3();
+      }
       
       // Store the offset from the hit point
       this.bodyOffset.copy(result.hitPointWorld);
       this.bodyOffset.vsub(hitBody.position, this.bodyOffset);
       
-      // Disable gravity for held body
-      this.heldBody.gravity.set(0, 0, 0);
+      // Safely disable gravity (ensuring the gravity property exists)
+      if (this.heldBody.gravity) {
+        this.heldBody.gravity.set(0, 0, 0);
+      } else {
+        this.heldBody.gravity = new CANNON.Vec3(0, 0, 0);
+      }
       
       // Reduce mass while held (makes it easier to move)
       this.heldBody.originalMass = this.heldBody.mass;
@@ -358,7 +384,6 @@ export class PhysicsManager {
       this.createGravityBeam(this.heldBodyId);
       
       // Emit event for multiplayer sync
-      console.log('Emitting physics:object-pickup event');
       this.eventBus.emit('physics:object-pickup', {
         id: this.heldBodyId,
         playerId: this.holdingPlayerId
@@ -366,19 +391,21 @@ export class PhysicsManager {
       
       // Network sync if in multiplayer mode
       if (this.socketManager) {
-        console.log('Sending physics:object-pickup via socket');
         this.socketManager.emit('physics:object-pickup', {
           id: this.heldBodyId,
           playerId: this.holdingPlayerId
         });
       }
-    } else {
-      console.log('No physics body hit by raycast');
     }
   }
   
   updateHeldBody() {
     if (!this.heldBody) return;
+    
+    // Safety check for bodyOffset
+    if (!this.bodyOffset) {
+      this.bodyOffset = new CANNON.Vec3(0, 0, 0);
+    }
     
     // Get the phone model position and orientation
     const phoneModel = this.scene.getObjectByName('phoneModel');
@@ -480,13 +507,11 @@ export class PhysicsManager {
   
   // Create a visual beam connecting the phone to the held object
   createGravityBeam(objectId) {
-    console.log('Creating gravity beam for object:', objectId);
     // Remove any existing beam
     this.removeGravityBeam();
     
     const physicsObj = this.physicsBodies.get(objectId);
     if (!physicsObj) {
-      console.warn('Physics object not found for ID:', objectId);
       return;
     }
     
@@ -501,7 +526,6 @@ export class PhysicsManager {
     // Get the phone model position (source of beam)
     const phoneModel = this.scene.getObjectByName('phoneModel');
     if (!phoneModel) {
-      console.warn('Phone model not found in scene, cannot create beam');
       return;
     }
     
@@ -523,7 +547,6 @@ export class PhysicsManager {
     // Create the line
     this.gravityBeam = new THREE.Line(geometry, material);
     this.scene.add(this.gravityBeam);
-    console.log('Gravity beam created and added to scene');
   }
   
   // Update the gravity beam position

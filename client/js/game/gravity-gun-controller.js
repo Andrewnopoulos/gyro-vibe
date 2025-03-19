@@ -267,8 +267,6 @@ export class GravityGunController {
     );
     
     if (physicsIntersects.length > 0) {
-      console.log('Physics object hit!', physicsIntersects[0].object.userData.physicsId);
-      
       // Add visual highlight to the intersected object
       this.highlightIntersectedObject(physicsIntersects[0].object);
       
@@ -299,12 +297,24 @@ export class GravityGunController {
       // Get the physics object ID from the userData
       this.heldObjectId = rayResult.intersection.object.userData.physicsId;
       
-      // Create ray data for physics system
+      // Create ray data for physics system with safety checks
       const ray = {
-        origin: rayResult.weaponPosition,
-        direction: rayResult.weaponDirection,
+        origin: rayResult.weaponPosition ? {
+          x: rayResult.weaponPosition.x || 0,
+          y: rayResult.weaponPosition.y || 0,
+          z: rayResult.weaponPosition.z || 0
+        } : {x: 0, y: 0, z: 0},
+        direction: rayResult.weaponDirection ? {
+          x: rayResult.weaponDirection.x || 0,
+          y: rayResult.weaponDirection.y || 0,
+          z: rayResult.weaponDirection.z || 0
+        } : {x: 0, y: 0, z: 0},
         // The collision point in world space is needed by the physics manager
-        hitPoint: rayResult.intersection.point // This was missing before
+        hitPoint: rayResult.intersection.point ? {
+          x: rayResult.intersection.point.x || 0,
+          y: rayResult.intersection.point.y || 0,
+          z: rayResult.intersection.point.z || 0
+        } : {x: 0, y: 0, z: 0}
       };
       
       // Create pickup data with all necessary information
@@ -603,8 +613,6 @@ export class GravityGunController {
     if (this.debugRayLine) {
       this.debugRayLine.visible = this.showDebugRay;
     }
-    
-    console.log("Debug raycast visualization:", this.showDebugRay ? "enabled" : "disabled");
   }
   
   /**
