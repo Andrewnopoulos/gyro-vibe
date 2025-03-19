@@ -737,16 +737,27 @@ export class WeaponView {
     const origin = new THREE.Vector3();
     this.raycastOrigin.getWorldPosition(origin);
 
-    // Get forward direction from raycast origin
-    // Use a clearly defined forward vector that points out of the top of the phone
-    const direction = new THREE.Vector3(0, 0, -1);
+    // *** KEY CHANGE: Get the actual orientation of the weapon from the phone's gyroscope data ***
+    // We need the full transformation hierarchy to get the correct orientation
     
-    // Apply the weapon quaternion to get the actual direction in the weapon view space
-    const weaponQuaternion = this.weaponPhone.quaternion.clone();
-    direction.applyQuaternion(weaponQuaternion);
-
+    // First get the weapon's world quaternion that includes all transformations
+    const weaponWorldQuaternion = new THREE.Quaternion();
+    this.raycastOrigin.getWorldQuaternion(weaponWorldQuaternion);
+    
+    // Get forward direction from the weapon's perspective
+    const direction = new THREE.Vector3(0, 0, -1);
+    direction.applyQuaternion(weaponWorldQuaternion);
+    
     // Make sure direction is normalized
     direction.normalize();
+
+    // Also store the raw device quaternion for potential direct use
+    const [w, x, y, z] = getQuaternion(
+      this.lastGyroData.alpha, 
+      this.lastGyroData.beta, 
+      this.lastGyroData.gamma
+    );
+    const deviceQuaternion = new THREE.Quaternion(x, y, z, w);
 
     // Add a debug message
     console.log("Raycast origin:", origin, "direction:", direction);
@@ -754,7 +765,9 @@ export class WeaponView {
     return {
       origin,
       direction,
-      weaponQuaternion
+      weaponWorldQuaternion,
+      deviceQuaternion,
+      rawGyroData: this.lastGyroData
     };
   }
 
@@ -765,22 +778,65 @@ export class WeaponView {
    * @param {THREE.Camera} mainCamera - Main scene camera
    * @returns {THREE.Vector3} Approximated point in main scene space
    */
-  mapToWorldSpace(weaponSpacePoint, mainCamera) {
-    // We need to transform the weapon view point to be relative to the main camera
-    // This is an approximation that works because the weapon view is positioned relative to the screen
-    
-    // Use camera position directly as the base point for raycast origin
+  mapToWorldSpace(weaponSpacePoint, mainCamera, useWeaponOrientation = true) {
+    // Start with the camera position as our base reference point
     const worldPoint = mainCamera.position.clone();
     
-    // Add small offset in front of camera (where the weapon would be)
+    // Add a small offset to position the raycast origin at a realistic position
+    // in relation to where the weapon would be in the world
     const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(mainCamera.quaternion);
-    worldPoint.addScaledVector(forward, 0.3); // Position slightly in front of camera
+    worldPoint.addScaledVector(forward, 0.5); // Position in front of camera
     
-    // Add a small vertical offset to match the visual weapon position
+    // Add a small vertical and lateral offset to match the visual weapon position
     const up = new THREE.Vector3(0, 1, 0).applyQuaternion(mainCamera.quaternion);
-    worldPoint.addScaledVector(up, 0.1); // Slightly above camera center
+    worldPoint.addScaledVector(up, -0.2); // Slightly below camera center for more realistic positioning
+    
+    // Add slight rightward offset to match weapon position
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(mainCamera.quaternion);
+    worldPoint.addScaledVector(right, 0.2); // Slightly to the right of camera
     
     return worldPoint;
+  }
+  
+  /**
+   * Get a world space direction vector that represents where the weapon is pointing
+   * @param {THREE.Quaternion} cameraQuaternion - Main camera quaternion for reference frame
+   * @returns {THREE.Vector3} Direction vector in world space
+   */
+  getWorldDirectionFromWeapon(cameraQuaternion) {
+    if (!this.raycastOrigin || !this.weaponPhone) {
+      // Fallback to camera forward direction
+      return new THREE.Vector3(0, 0, -1).applyQuaternion(cameraQuaternion);
+    }
+    
+    // Get the raw device rotation from gyroscope data
+    const [w, x, y, z] = getQuaternion(
+      this.lastGyroData.alpha, 
+      this.lastGyroData.beta, 
+      this.lastGyroData.gamma
+    );
+    const deviceQuaternion = new THREE.Quaternion(x, y, z, w);
+    
+    // Apply the offset correction that was used when creating the weapon view
+    const correctedQuaternion = this.offsetQuaternion.clone().multiply(deviceQuaternion);
+    
+    // Create a transformation to align local weapon space with world space
+    // This takes the weapon/phone's local forward vector and transforms it to world space
+    
+    // The phone's "forward" direction when used as a pointer/gun would be up from the screen
+    // which corresponds to the local +Y axis after our initial rotation
+    const weaponForward = new THREE.Vector3(0, 1, 0);
+    
+    // Transform this direction by the device orientation and any corrections
+    weaponForward.applyQuaternion(correctedQuaternion);
+    
+    // Finally, transform to world space by applying camera rotation
+    weaponForward.applyQuaternion(cameraQuaternion);
+    
+    // Ensure normalized
+    weaponForward.normalize();
+    
+    return weaponForward;
   }
 
   /**

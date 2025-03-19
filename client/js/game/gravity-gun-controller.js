@@ -28,8 +28,44 @@ export class GravityGunController {
     this.lastRaycastTime = 0;
     this.raycastInterval = 100; // ms between debug logs to avoid spam
     
+    // Create debug raycast line for visualization in world space
+    this.debugRayLine = null;
+    this.showDebugRay = true; // Set to false in production
+    this.createDebugRayLine();
+    
     // Set up event listeners
     this.setupEventListeners();
+  }
+  
+  /**
+   * Create a debug ray line to visualize raycasts in the main scene
+   */
+  createDebugRayLine() {
+    if (!this.showDebugRay) return;
+    
+    // Create a line for debug visualization
+    const material = new THREE.LineBasicMaterial({
+      color: 0x00ff00, // Bright green for visibility
+      transparent: true,
+      opacity: 0.7,
+      linewidth: 2
+    });
+    
+    // Default points - will be updated in drawDebugRaycast
+    const points = [
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(0, 0, -1)
+    ];
+    
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    
+    // Create line and add to scene
+    this.debugRayLine = new THREE.Line(geometry, material);
+    this.debugRayLine.name = "DebugRaycast";
+    this.scene.add(this.debugRayLine);
+    
+    // Initially hide it
+    this.debugRayLine.visible = false;
   }
   
   /**
@@ -72,6 +108,13 @@ export class GravityGunController {
   update(data) {
     if (!this.enabled) return;
     
+    // Limit the frequency of raycast updates to avoid performance issues
+    const now = Date.now();
+    if (now - this.lastRaycastTime < this.raycastInterval) {
+      return;
+    }
+    this.lastRaycastTime = now;
+    
     // Check if we're pointing at a physics object (for highlighting)
     const rayResult = this.performRaycast();
     
@@ -82,6 +125,11 @@ export class GravityGunController {
     } else if (!this.isHolding) {
       // No target found
       this.eventBus.emit('gravityGun:highlight', { targetFound: false });
+    }
+    
+    // If we're holding an object, update its position
+    if (this.isHolding) {
+      this.updateTargetPosition();
     }
   }
   
@@ -105,6 +153,11 @@ export class GravityGunController {
       } else {
         this.dropObject();
       }
+    }
+    
+    // Toggle debug raycast visualization with V key
+    if (event.code === 'KeyV' && !event.repeat) {
+      this.toggleDebugRaycast();
     }
     
     // Spawn random physics object with T key
@@ -200,12 +253,16 @@ export class GravityGunController {
     const mainCamera = this.camera;
     const weaponWorldPosition = this.weaponView.mapToWorldSpace(raycastData.origin, mainCamera);
     
-    // Get direction directly from camera for more intuitive aiming
-    const weaponWorldDirection = new THREE.Vector3(0, 0, -1).applyQuaternion(mainCamera.quaternion);
+    // *** KEY CHANGE: Get the direction from the weapon's orientation instead of camera ***
+    // This makes the raycast follow where the weapon is pointing, not just where the camera is looking
+    const weaponWorldDirection = this.weaponView.getWorldDirectionFromWeapon(mainCamera.quaternion);
     
     // Log the raycast information for debugging
     console.log('Raycast origin:', weaponWorldPosition);
-    console.log('Raycast direction:', weaponWorldDirection);
+    console.log('Raycast direction (from weapon orientation):', weaponWorldDirection);
+    
+    // Draw a debug line in the main scene to visualize the raycast
+    this.drawDebugRaycast(weaponWorldPosition, weaponWorldDirection);
     
     // Set up raycaster with max distance
     this.raycaster.set(weaponWorldPosition, weaponWorldDirection);
@@ -549,11 +606,58 @@ export class GravityGunController {
   }
   
   /**
+   * Draw or update the debug raycast visualization in the main scene
+   * @param {THREE.Vector3} origin - Origin point of the raycast
+   * @param {THREE.Vector3} direction - Direction vector of the raycast
+   */
+  drawDebugRaycast(origin, direction) {
+    if (!this.showDebugRay || !this.debugRayLine) return;
+    
+    // Make the debug line visible
+    this.debugRayLine.visible = true;
+    
+    // Calculate end point based on direction and max distance
+    const endPoint = origin.clone().add(
+      direction.clone().multiplyScalar(this.maxPickupDistance)
+    );
+    
+    // Update the line geometry
+    const points = [origin, endPoint];
+    this.debugRayLine.geometry.dispose();
+    this.debugRayLine.geometry = new THREE.BufferGeometry().setFromPoints(points);
+  }
+  
+  /**
+   * Toggle the debug raycast visualization
+   */
+  toggleDebugRaycast() {
+    this.showDebugRay = !this.showDebugRay;
+    
+    if (this.debugRayLine) {
+      this.debugRayLine.visible = this.showDebugRay;
+    }
+    
+    console.log("Debug raycast visualization:", this.showDebugRay ? "enabled" : "disabled");
+  }
+  
+  /**
    * Clean up resources
    */
   dispose() {
     // Remove any object highlights
     this.removeObjectHighlights();
+    
+    // Remove debug raycast line
+    if (this.debugRayLine && this.debugRayLine.parent) {
+      this.debugRayLine.parent.remove(this.debugRayLine);
+      if (this.debugRayLine.geometry) {
+        this.debugRayLine.geometry.dispose();
+      }
+      if (this.debugRayLine.material) {
+        this.debugRayLine.material.dispose();
+      }
+      this.debugRayLine = null;
+    }
     
     // Remove event listeners
     document.removeEventListener('keydown', this.boundOnKeyDown);

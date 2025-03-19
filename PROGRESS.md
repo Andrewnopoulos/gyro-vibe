@@ -101,39 +101,44 @@ These changes address the issues noted in testing where:
 3. E key was detecting objects (shown in logs) but feedback was missing
 
 
+## New Testing:
+- That's looking much better in a way
+- Now I can see via highlight which object i'm going to pick up
 
-### New testing:
+### Next steps
+- Now I'd like you to think deeply about this next part:
+- The Raycast in world space is still centered on the player's view
+- I'd like the raycast to be controlled by the orientation of the weapon in the weapon-view
+- Think hard about how to project that orientation into world space
+- I want that raycast to be the one to trigger the highlights on the physics rigidbodies
 
-- Debug logs:
-Raycast intersects found: 1
-gravity-gun-controller.js:220 Intersect 0: object: unnamed distance: 3.7143271155441746 physics ID: none
-weapon-view.js:763 Raycast origin: Vector3 {x: 0.3516312163640528, y: -0.09327730035840767, z: -1.2508673432857758} direction: Vector3 {x: -0.0769848517838799, y: -0.9938096042328243, z: 0.08009870866881179}
-weapon-view.js:763 Raycast origin: Vector3 {x: 0.3516312163640528, y: -0.09327730035840767, z: -1.2508673432857758} direction: Vector3 {x: -0.0769848517838799, y: -0.9938096042328243, z: 0.08009870866881179}
-weapon-view.js:763 Raycast origin: Vector3 {x: 0.3516312163640528, y: -0.09327730035840767, z: -1.2508673432857758} direction: Vector3 {x: -0.0769848517838799, y: -0.9938096042328243, z: 0.08009870866881179}
-gravity-gun-controller.js:206 Raycast origin: Vector3 {x: 3.3923686325899656, y: 1.5206982745590387, z: 1.6180245154024144}
-gravity-gun-controller.js:207 Raycast direction: Vector3 {x: 0.38667765368434853, y: -0.5440280868377404, z: 0.7446568557885138}
-gravity-gun-controller.js:218 Raycast intersects found: 1
-gravity-gun-controller.js:220 Intersect 0: object: unnamed distance: 3.7143271155441746 physics ID: none
+## Weapon-Controlled Raycast Implementation (2025-03-19)
 
-- Another debug log excerpt:
-Raycast intersects found: 2
-gravity-gun-controller.js:220 Intersect 0: object: unnamed distance: 0.5496479906332833 physics ID: physics_ajfpm7vzi
-gravity-gun-controller.js:220 Intersect 1: object: unnamed distance: 2.151843215132433 physics ID: none
-gravity-gun-controller.js:235 Physics object hit! physics_ajfpm7vzi
-weapon-view.js:763 Raycast origin: Vector3 {x: 0.33387651141192376, y: -0.09785975137666547, z: -1.255556912409996} direction: Vector3 {x: -0.020586015291614936, y: -0.9945203806251895, z: 0.10249599258284053}
-weapon-view.js:763 Raycast origin: Vector3 {x: 0.33387651141192376, y: -0.09785975137666547, z: -1.255556912409996} direction: Vector3 {x: -0.020586015291614936, y: -0.9945203806251895, z: 0.10249599258284053}
-weapon-view.js:763 Raycast origin: Vector3 {x: 0.33387651141192376, y: -0.09785975137666547, z: -1.255556912409996} direction: Vector3 {x: -0.020586015291614936, y: -0.9945203806251895, z: 0.10249599258284053}
-gravity-gun-controller.js:206 Raycast origin: Vector3 {x: 2.8774950604233376, y: 1.385354937454372, z: 1.624803921725152}
-gravity-gun-controller.js:207 Raycast direction: Vector3 {x: -0.13528390611839253, y: -0.8761581346614697, z: -0.46265017865757274}
-gravity-gun-controller.js:218 Raycast intersects found: 2
-gravity-gun-controller.js:220 Intersect 0: object: unnamed distance: 0.5496479906332833 physics ID: physics_ajfpm7vzi
-gravity-gun-controller.js:220 Intersect 1: object: unnamed distance: 2.151843215132433 physics ID: none
-gravity-gun-controller.js:235 Physics object hit! physics_ajfpm7vzi
+We've fundamentally restructured the raycast system to be driven by the weapon's orientation rather than the camera's view:
 
-- I can see that it's successfully intersecting, even though the visualisation doesn't appear to intersect.
-- Pressing E still doesn't cause anything to happen
-- There is no visual indication on the 3d object that it's being intersected with
-- The debug raycast visualisations still appear to be pointing the wrong way.
-  - Now there is one pointing the old way
-  - And a new one pointing a completely different way
-- Maybe just remove the debug ray casting visualisations
+1. **Weapon Orientation in World Space**:
+   - Added `getWorldDirectionFromWeapon()` method that correctly transforms the weapon's local orientation to world space
+   - Used the gyroscope data to determine weapon pointing direction
+   - Applied appropriate quaternion transformations to account for different coordinate spaces
+
+2. **Improved Raycast Debug Visualization**:
+   - Added a visible green ray in the main scene that shows exactly where the weapon is pointing
+   - Ray updates in real-time as the weapon moves
+   - Toggle with 'V' key for easy debugging
+
+3. **Accurate Physics Object Targeting**:
+   - The raycast now follows the weapon's orientation, not just where the camera is looking
+   - Physics objects are highlighted when the weapon points at them
+   - Pickup occurs exactly where the weapon is aimed
+
+4. **Fixed Coordinate Space Issues**:
+   - Properly transformed between weapon view space and world space
+   - Ensured consistent behavior between visual representation and physics interactions
+   - Made the raycast origin position more consistent with the visual weapon
+
+5. **Enhanced Debugging**:
+   - Added clearer visual feedback for physics interactions
+   - Improved logging to show actual ray direction and hit results
+   - Limited update frequency to prevent performance issues from too many raycasts
+
+This implementation correctly projects the weapon's orientation from its local space into world space, ensuring that the raycast direction matches where the weapon is actually pointing.
