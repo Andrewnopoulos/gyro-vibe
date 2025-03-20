@@ -290,6 +290,9 @@ export class PhysicsManager {
           this.heldBodyId = id;
           this.holdingPlayerId = sourceId || 'local';
           
+          // Add debug logging to track ID settings
+          // Debug removed
+          
           // Create a zero offset (center of object)
           // Make sure bodyOffset is properly initialized before using it
           if (!this.bodyOffset) {
@@ -304,19 +307,17 @@ export class PhysicsManager {
             this.heldBody.gravity = new CANNON.Vec3(0, 0, 0);
           }
           
-          // Store original mass and reduce for holding
+          // Store original mass and reduce for holding - but not as drastically
           this.heldBody.originalMass = this.heldBody.mass;
-          this.heldBody.mass = 0.1;
+          // Changed from 0.1 to use a percentage of original mass (minimum 0.5)
+          this.heldBody.mass = Math.max(0.5, this.heldBody.originalMass * 0.5);
           this.heldBody.updateMassProperties();
           
           // Create visual beam effect
           this.createGravityBeam(this.heldBodyId);
           
-          // Emit event for multiplayer sync
-          this.eventBus.emit('physics:object-pickup', {
-            id: this.heldBodyId,
-            playerId: this.holdingPlayerId
-          });
+          // Event will be emitted at the end of the method to avoid duplicated events
+          // Do not emit event here, as we'd emit it twice in some cases
           
           return;
         }
@@ -351,7 +352,7 @@ export class PhysicsManager {
       if (hitBody.mass <= 0) {
         return;
       }
-      
+
       // Store the hit body as the held body
       this.heldBody = hitBody;
       this.heldBodyId = this.getIdFromBody(hitBody);
@@ -375,13 +376,19 @@ export class PhysicsManager {
         this.heldBody.gravity = new CANNON.Vec3(0, 0, 0);
       }
       
-      // Reduce mass while held (makes it easier to move)
+      // Reduce mass while held - but not as drastically
       this.heldBody.originalMass = this.heldBody.mass;
-      this.heldBody.mass = 0.1;
+      // Changed from 0.1 to use a percentage of original mass (minimum 0.5)
+      this.heldBody.mass = Math.max(0.5, this.heldBody.originalMass * 0.5);
       this.heldBody.updateMassProperties();
       
       // Create visual beam effect
       this.createGravityBeam(this.heldBodyId);
+    }
+    
+    // If we successfully picked up an object, emit events
+    if (this.heldBody && this.heldBodyId) {
+      // Debug removed
       
       // Emit event for multiplayer sync
       this.eventBus.emit('physics:object-pickup', {
@@ -407,58 +414,100 @@ export class PhysicsManager {
       this.bodyOffset = new CANNON.Vec3(0, 0, 0);
     }
     
-    // Get the phone model position and orientation
-    const phoneModel = this.scene.getObjectByName('phoneModel');
-    if (!phoneModel) return;
+    // Use the stored target position from gravity gun's updateHeldObjectTarget
+    if (!this.targetPosition) {
+      this.targetPosition = new CANNON.Vec3(0, 0, 0);
+    }
     
-    // Calculate target position - in front of the phone model
-    const phonePosition = new THREE.Vector3();
-    phoneModel.getWorldPosition(phonePosition);
+    // Calculate velocity-based approach for more stable physics
+    const currentPosition = this.heldBody.position;
+    const desiredPosition = this.targetPosition;
     
-    const phoneDirection = new THREE.Vector3(0, 0, -1);
-    phoneDirection.applyQuaternion(phoneModel.quaternion);
+    // Calculate the displacement vector between current and desired position
+    const displacement = new CANNON.Vec3();
+    desiredPosition.vsub(currentPosition, displacement);
     
-    // Position the object 2 units in front of the phone
-    const targetPos = phonePosition.clone().add(phoneDirection.multiplyScalar(2));
+    // Calculate distance to target
+    const distance = displacement.length();
     
-    // Convert to Cannon format
-    this.targetPosition.set(targetPos.x, targetPos.y, targetPos.z);
-    
-    // Apply spring force to move body toward target position
+    // Calculate required force (stronger when further away)
     const force = new CANNON.Vec3();
-    this.targetPosition.vsub(this.heldBody.position, force);
+    displacement.copy(displacement);
     
-    // Scale force based on distance (stronger force when further away)
-    const distance = force.length();
-    force.normalize();
-    force.scale(distance * 20, force); // Adjust spring strength here
+    // Normalize and scale force based on distance and mass
+    if (distance > 0.001) {
+      displacement.normalize();
+      
+      // Three-part force system with SIGNIFICANTLY REDUCED FORCES:
+      
+      // 1. Distance-based force (stronger when further away)
+      // Reduced from 50 to 3 - almost 17x reduction
+      const distanceForce = distance * 3; 
+      
+      // 2. Dampening of current velocity to prevent oscillation
+      const currentVelocity = this.heldBody.velocity;
+      const dampingForce = new CANNON.Vec3();
+      // Increased damping from 0.9 to 0.97 (97% damping) for smoother movement
+      currentVelocity.scale(-0.97, dampingForce);
+      
+      // 3. Centering force always pulling toward the target
+      const centeringForce = new CANNON.Vec3();
+      // Reduced from 30 to 2 - 15x reduction
+      displacement.scale(2, centeringForce);
+      
+      // Combine forces
+      force.copy(displacement);
+      force.scale(distanceForce, force);
+      force.vadd(dampingForce, force);
+      force.vadd(centeringForce, force);
+      
+      // Apply a more gentle scaling by mass with a cap for heavier objects
+      // Cap max effective mass at 2.0 to prevent heavy objects from moving too slowly
+      const rawMass = Math.max(0.1, this.heldBody.mass);
+      const effectiveMass = Math.min(2.0, rawMass);
+      
+      // Further reduced multiplier from 0.5 to 0.3 for more gentle behavior
+      force.scale(effectiveMass * 0.3, force);
+      
+      // Apply a much lower maximum force limit
+      // Reduced from 500 to 15 - over 30x reduction
+      const maxForce = 15 * effectiveMass;
+      if (force.length() > maxForce) {
+        force.normalize();
+        force.scale(maxForce, force);
+      }
+    }
     
-    // Apply force
+    // Apply force at the center of mass
     this.heldBody.applyForce(force, this.heldBody.position);
     
-    // Apply rotation to match phone model
-    const targetQuaternion = phoneModel.quaternion.clone();
-    const q = new CANNON.Quaternion(
-      targetQuaternion.x,
-      targetQuaternion.y,
-      targetQuaternion.z,
-      targetQuaternion.w
-    );
+    // Lock rotation by applying angular damping
+    // This helps maintain the object's orientation while being held
+    this.heldBody.angularVelocity.scale(0.8, this.heldBody.angularVelocity);
     
-    // Calculate difference between current and target rotation
-    const qDiff = new CANNON.Quaternion();
-    q.conjugate(qDiff);
-    qDiff.mult(this.heldBody.quaternion, qDiff);
-    
-    // Convert to axis angle
-    const axis = new CANNON.Vec3();
-    let angle = qDiff.toAxisAngle(axis);
-    
-    // Apply torque to rotate toward target
-    if (axis.lengthSquared() > 0.001) {
-      axis.normalize();
-      axis.scale(angle * 10, axis); // Adjust rotation strength here
-      this.heldBody.applyTorque(axis);
+    // Use the target rotation if available
+    if (this.targetRotation) {
+      // Apply smooth rotation to match target orientation
+      // Calculate difference between current and target rotation
+      const qDiff = new CANNON.Quaternion();
+      this.targetRotation.conjugate(qDiff);
+      qDiff.mult(this.heldBody.quaternion, qDiff);
+      
+      // Convert to axis angle
+      const axis = new CANNON.Vec3();
+      let angle = qDiff.toAxisAngle(axis);
+      
+      // Apply torque to rotate toward target
+      if (axis.lengthSquared() > 0.001) {
+        axis.normalize();
+        
+        // Calculate torque strength based on angle difference and object mass
+        const torqueStrength = angle * 5 * Math.max(0.1, this.heldBody.mass);
+        axis.scale(torqueStrength, axis);
+        
+        // Apply torque to the object
+        this.heldBody.applyTorque(axis);
+      }
     }
     
     // Update gravity beam if it exists
@@ -467,6 +516,8 @@ export class PhysicsManager {
   
   dropObject(data = {}) {
     if (!this.heldBody) return;
+    
+    // Debug removed
     
     // Restore gravity
     this.heldBody.gravity.set(0, -9.82, 0);
@@ -483,26 +534,31 @@ export class PhysicsManager {
     
     // Remove visual beam
     this.removeGravityBeam();
+
+    // Debug removed
+    
+    // Store player ID before clearing references
+    const currentPlayerId = this.holdingPlayerId;
     
     // Clear references
     this.heldBody = null;
     this.heldBodyId = null;
+    this.holdingPlayerId = null;
     
-    // Emit event for multiplayer sync
+    // Emit event for multiplayer sync - only once
+    // Debug removed
     this.eventBus.emit('physics:object-drop', { 
       id,
-      playerId: this.holdingPlayerId 
+      playerId: currentPlayerId 
     });
     
     // Network sync if in multiplayer mode
     if (this.socketManager && !data.skipNetworkSync) {
       this.socketManager.emit('physics:object-drop', { 
         id,
-        playerId: this.holdingPlayerId 
+        playerId: currentPlayerId 
       });
     }
-    
-    this.holdingPlayerId = null;
   }
   
   // Create a visual beam connecting the phone to the held object
@@ -894,19 +950,40 @@ export class PhysicsManager {
   updateHeldObjectTarget(data) {
     const { objectId, position, rotation } = data;
     
+    // Add debug logging to identify mismatch
+    if (this.heldBodyId !== objectId) {
+      console.warn(`ID mismatch in updateHeldObjectTarget:`, {
+        heldBodyId: this.heldBodyId,
+        receivedObjectId: objectId
+      });
+    }
+    
     if (!this.heldBody || !this.heldBodyId || this.heldBodyId !== objectId) return;
     
-    // Update target position for spring physics
-    this.targetPosition.set(position.x, position.y, position.z);
+    // Safety check for targetPosition
+    if (!this.targetPosition) {
+      this.targetPosition = new CANNON.Vec3();
+    }
     
-    // If rotation provided, update target rotation
-    if (rotation) {
-      this.targetRotation = new CANNON.Quaternion(
-        rotation.x,
-        rotation.y,
-        rotation.z,
-        rotation.w
-      );
+    // Update target position with safety checks
+    if (position && position.x !== undefined && position.y !== undefined && position.z !== undefined) {
+      this.targetPosition.set(position.x, position.y, position.z);
+    }
+    
+    // If rotation provided, update target rotation with safety checks
+    if (rotation && rotation.x !== undefined && rotation.y !== undefined && 
+        rotation.z !== undefined && rotation.w !== undefined) {
+      // Create quaternion if it doesn't exist
+      if (!this.targetRotation) {
+        this.targetRotation = new CANNON.Quaternion();
+      }
+      
+      this.targetRotation.set(rotation.x, rotation.y, rotation.z, rotation.w);
+    }
+    
+    // Force the held body to wake up if it's asleep
+    if (this.heldBody.sleepState === CANNON.Body.SLEEPING) {
+      this.heldBody.wakeUp();
     }
   }
   

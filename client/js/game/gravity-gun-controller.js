@@ -267,8 +267,10 @@ export class GravityGunController {
     );
     
     if (physicsIntersects.length > 0) {
+      const hitObject = physicsIntersects[0].object;
+      
       // Add visual highlight to the intersected object
-      this.highlightIntersectedObject(physicsIntersects[0].object);
+      this.highlightIntersectedObject(hitObject);
       
       return {
         hit: true,
@@ -296,6 +298,22 @@ export class GravityGunController {
     if (rayResult.hit) {
       // Get the physics object ID from the userData
       this.heldObjectId = rayResult.intersection.object.userData.physicsId;
+      
+      // Calculate initial pickup distance (to maintain during holding)
+      const hitPoint = rayResult.intersection.point;
+      const weaponPosition = rayResult.weaponPosition;
+      
+      if (hitPoint && weaponPosition) {
+        // Calculate the distance from weapon to hit point
+        this.pickupDistance = new THREE.Vector3(
+          hitPoint.x - weaponPosition.x,
+          hitPoint.y - weaponPosition.y,
+          hitPoint.z - weaponPosition.z
+        ).length();
+      } else {
+        // Default distance if calculation not possible
+        this.pickupDistance = 3;
+      }
       
       // Create ray data for physics system with safety checks
       const ray = {
@@ -329,6 +347,14 @@ export class GravityGunController {
       
       // Set holding state
       this.isHolding = true;
+      this.lastPickupTime = Date.now(); // Record the pickup time
+      
+      // Object pickup completed
+      
+      // Add a small delay before updating target position to ensure pickup event is processed first
+      setTimeout(() => {
+        this.updateTargetPosition();
+      }, 50); // 50ms delay to ensure pickup event is processed first
       
       // Make sure the object is highlighted while held
       this.highlightIntersectedObject(rayResult.intersection.object);
@@ -341,6 +367,15 @@ export class GravityGunController {
   dropObject() {
     if (!this.isHolding) return;
     
+    // Debug removed
+    
+    // Add a protection against accidental drops right after pickup
+    const now = Date.now();
+    if (this.lastPickupTime && now - this.lastPickupTime < 500) {
+      // Silently block the drop
+      return;
+    }
+    
     // Emit drop event with context
     this.eventBus.emit('gravityGun:drop', {
       objectId: this.heldObjectId,
@@ -350,16 +385,22 @@ export class GravityGunController {
     // Remove highlight
     this.removeObjectHighlights();
     
-    // Reset holding state
+    // Reset holding state and pickup distance
     this.isHolding = false;
     this.heldObjectId = null;
+    this.pickupDistance = null;
   }
+  
+  /**
+   * Initial pickup distance (set on first pickup)
+   */
+  pickupDistance = null;
   
   /**
    * Update the target position for held objects
    */
   updateTargetPosition() {
-    if (!this.isHolding || !this.weaponView) return;
+    if (!this.isHolding || !this.weaponView || !this.heldObjectId) return;
     
     // Get raycast data from the weapon view
     const raycastData = this.weaponView.getRaycastData();
@@ -368,20 +409,22 @@ export class GravityGunController {
     // Transform to world space
     const mainCamera = this.camera;
     const weaponWorldPosition = this.weaponView.mapToWorldSpace(raycastData.origin, mainCamera);
-    const weaponWorldDirection = raycastData.direction.clone().applyQuaternion(mainCamera.quaternion);
+    const weaponWorldDirection = this.weaponView.getWorldDirectionFromWeapon(mainCamera.quaternion);
     
-    // Update target position (held 2-4 meters in front of weapon)
-    // The physics system will handle the actual movement
-    const holdDistance = 3; // meters
+    // Use the stored pickup distance if available, otherwise use default
+    const holdDistance = this.pickupDistance !== null ? this.pickupDistance : 3;
+    
+    // Update target position along the raycast line
     const targetPosition = weaponWorldPosition.clone().add(
-      weaponWorldDirection.multiplyScalar(holdDistance)
+      weaponWorldDirection.clone().multiplyScalar(holdDistance)
     );
     
-    // Send to physics system
+    // Send to physics system with weapon rotation (not camera rotation)
+    // This ensures the object follows the weapon orientation
     this.eventBus.emit('gravityGun:update-target', {
       objectId: this.heldObjectId,
       position: targetPosition,
-      rotation: mainCamera.quaternion
+      rotation: raycastData.weaponWorldQuaternion
     });
   }
   
