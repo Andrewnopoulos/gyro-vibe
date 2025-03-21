@@ -193,7 +193,29 @@ export class FirstPersonController {
     if (this.enabled) {
       // Enable first-person mode
       this.sceneManager.setFirstPersonMode(true);
-      this.camera.position.y = PLAYER_HEIGHT;
+      
+      // Try to get a spawn point from the environment
+      if (this.sceneManager.environment && 
+          typeof this.sceneManager.environment.getRandomSpawnPoint === 'function') {
+        const spawnPoint = this.sceneManager.environment.getRandomSpawnPoint();
+        
+        // Set position from spawn point
+        this.camera.position.set(
+          spawnPoint.x,
+          PLAYER_HEIGHT, // Use standard player height
+          spawnPoint.z
+        );
+        
+        // If spawn point includes rotation, apply it
+        if (spawnPoint.rotation !== undefined) {
+          const euler = new THREE.Euler(0, spawnPoint.rotation, 0, 'YXZ');
+          this.camera.quaternion.setFromEuler(euler);
+        }
+      } else {
+        // Default position if no spawn points available
+        this.camera.position.y = PLAYER_HEIGHT;
+      }
+      
       this.controlsGuide.style.display = 'block';
       this.requestPointerLock();
       this.eventBus.emit('firstperson:enabled');

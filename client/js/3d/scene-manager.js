@@ -68,9 +68,19 @@ export class SceneManager {
     //   resetViewBtn.addEventListener('click', this.resetCameraView.bind(this));
     // }
     
-    // Create environment, lighting, and phone model
-    this.environment = new Environment(this.scene);
+    // Create lighting
     this.lighting = new Lighting(this.scene);
+    
+    // Get physics manager if available (via event bus)
+    let physicsManager = null;
+    this.eventBus.emit('physics:request-manager', (manager) => {
+      physicsManager = manager;
+    });
+    
+    // Create environment with physics support
+    this.environment = new Environment(this.scene, physicsManager);
+    
+    // Create phone model
     this.phoneModel = new PhoneModel(this.scene, this.eventBus);
     
     // Add orbit controls
@@ -88,7 +98,7 @@ export class SceneManager {
     // Handle window resize
     window.addEventListener('resize', this.onWindowResize.bind(this), false);
     
-    console.log('3D scene initialized successfully');
+    console.log('Medieval village scene initialized successfully');
   }
 
   /**
@@ -120,6 +130,22 @@ export class SceneManager {
         this.phoneModel.setCalibrationMode(false);
       }
     });
+    
+    // Listen for time of day change requests
+    this.eventBus.on('scene:set-time-of-day', this.setTimeOfDay.bind(this));
+  }
+  
+  /**
+   * Set the time of day for lighting
+   * @param {Object} data - Time of day data 
+   */
+  setTimeOfDay(data) {
+    const timeOfDay = data.timeOfDay || 'dusk';
+    
+    if (this.lighting && typeof this.lighting.setTimeOfDay === 'function') {
+      this.lighting.setTimeOfDay(timeOfDay);
+      console.log(`Time of day set to: ${timeOfDay}`);
+    }
   }
 
   /**
@@ -134,6 +160,11 @@ export class SceneManager {
     if (this.orbitControls && !this.firstPersonMode) {
       // Update orbit controls when not in first-person mode
       this.orbitControls.update();
+    }
+    
+    // Update lighting effects (torch flickering)
+    if (this.lighting && this.lighting.update) {
+      this.lighting.update(time);
     }
     
     // Emit update event for first-person controller and weapon view

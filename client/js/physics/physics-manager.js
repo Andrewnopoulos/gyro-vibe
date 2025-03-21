@@ -60,6 +60,13 @@ export class PhysicsManager {
     // Sync physics objects
     this.eventBus.on('physics:sync', this.handlePhysicsSync.bind(this));
     
+    // Provide physics manager reference to other components
+    this.eventBus.on('physics:request-manager', (callback) => {
+      if (typeof callback === 'function') {
+        callback(this);
+      }
+    });
+    
     // Socket events for remote physics if socket manager provided
     if (this.socketManager) {
       this.socketManager.on('physics:object-pickup', this.handleRemoteObjectPickup.bind(this));
