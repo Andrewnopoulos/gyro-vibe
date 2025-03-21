@@ -120,8 +120,17 @@ export class GravityGunController {
     // Check if we're pointing at a physics object (for highlighting)
     const rayResult = this.performRaycast();
     
-    // Visual feedback based on raycast results
-    this.updateWeaponHighlight(rayResult.hit && !this.isHolding);
+    // If we're not holding an object, handle highlighting based on raycast
+    if (!this.isHolding) {
+      if (rayResult.hit) {
+        // We're hitting an object - highlight it
+        this.updateWeaponHighlight(true);
+      } else {
+        // We're not hitting an object - remove any existing highlights
+        this.updateWeaponHighlight(false);
+        this.removeObjectHighlights();
+      }
+    }
     
     // If we're holding an object, update its target position
     if (this.isHolding && this.heldObjectId) {
