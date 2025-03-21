@@ -273,6 +273,10 @@ export class PhysicsManager {
   pickupObject(data) {
     if (!data) return;
     const { objectId, ray, playerId, holdDistance } = data;
+
+    if (this.heldBody) {
+        this.targetPosition.copy(this.heldBody.position); // Set target to current position
+    }
     
     // Ensure bodyOffset is always initialized
     if (!this.bodyOffset) {
@@ -459,111 +463,37 @@ export class PhysicsManager {
   
   updateHeldBody() {
     if (!this.heldBody) return;
-    
-    // Safety check for bodyOffset
-    if (!this.bodyOffset) {
-      this.bodyOffset = new CANNON.Vec3(0, 0, 0);
-    }
-    
-    // Use the stored target position from gravity gun's updateHeldObjectTarget
-    if (!this.targetPosition) {
-      this.targetPosition = new CANNON.Vec3(0, 0, 0);
-    }
-    
-    // Calculate velocity-based approach for more stable physics
+
     const currentPosition = this.heldBody.position;
     const desiredPosition = this.targetPosition;
-    
-    // Calculate the displacement vector between current and desired position
+
+    // Calculate displacement
     const displacement = new CANNON.Vec3();
     desiredPosition.vsub(currentPosition, displacement);
-    
-    // Calculate distance to target
-    const distance = displacement.length();
-    
-    // Calculate required force (stronger when further away)
+
+    // PD controller constants
+    const k_p = 10; // Proportional gain (stiffness)
+    const k_d = 5;  // Derivative gain (damping)
+
+    // Calculate force
     const force = new CANNON.Vec3();
-    displacement.copy(displacement);
-    
-    // Normalize and scale force based on distance and mass
-    if (distance > 0.001) {
-      displacement.normalize();
-      
-      // Three-part force system with SIGNIFICANTLY REDUCED FORCES:
-      
-      // 1. Distance-based force (stronger when further away)
-      // Reduced from 50 to 3 - almost 17x reduction
-      const distanceForce = distance * 3; 
-      
-      // 2. Dampening of current velocity to prevent oscillation
-      const currentVelocity = this.heldBody.velocity;
-      const dampingForce = new CANNON.Vec3();
-      // Increased damping from 0.9 to 0.97 (97% damping) for smoother movement
-      currentVelocity.scale(-0.97, dampingForce);
-      
-      // 3. Centering force always pulling toward the target
-      const centeringForce = new CANNON.Vec3();
-      // Reduced from 30 to 2 - 15x reduction
-      displacement.scale(2, centeringForce);
-      
-      // Combine forces
-      force.copy(displacement);
-      force.scale(distanceForce, force);
-      force.vadd(dampingForce, force);
-      force.vadd(centeringForce, force);
-      
-      // Apply a more gentle scaling by mass with a cap for heavier objects
-      // Cap max effective mass at 2.0 to prevent heavy objects from moving too slowly
-      const rawMass = Math.max(0.1, this.heldBody.mass);
-      const effectiveMass = Math.min(2.0, rawMass);
-      
-      // Further reduced multiplier from 0.5 to 0.3 for more gentle behavior
-      force.scale(effectiveMass * 0.3, force);
-      
-      // Apply a much lower maximum force limit
-      // Reduced from 500 to 15 - over 30x reduction
-      const maxForce = 15 * effectiveMass;
-      if (force.length() > maxForce) {
-        force.normalize();
-        force.scale(maxForce, force);
-      }
-    }
-    
-    // Apply force at the center of mass
+    displacement.scale(k_p, force); // Proportional force
+
+    // Add damping force
+    const dampingForce = new CANNON.Vec3();
+    this.heldBody.velocity.scale(-k_d, dampingForce);
+    force.vadd(dampingForce, force);
+
+    // Compensate for gravity (assuming -9.82 m/s² in y-direction)
+    const gravityForce = new CANNON.Vec3(0, this.heldBody.mass * 9.82, 0);
+    force.vadd(gravityForce, force);
+
+    // Apply the force
     this.heldBody.applyForce(force, this.heldBody.position);
-    
-    // Lock rotation by applying angular damping
-    // This helps maintain the object's orientation while being held
+
+    // Optional: Reduce angular velocity for stability
     this.heldBody.angularVelocity.scale(0.8, this.heldBody.angularVelocity);
-    
-    // Use the target rotation if available
-    if (this.targetRotation) {
-      // Apply smooth rotation to match target orientation
-      // Calculate difference between current and target rotation
-      const qDiff = new CANNON.Quaternion();
-      this.targetRotation.conjugate(qDiff);
-      qDiff.mult(this.heldBody.quaternion, qDiff);
-      
-      // Convert to axis angle
-      const axis = new CANNON.Vec3();
-      let angle = qDiff.toAxisAngle(axis);
-      
-      // Apply torque to rotate toward target
-      if (axis.lengthSquared() > 0.001) {
-        axis.normalize();
-        
-        // Calculate torque strength based on angle difference and object mass
-        const torqueStrength = angle * 5 * Math.max(0.1, this.heldBody.mass);
-        axis.scale(torqueStrength, axis);
-        
-        // Apply torque to the object
-        this.heldBody.applyTorque(axis);
-      }
     }
-    
-    // Update gravity beam if it exists
-    this.updateGravityBeam();
-  }
   
   /**
    * Drop the currently held object

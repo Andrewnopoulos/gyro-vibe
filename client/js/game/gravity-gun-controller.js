@@ -279,47 +279,28 @@ export class GravityGunController {
    */
   pickupObject() {
     if (!this.enabled || this.isHolding) return;
-    
     const rayResult = this.performRaycast();
-    
     if (rayResult.hit) {
-      // Get the physics object ID from the userData
-      const objectId = rayResult.intersection.object.userData.physicsId;
-      
-      // Calculate initial pickup distance (to maintain during holding)
-      const hitPoint = rayResult.intersection.point;
-      const weaponPosition = rayResult.weaponPosition;
-      let pickupDistance = 3; // Default
-      
-      if (hitPoint && weaponPosition) {
-        // Calculate the distance from weapon to hit point
-        pickupDistance = new THREE.Vector3(
-          hitPoint.x - weaponPosition.x,
-          hitPoint.y - weaponPosition.y,
-          hitPoint.z - weaponPosition.z
-        ).length();
-      }
-      
-      // Create ray data for physics system
-      const ray = this.createRayData(rayResult);
-      
-      // Store information locally before sending to physics system
-      this.heldObjectId = objectId;
-      this.pickupDistance = pickupDistance;
-      this.lastPickupTime = Date.now();
-      
-      // Emit direct pickup command to physics system
-      this.eventBus.emit('physics:pickup-object', {
-        objectId: objectId,
-        ray: ray,
-        playerId: 'local',
-        holdDistance: pickupDistance
-      });
-      
-      // Highlight the object we're trying to pick up
-      this.highlightIntersectedObject(rayResult.intersection.object);
+        const objectId = rayResult.intersection.object.userData.physicsId;
+        const weaponPosition = rayResult.weaponPosition;
+        let pickupDistance = 3;
+        if (rayResult.intersection.object && weaponPosition) {
+            const objectPosition = rayResult.intersection.object.position;
+            pickupDistance = weaponPosition.distanceTo(objectPosition);
+        }
+        const ray = this.createRayData(rayResult);
+        this.heldObjectId = objectId;
+        this.pickupDistance = pickupDistance;
+        this.lastPickupTime = Date.now();
+        this.eventBus.emit('physics:pickup-object', {
+            objectId: objectId,
+            ray: ray,
+            playerId: 'local',
+            holdDistance: pickupDistance
+        });
+        this.highlightIntersectedObject(rayResult.intersection.object);
     }
-  }
+}
   
   /**
    * Drop the currently held object
