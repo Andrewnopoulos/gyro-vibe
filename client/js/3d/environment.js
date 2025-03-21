@@ -1016,11 +1016,20 @@ export class Environment {
       
       const shape = new CANNON.Box(new CANNON.Vec3(wallLength/2, height/2, thickness/2));
       const body = new CANNON.Body({
-        mass: 0,
+        mass: 0, // Static body
         position: new CANNON.Vec3(wall.position.x, wall.position.y, wall.position.z),
-        shape: shape,
         quaternion: rotation
       });
+      body.addShape(shape);
+      
+      // Add walkable top
+      const topWalkway = new CANNON.Box(new CANNON.Vec3(wallLength/2, thickness/4, thickness));
+      body.addShape(topWalkway, new CANNON.Vec3(0, height/2 + thickness/4, 0));
+      
+      // Setup material properties
+      body.material = new CANNON.Material();
+      body.material.friction = this.materials.stone.physics.friction;
+      body.material.restitution = this.materials.stone.physics.restitution;
       
       this.physicsManager.world.addBody(body);
       
@@ -1058,28 +1067,61 @@ export class Environment {
     
     // Add physics
     if (this.physicsManager) {
+      // Create a compound body for the entire tower
+      const towerBody = new CANNON.Body({
+        mass: 0, // Static
+        position: new CANNON.Vec3(position.x, height/2, position.z)
+      });
+      
       // Tower cylinder
       const towerShape = new CANNON.Cylinder(towerRadius, towerRadius, height, 16);
-      const towerBody = new CANNON.Body({
+      towerBody.addShape(towerShape);
+      
+      // Tower walkable top (flatten the top rim)
+      const topRim = new CANNON.Cylinder(towerRadius, towerRadius - 0.5, 0.5, 16);
+      towerBody.addShape(topRim, new CANNON.Vec3(0, height/2 - 0.25, 0));
+      
+      // Interior hollow
+      const hollowRadius = towerRadius - 0.5; // Wall thickness
+      const hollowHeight = height - 1; // Leave some floor
+      const hollowShape = new CANNON.Cylinder(hollowRadius, hollowRadius, hollowHeight, 16);
+      // Make it non-colliding with other objects by setting collisionResponse to false
+      const hollowBody = new CANNON.Body({
         mass: 0,
-        position: new CANNON.Vec3(position.x, height/2, position.z),
-        shape: towerShape
+        position: new CANNON.Vec3(position.x, height/2 + 0.5, position.z),
+        collisionResponse: false
       });
+      hollowBody.addShape(hollowShape);
+      this.physicsManager.world.addBody(hollowBody);
+      
+      // Setup material properties
+      towerBody.material = new CANNON.Material();
+      towerBody.material.friction = this.materials.stone.physics.friction;
+      towerBody.material.restitution = this.materials.stone.physics.restitution;
+      
       this.physicsManager.world.addBody(towerBody);
       
-      // Roof cone
-      const roofShape = new CANNON.Cylinder(0.5, towerRadius + 0.5, 3, 16);
+      // Roof cone as a separate body
       const roofBody = new CANNON.Body({
         mass: 0,
-        position: new CANNON.Vec3(position.x, height + 1.5, position.z),
-        shape: roofShape
+        position: new CANNON.Vec3(position.x, height + 1.5, position.z)
       });
+      const roofShape = new CANNON.Cylinder(0.5, towerRadius + 0.5, 3, 16);
+      roofBody.addShape(roofShape);
+      
+      // Setup material properties
+      roofBody.material = new CANNON.Material();
+      roofBody.material.friction = this.materials.thatch.physics.friction;
+      roofBody.material.restitution = this.materials.thatch.physics.restitution;
+      
       this.physicsManager.world.addBody(roofBody);
       
       // Store reference
       this.objects.set(`tower_${position.x}_${position.z}`, { 
         mesh: tower, 
-        body: towerBody 
+        body: towerBody,
+        roofBody: roofBody,
+        hollowBody: hollowBody
       });
     }
     
@@ -1133,36 +1175,64 @@ export class Environment {
     
     // Add physics
     if (this.physicsManager) {
+      // Create a combined gate body
+      const gateBody = new CANNON.Body({
+        mass: 0, // Static
+        position: new CANNON.Vec3(position.x, 0, position.z)
+      });
+      
+      // Create quaternion for rotation
+      const rotationQuat = new CANNON.Quaternion();
+      rotationQuat.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), rotation);
+      
       // Left pillar
       const leftPillarShape = new CANNON.Box(new CANNON.Vec3(depth/2, height/2, depth/2));
-      const leftPillarBody = new CANNON.Body({
-        mass: 0,
-        position: new CANNON.Vec3(leftPillar.position.x, leftPillar.position.y, leftPillar.position.z),
-        shape: leftPillarShape
-      });
-      this.physicsManager.world.addBody(leftPillarBody);
+      const leftPillarPos = new CANNON.Vec3(
+        Math.sin(rotation) * gateWidth/2,
+        height/2,
+        Math.cos(rotation) * gateWidth/2
+      );
+      gateBody.addShape(leftPillarShape, leftPillarPos);
       
       // Right pillar
       const rightPillarShape = new CANNON.Box(new CANNON.Vec3(depth/2, height/2, depth/2));
-      const rightPillarBody = new CANNON.Body({
-        mass: 0,
-        position: new CANNON.Vec3(rightPillar.position.x, rightPillar.position.y, rightPillar.position.z),
-        shape: rightPillarShape
-      });
-      this.physicsManager.world.addBody(rightPillarBody);
+      const rightPillarPos = new CANNON.Vec3(
+        -Math.sin(rotation) * gateWidth/2,
+        height/2,
+        -Math.cos(rotation) * gateWidth/2
+      );
+      gateBody.addShape(rightPillarShape, rightPillarPos);
       
-      // Top arch
-      const rotationQuaternion = new CANNON.Quaternion();
-      rotationQuaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), rotation);
-      
+      // Top arch with rotation
       const archShape = new CANNON.Box(new CANNON.Vec3(gateWidth/2, (height - gateHeight)/2, depth/2));
-      const archBody = new CANNON.Body({
-        mass: 0,
-        position: new CANNON.Vec3(arch.position.x, arch.position.y, arch.position.z),
-        shape: archShape,
-        quaternion: rotationQuaternion
+      const archPos = new CANNON.Vec3(
+        0,
+        height - (height - gateHeight)/2,
+        0
+      );
+      gateBody.addShape(archShape, archPos, rotationQuat);
+      
+      // Walkway on top
+      const walkwayShape = new CANNON.Box(new CANNON.Vec3(gateWidth/2, depth/4, depth));
+      const walkwayPos = new CANNON.Vec3(
+        0,
+        height + depth/4,
+        0
+      );
+      gateBody.addShape(walkwayShape, walkwayPos, rotationQuat);
+      
+      // Setup material properties for better collisions
+      gateBody.material = new CANNON.Material();
+      gateBody.material.friction = this.materials.stone.physics.friction;
+      gateBody.material.restitution = this.materials.stone.physics.restitution;
+      
+      this.physicsManager.world.addBody(gateBody);
+      
+      // Store reference
+      this.objects.set(`gate_${position.x}_${position.z}`, { 
+        meshes: [leftPillar, rightPillar, arch],
+        body: gateBody
       });
-      this.physicsManager.world.addBody(archBody);
     }
     
     return { leftPillar, rightPillar, arch };
@@ -1490,6 +1560,7 @@ export class Environment {
     this.scene.add(counter);
     
     // Add a random item on the counter
+    let randomItem = null;
     if (Math.random() > 0.5) {
       // Create a basket
       const basketGeometry = new THREE.CylinderGeometry(0.3, 0.4, 0.3, 8);
@@ -1498,6 +1569,7 @@ export class Environment {
       basket.castShadow = true;
       basket.receiveShadow = true;
       this.scene.add(basket);
+      randomItem = basket;
     } else {
       // Create a box/crate
       const crateGeometry = new THREE.BoxGeometry(0.4, 0.4, 0.4);
@@ -1506,23 +1578,115 @@ export class Environment {
       crate.castShadow = true;
       crate.receiveShadow = true;
       this.scene.add(crate);
+      randomItem = crate;
     }
     
     // Add physics if available
     if (this.physicsManager) {
-      // Base platform
-      this.addPhysicsBox(base, 0);
-      
-      // Posts
-      posts.forEach(post => {
-        this.addPhysicsBox(post, 0);
+      // Create a compound body for the entire stall
+      const stallBody = new CANNON.Body({
+        mass: 0, // Static
+        position: new CANNON.Vec3(position.x, 0, position.z)
       });
       
+      // Base platform
+      const baseShape = new CANNON.Box(new CANNON.Vec3(3/2, 0.2/2, 2/2));
+      stallBody.addShape(baseShape, new CANNON.Vec3(0, 0.1, 0));
+      
+      // Posts
+      const postShape = new CANNON.Box(new CANNON.Vec3(0.2/2, 2/2, 0.2/2));
+      for (let x = -1; x <= 1; x += 2) {
+        for (let z = -1; z <= 1; z += 2) {
+          stallBody.addShape(
+            postShape, 
+            new CANNON.Vec3(x * 1.4, 1, z * 0.9)
+          );
+        }
+      }
+      
       // Roof
-      this.addPhysicsBox(roof, 0);
+      const roofShape = new CANNON.Box(new CANNON.Vec3(3.6/2, 0.2/2, 2.6/2));
+      stallBody.addShape(roofShape, new CANNON.Vec3(0, 2.1, 0));
       
       // Counter
-      this.addPhysicsBox(counter, 0);
+      const counterShape = new CANNON.Box(new CANNON.Vec3(2.8/2, 0.4/2, 0.8/2));
+      stallBody.addShape(counterShape, new CANNON.Vec3(0, 0.7, 0.5));
+      
+      // Set up material properties
+      stallBody.material = new CANNON.Material();
+      stallBody.material.friction = this.materials.wood.physics.friction;
+      stallBody.material.restitution = this.materials.wood.physics.restitution;
+      
+      this.physicsManager.world.addBody(stallBody);
+      
+      // Store reference
+      this.objects.set(`stall_${position.x}_${position.z}`, {
+        meshes: [base, ...posts, roof, counter],
+        body: stallBody
+      });
+      
+      // Add physics for the random item - make it interactive
+      if (randomItem) {
+        if (randomItem.geometry.type === 'CylinderGeometry') {
+          // Basket
+          const shape = new CANNON.Cylinder(0.3, 0.4, 0.3, 8);
+          const body = new CANNON.Body({
+            mass: 1, // Lightweight but movable
+            position: new CANNON.Vec3(position.x + 0.7, 1, position.z + 0.5)
+          });
+          body.addShape(shape);
+          body.material = new CANNON.Material();
+          body.material.friction = this.materials.thatch.physics.friction;
+          body.material.restitution = this.materials.thatch.physics.restitution;
+          
+          this.physicsManager.world.addBody(body);
+          
+          // Register with the physics manager for interaction
+          const id = `basket_${position.x}_${position.z}`;
+          this.physicsManager.physicsBodies.set(id, {
+            body,
+            mesh: randomItem,
+            properties: {
+              size: { x: 0.4, y: 0.3, z: 0.4 },
+              mass: 1,
+              color: this.materials.thatch.visual.color.getHex(),
+              shape: 'cylinder',
+              metallic: false,
+              restitution: this.materials.thatch.physics.restitution,
+              friction: this.materials.thatch.physics.friction
+            }
+          });
+        } else {
+          // Crate
+          const shape = new CANNON.Box(new CANNON.Vec3(0.4/2, 0.4/2, 0.4/2));
+          const body = new CANNON.Body({
+            mass: 1.5, // Slightly heavier than basket
+            position: new CANNON.Vec3(position.x - 0.7, 1, position.z + 0.5)
+          });
+          body.addShape(shape);
+          body.material = new CANNON.Material();
+          body.material.friction = this.materials.wood.physics.friction;
+          body.material.restitution = this.materials.wood.physics.restitution;
+          
+          this.physicsManager.world.addBody(body);
+          
+          // Register with the physics manager for interaction
+          const id = `crate_${position.x}_${position.z}`;
+          this.physicsManager.physicsBodies.set(id, {
+            body,
+            mesh: randomItem,
+            properties: {
+              size: { x: 0.4, y: 0.4, z: 0.4 },
+              mass: 1.5,
+              color: this.materials.wood.visual.color.getHex(),
+              shape: 'box',
+              metallic: false,
+              restitution: this.materials.wood.physics.restitution,
+              friction: this.materials.wood.physics.friction
+            }
+          });
+        }
+      }
     }
   }
   
@@ -1673,24 +1837,26 @@ export class Environment {
     // Add to physics world
     this.physicsManager.world.addBody(body);
     
-    // If this is an interactive object (non-zero mass), add to physicsBodies map
-    if (mass > 0) {
-      const id = `physics_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
-      this.physicsManager.physicsBodies.set(id, {
-        body: body,
-        mesh: mesh,
-        properties: {
-          size: { x: size.x, y: size.y, z: size.z },
-          mass: mass,
-          color: mesh.material.color.getHex(),
-          shape: 'box',
-          metallic: false,
-          restitution: 0.3,
-          friction: 0.5
-        }
-      });
-    }
+    // Generate a unique ID for this object
+    const id = `physics_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Always add the physicsId to the mesh userData, whether static or not
+    mesh.userData.physicsId = id;
+    
+    // Add to the physicsBodies map in the physics manager
+    this.physicsManager.physicsBodies.set(id, {
+      body: body,
+      mesh: mesh,
+      properties: {
+        size: { x: size.x, y: size.y, z: size.z },
+        mass: mass,
+        color: mesh.material.color.getHex(),
+        shape: 'box',
+        metallic: false,
+        restitution: mass > 0 ? 0.3 : this.materials.stone.physics.restitution,
+        friction: mass > 0 ? 0.5 : this.materials.stone.physics.friction
+      }
+    });
   }
   
   /**
@@ -1717,29 +1883,43 @@ export class Environment {
     // Add to physics world
     this.physicsManager.world.addBody(body);
     
-    // If this is an interactive object (non-zero mass), add to physicsBodies map
-    if (mass > 0) {
-      const id = `physics_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
-      // Get bounding box for size estimate
-      const size = new THREE.Vector3();
-      mesh.geometry.computeBoundingBox();
-      mesh.geometry.boundingBox.getSize(size);
-      
-      this.physicsManager.physicsBodies.set(id, {
-        body: body,
-        mesh: mesh,
-        properties: {
-          size: { x: size.x, y: size.y, z: size.z },
-          mass: mass,
-          color: mesh.material.color.getHex(),
-          shape: shape instanceof CANNON.Cylinder ? 'cylinder' : 'box',
-          metallic: false,
-          restitution: 0.3,
-          friction: 0.5
-        }
-      });
+    // Generate a unique ID for this object
+    const id = `physics_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Always add the physicsId to the mesh userData, whether static or not
+    mesh.userData.physicsId = id;
+    
+    // Get bounding box for size estimate
+    const size = new THREE.Vector3();
+    mesh.geometry.computeBoundingBox();
+    mesh.geometry.boundingBox.getSize(size);
+    
+    // Set material properties based on object type
+    let restitution = 0.3;
+    let friction = 0.5;
+    
+    // If it's a static object, use appropriate material properties
+    if (mass === 0) {
+      // Try to determine what material this object is made of based on color
+      // Default to stone properties if we can't determine
+      restitution = this.materials.stone.physics.restitution;
+      friction = this.materials.stone.physics.friction;
     }
+    
+    // Add to the physicsBodies map in the physics manager
+    this.physicsManager.physicsBodies.set(id, {
+      body: body,
+      mesh: mesh,
+      properties: {
+        size: { x: size.x, y: size.y, z: size.z },
+        mass: mass,
+        color: mesh.material.color ? mesh.material.color.getHex() : 0x808080,
+        shape: shape instanceof CANNON.Cylinder ? 'cylinder' : 'box',
+        metallic: false,
+        restitution: restitution,
+        friction: friction
+      }
+    });
   }
   
   /**
@@ -1764,9 +1944,16 @@ export class Environment {
     // Add the outer shape
     body.addShape(outerShape);
     
+    // Generate a unique ID for this object
+    const id = `physics_hollow_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Always add the physicsId to the mesh userData, whether static or not
+    mesh.userData.physicsId = id;
+    
     // Add the inner shape as a separate body for simplicity
+    let innerBody = null;
     if (innerShape) {
-      const innerBody = new CANNON.Body({
+      innerBody = new CANNON.Body({
         mass: 0,
         position: new CANNON.Vec3(mesh.position.x, mesh.position.y, mesh.position.z)
       });
@@ -1777,6 +1964,28 @@ export class Environment {
     
     // Add to physics world
     this.physicsManager.world.addBody(body);
+    
+    // Get bounding box for size estimate
+    const size = new THREE.Vector3();
+    mesh.geometry.computeBoundingBox();
+    mesh.geometry.boundingBox.getSize(size);
+    
+    // Add to the physicsBodies map in the physics manager
+    this.physicsManager.physicsBodies.set(id, {
+      body: body,
+      mesh: mesh,
+      innerBody: innerBody, // Keep reference to inner body
+      properties: {
+        size: { x: size.x, y: size.y, z: size.z },
+        mass: mass,
+        color: mesh.material.color ? mesh.material.color.getHex() : 0x808080,
+        shape: outerShape instanceof CANNON.Cylinder ? 'cylinder' : 'box',
+        metallic: false,
+        restitution: this.materials.stone.physics.restitution,
+        friction: this.materials.stone.physics.friction,
+        isHollow: true
+      }
+    });
   }
   
   /**
@@ -1823,7 +2032,45 @@ export class Environment {
     const rightWall = new CANNON.Box(new CANNON.Vec3(wallThickness/2, height/2, halfDepth - wallThickness));
     buildingBody.addShape(rightWall, new CANNON.Vec3(halfWidth - wallThickness/2, 0, 0));
     
+    // Add floor (bottom)
+    const floorWall = new CANNON.Box(new CANNON.Vec3(halfWidth - wallThickness, wallThickness/2, halfDepth - wallThickness));
+    buildingBody.addShape(floorWall, new CANNON.Vec3(0, -height/2 + wallThickness/2, 0));
+    
+    // Add roof (top)
+    const roofWall = new CANNON.Box(new CANNON.Vec3(halfWidth - wallThickness, wallThickness/2, halfDepth - wallThickness));
+    buildingBody.addShape(roofWall, new CANNON.Vec3(0, height/2 - wallThickness/2, 0));
+    
+    // Set up material properties
+    buildingBody.material = new CANNON.Material();
+    buildingBody.material.friction = this.materials.stone.physics.friction;
+    buildingBody.material.restitution = this.materials.stone.physics.restitution;
+    
     // Add to physics world
     this.physicsManager.world.addBody(buildingBody);
+    
+    // Generate a unique ID for this building
+    const id = `building_${mesh.position.x}_${mesh.position.y}_${mesh.position.z}`;
+    
+    // Add this ID to the mesh's userData so it can be detected by raycasting
+    mesh.userData.physicsId = id;
+    
+    // Store reference in the objects map
+    this.objects.set(id, { mesh, body: buildingBody });
+    
+    // Also register with physics manager for proper interaction
+    const size = new THREE.Vector3(width, height, depth);
+    this.physicsManager.physicsBodies.set(id, {
+      body: buildingBody,
+      mesh: mesh,
+      properties: {
+        size: { x: size.x, y: size.y, z: size.z },
+        mass: 0,
+        color: mesh.material.color ? mesh.material.color.getHex() : 0x808080,
+        shape: 'box',
+        metallic: false,
+        restitution: this.materials.stone.physics.restitution,
+        friction: this.materials.stone.physics.friction
+      }
+    });
   }
 }
