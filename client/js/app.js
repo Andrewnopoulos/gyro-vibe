@@ -43,7 +43,6 @@ class App {
 
     // Initialize physics system with scene and socket manager for network synchronization
     this.physicsManager = new PhysicsManager(this.eventBus, this.sceneManager.getScene(), this.socketManager);
-    this.gravityGunController = new GravityGunController(this.eventBus, this.sceneManager);
     
     // Initialize lobby manager for room management UI
     this.lobbyManager = new LobbyManager(this.eventBus, this.gameStateManager);

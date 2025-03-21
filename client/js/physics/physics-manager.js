@@ -46,11 +46,11 @@ export class PhysicsManager {
     // Listen for update events
     this.eventBus.on('scene:update', this.update.bind(this));
     
-    // Listen for gravity gun events
-    this.eventBus.on('gravityGun:pickup', this.pickupObject.bind(this));
-    this.eventBus.on('gravityGun:drop', this.dropObject.bind(this));
-    this.eventBus.on('gravityGun:apply-force', this.applyForceToObject.bind(this));
-    this.eventBus.on('gravityGun:update-target', this.updateHeldObjectTarget.bind(this));
+    // Listen for physics commands from gravity gun controller
+    this.eventBus.on('physics:pickup-object', this.pickupObject.bind(this));
+    this.eventBus.on('physics:drop-object', this.dropObject.bind(this));
+    this.eventBus.on('physics:update-target', this.updateHeldObjectTarget.bind(this));
+    this.eventBus.on('physics:apply-force', this.applyForceToObject.bind(this));
     this.eventBus.on('physics:spawn-object', this.createPhysicsObject.bind(this));
     
     // Multiplayer events
@@ -122,16 +122,10 @@ export class PhysicsManager {
     }
     
     // Get object position
-    const objectPosition = new THREE.Vector3(
-      physicsObj.body.position.x,
-      physicsObj.body.position.y,
-      physicsObj.body.position.z
-    );
+    const objectPosition = this.getPositionFromBody(physicsObj.body);
     
     // Update beam geometry
-    const points = [playerPosition, objectPosition];
-    physicsObj.remoteBeam.geometry.dispose();
-    physicsObj.remoteBeam.geometry = new THREE.BufferGeometry().setFromPoints(points);
+    this.updateBeamGeometry(physicsObj.remoteBeam, playerPosition, objectPosition);
   }
   
   createPhysicsObject(options = {}) {
@@ -271,64 +265,84 @@ export class PhysicsManager {
     return id;
   }
   
+
+  /**
+   * Pick up a physics object
+   * @param {Object} data - Object pickup data
+   */
   pickupObject(data) {
     if (!data) return;
-    const { ray, sourceId, objectId } = data || {};
+    const { objectId, ray, playerId, holdDistance } = data;
     
     // Ensure bodyOffset is always initialized
     if (!this.bodyOffset) {
       this.bodyOffset = new CANNON.Vec3(0, 0, 0);
     }
     
-    // If objectId is provided (from gravity gun controller), try to find the body directly
-    if (objectId) {
-      // Find the physics body by ID - more reliable than raycasting
-      for (const [id, entry] of this.physicsBodies.entries()) {
-        if (id === objectId && entry.body.mass > 0) {
-          // Found the body, use it directly
-          this.heldBody = entry.body;
-          this.heldBodyId = id;
-          this.holdingPlayerId = sourceId || 'local';
-          
-          // Add debug logging to track ID settings
-          // Debug removed
-          
-          // Create a zero offset (center of object)
-          // Make sure bodyOffset is properly initialized before using it
-          if (!this.bodyOffset) {
-            this.bodyOffset = new CANNON.Vec3();
-          }
-          this.bodyOffset.set(0, 0, 0);
-          
-          // Safely disable gravity (ensuring the gravity property exists)
-          if (this.heldBody.gravity) {
-            this.heldBody.gravity.set(0, 0, 0);
-          } else {
-            this.heldBody.gravity = new CANNON.Vec3(0, 0, 0);
-          }
-          
-          // Store original mass and reduce for holding - but not as drastically
-          this.heldBody.originalMass = this.heldBody.mass;
-          // Changed from 0.1 to use a percentage of original mass (minimum 0.5)
-          this.heldBody.mass = Math.max(0.5, this.heldBody.originalMass * 0.5);
-          this.heldBody.updateMassProperties();
-          
-          // Create visual beam effect
-          this.createGravityBeam(this.heldBodyId);
-          
-          // Event will be emitted at the end of the method to avoid duplicated events
-          // Do not emit event here, as we'd emit it twice in some cases
-          
-          return;
-        }
-      }
+    // Check for existing held object and drop it first if needed
+    if (this.heldBody && this.heldBodyId) {
+      this.dropObject({ objectId: this.heldBodyId, playerId: this.holdingPlayerId });
     }
     
-    // Fallback to raycasting if objectId not provided or not found
+    // Try direct lookup by ID first (preferred method)
+    if (objectId && this.tryPickupById(objectId, playerId)) {
+      return; // Successful pickup by ID
+    }
     
+    // Fallback to raycasting if objectId not found or not provided
+    this.tryPickupByRaycast(ray, playerId);
+  }
+  
+  /**
+   * Attempt to pick up an object by its ID
+   * @param {string} objectId - ID of the object to pick up
+   * @param {string} playerId - ID of the player picking up the object
+   * @returns {boolean} True if pickup was successful
+   */
+  tryPickupById(objectId, playerId) {
+    if (!this.physicsBodies.has(objectId)) {
+      return false;
+    }
+    
+    const entry = this.physicsBodies.get(objectId);
+    
+    // Don't pick up static bodies
+    if (entry.body.mass <= 0) {
+      return false;
+    }
+    
+    // Found the body, use it directly
+    this.heldBody = entry.body;
+    this.heldBodyId = objectId;
+    this.holdingPlayerId = playerId || 'local';
+    
+    // Create a zero offset (center of object)
+    if (!this.bodyOffset) {
+      this.bodyOffset = new CANNON.Vec3();
+    }
+    this.bodyOffset.set(0, 0, 0);
+    
+    // Prepare the body for being held
+    this.prepareBodyForHolding(this.heldBody);
+    
+    // Create visual beam effect
+    this.createGravityBeam(this.heldBodyId);
+    
+    // Emit success event
+    this.emitPickupEvent();
+    return true;
+  }
+  
+  /**
+   * Attempt to pick up an object by raycasting
+   * @param {Object} ray - Ray data for raycasting
+   * @param {string} playerId - ID of the player picking up the object
+   * @returns {boolean} True if pickup was successful
+   */
+  tryPickupByRaycast(ray, playerId) {
     // Make sure we have ray data before proceeding
     if (!ray || !ray.origin || !ray.direction) {
-      return;
+      return false;
     }
     
     // Convert ray to Cannon.js format
@@ -340,69 +354,106 @@ export class PhysicsManager {
     
     // Scale up the ray length to ensure it can reach objects
     const scaledDirection = direction.clone();
-    scaledDirection.scale(20, scaledDirection); // Extend ray to 20 units to ensure it reaches
+    scaledDirection.scale(20, scaledDirection); // Extend ray to 20 units
     
     this.world.raycastClosest(origin, scaledDirection, { collisionFilterMask: -1, skipBackfaces: true }, result);
     
-    if (result.hasHit) {
-      // Find which body was hit
-      const hitBody = result.body;
-      
-      // Don't pick up static bodies
-      if (hitBody.mass <= 0) {
-        return;
-      }
-
-      // Store the hit body as the held body
-      this.heldBody = hitBody;
-      this.heldBodyId = this.getIdFromBody(hitBody);
-      this.holdingPlayerId = sourceId || 'local';
-      
-      // Store the held body ID and player
-      
-      // Ensure bodyOffset is initialized before using it
-      if (!this.bodyOffset) {
-        this.bodyOffset = new CANNON.Vec3();
-      }
-      
-      // Store the offset from the hit point
-      this.bodyOffset.copy(result.hitPointWorld);
-      this.bodyOffset.vsub(hitBody.position, this.bodyOffset);
-      
-      // Safely disable gravity (ensuring the gravity property exists)
-      if (this.heldBody.gravity) {
-        this.heldBody.gravity.set(0, 0, 0);
-      } else {
-        this.heldBody.gravity = new CANNON.Vec3(0, 0, 0);
-      }
-      
-      // Reduce mass while held - but not as drastically
-      this.heldBody.originalMass = this.heldBody.mass;
-      // Changed from 0.1 to use a percentage of original mass (minimum 0.5)
-      this.heldBody.mass = Math.max(0.5, this.heldBody.originalMass * 0.5);
-      this.heldBody.updateMassProperties();
-      
-      // Create visual beam effect
-      this.createGravityBeam(this.heldBodyId);
+    if (!result.hasHit) {
+      return false;
     }
     
-    // If we successfully picked up an object, emit events
-    if (this.heldBody && this.heldBodyId) {
-      // Debug removed
-      
-      // Emit event for multiplayer sync
-      this.eventBus.emit('physics:object-pickup', {
+    // Find which body was hit
+    const hitBody = result.body;
+    
+    // Don't pick up static bodies
+    if (hitBody.mass <= 0) {
+      return false;
+    }
+
+    // Store the hit body as the held body
+    this.heldBody = hitBody;
+    this.heldBodyId = this.getIdFromBody(hitBody);
+    this.holdingPlayerId = playerId || 'local';
+    
+    // Calculate the offset from the hit point
+    this.calculateBodyOffset(ray, hitBody, result);
+    
+    // Prepare the body for being held
+    this.prepareBodyForHolding(this.heldBody);
+    
+    // Create visual beam effect
+    this.createGravityBeam(this.heldBodyId);
+    
+    // Emit success event
+    this.emitPickupEvent();
+    return true;
+  }
+  
+  /**
+   * Calculate the offset from hit point to body center
+   * @param {Object} ray - Ray data
+   * @param {CANNON.Body} hitBody - The body that was hit
+   * @param {CANNON.RaycastResult} result - Raycast result
+   */
+  calculateBodyOffset(ray, hitBody, result) {
+    if (!this.bodyOffset) {
+      this.bodyOffset = new CANNON.Vec3();
+    }
+    
+    if (ray.hitPoint) {
+      // Use the provided hit point if available
+      const hitPoint = new CANNON.Vec3(ray.hitPoint.x, ray.hitPoint.y, ray.hitPoint.z);
+      this.bodyOffset.copy(hitPoint);
+      this.bodyOffset.vsub(hitBody.position, this.bodyOffset);
+    } else {
+      // Otherwise use the raycast result
+      this.bodyOffset.copy(result.hitPointWorld);
+      this.bodyOffset.vsub(hitBody.position, this.bodyOffset);
+    }
+  }
+  
+  /**
+   * Prepare a physics body for being held (modify gravity, mass)
+   * @param {CANNON.Body} body - The body to prepare
+   */
+  prepareBodyForHolding(body) {
+    // Disable gravity
+    if (body.gravity) {
+      body.gravity.set(0, 0, 0);
+    } else {
+      body.gravity = new CANNON.Vec3(0, 0, 0);
+    }
+    
+    // Store original mass and reduce for holding
+    body.originalMass = body.mass;
+    // Use a percentage of original mass (minimum 0.5)
+    body.mass = Math.max(0.5, body.originalMass * 0.3);
+    body.updateMassProperties();
+    
+    // Force the body to wake up if it's asleep
+    if (body.sleepState === CANNON.Body.SLEEPING) {
+      body.wakeUp();
+    }
+  }
+  
+  /**
+   * Helper method to emit pickup events
+   */
+  emitPickupEvent() {
+    if (!this.heldBody || !this.heldBodyId) return;
+    
+    // Emit event for local state tracking
+    this.eventBus.emit('physics:object-pickup', {
+      id: this.heldBodyId,
+      playerId: this.holdingPlayerId
+    });
+    
+    // Network sync if in multiplayer mode
+    if (this.socketManager) {
+      this.socketManager.emit('physics:object-pickup', {
         id: this.heldBodyId,
         playerId: this.holdingPlayerId
       });
-      
-      // Network sync if in multiplayer mode
-      if (this.socketManager) {
-        this.socketManager.emit('physics:object-pickup', {
-          id: this.heldBodyId,
-          playerId: this.holdingPlayerId
-        });
-      }
     }
   }
   
@@ -514,54 +565,80 @@ export class PhysicsManager {
     this.updateGravityBeam();
   }
   
+  /**
+   * Drop the currently held object
+   * @param {Object} data - Drop data
+   */
   dropObject(data = {}) {
-    if (!this.heldBody) return;
-    
-    // Debug removed
-    
-    // Restore gravity
-    this.heldBody.gravity.set(0, -9.82, 0);
-    
-    // Restore original mass
-    if (this.heldBody.originalMass !== undefined) {
-      this.heldBody.mass = this.heldBody.originalMass;
-      this.heldBody.updateMassProperties();
-      delete this.heldBody.originalMass;
+    // If specific objectId is provided, only drop if it matches our held object
+    if (data.objectId && this.heldBodyId !== data.objectId) {
+      return;
     }
     
-    // Get ID for the dropped body
+    // Can't drop if not holding anything
+    if (!this.heldBody) return;
+    
+    // Restore the body's physics properties
+    this.restoreBodyAfterHolding(this.heldBody);
+    
+    // Get ID for the dropped body and player before clearing references
     const id = this.heldBodyId;
+    const currentPlayerId = this.holdingPlayerId;
     
     // Remove visual beam
     this.removeGravityBeam();
-
-    // Debug removed
-    
-    // Store player ID before clearing references
-    const currentPlayerId = this.holdingPlayerId;
     
     // Clear references
     this.heldBody = null;
     this.heldBodyId = null;
     this.holdingPlayerId = null;
     
-    // Emit event for multiplayer sync - only once
-    // Debug removed
+    // Emit drop events
+    this.emitDropEvent(id, currentPlayerId, data.skipNetworkSync);
+  }
+  
+  /**
+   * Restore a physics body's properties after it has been held
+   * @param {CANNON.Body} body - The body to restore
+   */
+  restoreBodyAfterHolding(body) {
+    // Restore gravity
+    body.gravity.set(0, -9.82, 0);
+    
+    // Restore original mass
+    if (body.originalMass !== undefined) {
+      body.mass = body.originalMass;
+      body.updateMassProperties();
+      delete body.originalMass;
+    }
+  }
+  
+  /**
+   * Emit drop events for local tracking and network sync
+   * @param {string} objectId - ID of the dropped object
+   * @param {string} playerId - ID of the player dropping the object
+   * @param {boolean} skipNetworkSync - If true, don't sync over network
+   */
+  emitDropEvent(objectId, playerId, skipNetworkSync = false) {
+    // Emit event for local state tracking
     this.eventBus.emit('physics:object-drop', { 
-      id,
-      playerId: currentPlayerId 
+      id: objectId,
+      playerId: playerId 
     });
     
     // Network sync if in multiplayer mode
-    if (this.socketManager && !data.skipNetworkSync) {
+    if (this.socketManager && !skipNetworkSync) {
       this.socketManager.emit('physics:object-drop', { 
-        id,
-        playerId: currentPlayerId 
+        id: objectId,
+        playerId: playerId
       });
     }
   }
   
-  // Create a visual beam connecting the phone to the held object
+  /**
+   * Create a visual beam connecting the phone to the held object
+   * @param {string} objectId - ID of the held object
+   */
   createGravityBeam(objectId) {
     // Remove any existing beam
     this.removeGravityBeam();
@@ -605,7 +682,9 @@ export class PhysicsManager {
     this.scene.add(this.gravityBeam);
   }
   
-  // Update the gravity beam position
+  /**
+   * Update the gravity beam position
+   */
   updateGravityBeam() {
     if (!this.gravityBeam || !this.heldBody) return;
     
@@ -617,29 +696,60 @@ export class PhysicsManager {
     phoneModel.getWorldPosition(sourcePosition);
     
     // Get target position (held object)
-    const targetPosition = new THREE.Vector3(
-      this.heldBody.position.x,
-      this.heldBody.position.y,
-      this.heldBody.position.z
-    );
+    const targetPosition = this.getPositionFromBody(this.heldBody);
     
     // Update line vertices
-    const points = [sourcePosition, targetPosition];
-    this.gravityBeam.geometry.dispose();
-    this.gravityBeam.geometry = new THREE.BufferGeometry().setFromPoints(points);
+    this.updateBeamGeometry(this.gravityBeam, sourcePosition, targetPosition);
   }
   
-  // Remove gravity beam
+  /**
+   * Remove gravity beam
+   */
   removeGravityBeam() {
-    if (this.gravityBeam) {
-      this.scene.remove(this.gravityBeam);
-      if (this.gravityBeam.geometry) {
-        this.gravityBeam.geometry.dispose();
-      }
-      if (this.gravityBeam.material) {
-        this.gravityBeam.material.dispose();
-      }
-      this.gravityBeam = null;
+    this.removeBeam(this.gravityBeam);
+    this.gravityBeam = null;
+  }
+  
+  /**
+   * Helper function to get position Vector3 from a physics body
+   * @param {CANNON.Body} body - Physics body
+   * @returns {THREE.Vector3} Position as Vector3
+   */
+  getPositionFromBody(body) {
+    return new THREE.Vector3(
+      body.position.x,
+      body.position.y,
+      body.position.z
+    );
+  }
+  
+  /**
+   * Update beam geometry between two points
+   * @param {THREE.Line} beam - The beam line object
+   * @param {THREE.Vector3} source - Source position
+   * @param {THREE.Vector3} target - Target position
+   */
+  updateBeamGeometry(beam, source, target) {
+    if (!beam) return;
+    
+    const points = [source, target];
+    beam.geometry.dispose();
+    beam.geometry = new THREE.BufferGeometry().setFromPoints(points);
+  }
+  
+  /**
+   * Generic beam removal helper
+   * @param {THREE.Line} beam - The beam to remove
+   */
+  removeBeam(beam) {
+    if (!beam) return;
+    
+    this.scene.remove(beam);
+    if (beam.geometry) {
+      beam.geometry.dispose();
+    }
+    if (beam.material) {
+      beam.material.dispose();
     }
   }
   
@@ -756,21 +866,20 @@ export class PhysicsManager {
     }
     
     // Get the physics object
-    if (this.physicsBodies.has(id)) {
-      const physicsObj = this.physicsBodies.get(id);
-      
-      // Set held attributes on the object
-      physicsObj.body.gravity.set(0, 0, 0);
-      physicsObj.body.originalMass = physicsObj.body.mass;
-      physicsObj.body.mass = 0.1;
-      physicsObj.body.updateMassProperties();
-      
-      // Mark as held remotely
-      physicsObj.heldByRemotePlayer = playerId;
-      
-      // Add visual effects to show it's held by another player
-      this.createRemoteGravityBeam(id, playerId);
+    if (!this.physicsBodies.has(id)) {
+      return;
     }
+    
+    const physicsObj = this.physicsBodies.get(id);
+    
+    // Prepare the body for remote holding (same physics changes as local holding)
+    this.prepareBodyForHolding(physicsObj.body);
+    
+    // Mark as held remotely
+    physicsObj.heldByRemotePlayer = playerId;
+    
+    // Add visual effects to show it's held by another player
+    this.createRemoteGravityBeam(id, playerId);
   }
   
   /**
@@ -786,27 +895,22 @@ export class PhysicsManager {
     }
     
     // Get the physics object
-    if (this.physicsBodies.has(id)) {
-      const physicsObj = this.physicsBodies.get(id);
+    if (!this.physicsBodies.has(id)) {
+      return;
+    }
+    
+    const physicsObj = this.physicsBodies.get(id);
+    
+    // Only reset if this object was held by the remote player
+    if (physicsObj.heldByRemotePlayer === playerId) {
+      // Restore physics properties
+      this.restoreBodyAfterHolding(physicsObj.body);
       
-      // Only reset if this object was held by the remote player
-      if (physicsObj.heldByRemotePlayer === playerId) {
-        // Restore gravity
-        physicsObj.body.gravity.set(0, -9.82, 0);
-        
-        // Restore original mass
-        if (physicsObj.body.originalMass !== undefined) {
-          physicsObj.body.mass = physicsObj.body.originalMass;
-          physicsObj.body.updateMassProperties();
-          delete physicsObj.body.originalMass;
-        }
-        
-        // Mark as no longer held
-        physicsObj.heldByRemotePlayer = null;
-        
-        // Remove visual beam
-        this.removeRemoteGravityBeam(id);
-      }
+      // Mark as no longer held
+      physicsObj.heldByRemotePlayer = null;
+      
+      // Remove visual beam
+      this.removeRemoteGravityBeam(id);
     }
   }
   
@@ -837,6 +941,11 @@ export class PhysicsManager {
     const physicsObj = this.physicsBodies.get(objectId);
     if (!physicsObj) return;
     
+    // First clean up any existing beam
+    if (physicsObj.remoteBeam) {
+      this.removeBeam(physicsObj.remoteBeam);
+    }
+    
     // Create a visual connection to show the object is held remotely
     const material = new THREE.LineBasicMaterial({
       color: 0xff5500,  // Different color for remote beams
@@ -845,13 +954,12 @@ export class PhysicsManager {
       linewidth: 1
     });
     
-    // Create initial geometry (will be updated each frame)
+    // Create placeholder points (will be updated immediately in updateRemoteGravityBeam)
     const geometry = new THREE.BufferGeometry();
-    const points = [
+    geometry.setFromPoints([
       new THREE.Vector3(0, 0, 0),
       new THREE.Vector3(0, 0, 0)
-    ];
-    geometry.setFromPoints(points);
+    ]);
     
     // Create the line
     const beam = new THREE.Line(geometry, material);
@@ -860,6 +968,9 @@ export class PhysicsManager {
     // Store reference in the physics object
     physicsObj.remoteBeam = beam;
     physicsObj.heldByRemotePlayer = playerId;
+    
+    // Update beam with correct positions
+    this.updateRemoteGravityBeam(objectId, playerId);
   }
   
   /**
@@ -870,16 +981,7 @@ export class PhysicsManager {
     const physicsObj = this.physicsBodies.get(objectId);
     if (!physicsObj || !physicsObj.remoteBeam) return;
     
-    // Remove beam from scene
-    this.scene.remove(physicsObj.remoteBeam);
-    
-    // Dispose resources
-    if (physicsObj.remoteBeam.geometry) {
-      physicsObj.remoteBeam.geometry.dispose();
-    }
-    if (physicsObj.remoteBeam.material) {
-      physicsObj.remoteBeam.material.dispose();
-    }
+    this.removeBeam(physicsObj.remoteBeam);
     
     // Clear reference
     physicsObj.remoteBeam = null;
@@ -919,7 +1021,7 @@ export class PhysicsManager {
   
   /**
    * Apply an external force to a physics object
-   * @param {Object} data - Force data
+   * @param {Object} data - Force data containing objectId and force vector
    */
   applyForceToObject(data) {
     const { objectId, force } = data;
@@ -944,21 +1046,16 @@ export class PhysicsManager {
   }
   
   /**
-   * Update the target position for held objects (from gravity gun)
+   * Update the target position for held objects
    * @param {Object} data - Target data
    */
   updateHeldObjectTarget(data) {
     const { objectId, position, rotation } = data;
     
-    // Add debug logging to identify mismatch
-    if (this.heldBodyId !== objectId) {
-      console.warn(`ID mismatch in updateHeldObjectTarget:`, {
-        heldBodyId: this.heldBodyId,
-        receivedObjectId: objectId
-      });
+    // Only update if we're holding the specified object
+    if (!this.heldBody || !this.heldBodyId || this.heldBodyId !== objectId) {
+      return;
     }
-    
-    if (!this.heldBody || !this.heldBodyId || this.heldBodyId !== objectId) return;
     
     // Safety check for targetPosition
     if (!this.targetPosition) {

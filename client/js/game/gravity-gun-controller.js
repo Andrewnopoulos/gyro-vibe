@@ -2,6 +2,7 @@ import * as THREE from 'three';
 
 /**
  * Controls the gravity gun functionality allowing players to pick up and manipulate physics objects
+ * Handles user input and visual feedback, while delegating physics operations to PhysicsManager
  */
 export class GravityGunController {
   /**
@@ -24,7 +25,6 @@ export class GravityGunController {
     this.highlightedObject = null; // Reference to currently highlighted object
     
     // Debug properties 
-    this.debugEnabled = true;
     this.lastRaycastTime = 0;
     this.raycastInterval = 100; // ms between debug logs to avoid spam
     
@@ -79,7 +79,9 @@ export class GravityGunController {
     
     this.eventBus.on('firstperson:disabled', () => {
       this.enabled = false;
-      this.dropObject();
+      if (this.isHolding) {
+        this.dropObject();
+      }
     });
     
     // Store bound functions to use for both adding and removing event listeners
@@ -96,7 +98,7 @@ export class GravityGunController {
     // Listen for render loop updates to highlight available objects
     this.eventBus.on('scene:update', this.update.bind(this));
     
-    // Listen for physics sync events to update held object properties
+    // Listen for physics events to update controller state
     this.eventBus.on('physics:object-pickup', this.handleObjectPickup.bind(this));
     this.eventBus.on('physics:object-drop', this.handleObjectDrop.bind(this));
   }
@@ -118,17 +120,11 @@ export class GravityGunController {
     // Check if we're pointing at a physics object (for highlighting)
     const rayResult = this.performRaycast();
     
-    // Feedback is now handled in the weapon view through the beam
-    if (rayResult.hit && !this.isHolding) {
-      // Emit an event for the weapon view to update visual feedback
-      this.eventBus.emit('gravityGun:highlight', { targetFound: true });
-    } else if (!this.isHolding) {
-      // No target found
-      this.eventBus.emit('gravityGun:highlight', { targetFound: false });
-    }
+    // Visual feedback based on raycast results
+    this.updateWeaponHighlight(rayResult.hit && !this.isHolding);
     
-    // If we're holding an object, update its position
-    if (this.isHolding) {
+    // If we're holding an object, update its target position
+    if (this.isHolding && this.heldObjectId) {
       this.updateTargetPosition();
     }
   }
@@ -140,10 +136,10 @@ export class GravityGunController {
   onKeyDown(event) {
     if (!this.enabled) return;
     
+    // Prevent repeat events while key is held down
+    if (event.repeat) return;
+    
     if (event.code === 'KeyE') {
-      // Force a raycast update right before attempting to pick up
-      const raycastResult = this.performRaycast();
-      
       if (!this.isHolding) {
         this.pickupObject();
       } else {
@@ -152,7 +148,7 @@ export class GravityGunController {
     }
     
     // Toggle debug raycast visualization with V key
-    if (event.code === 'KeyV' && !event.repeat) {
+    if (event.code === 'KeyV') {
       this.toggleDebugRaycast();
     }
     
@@ -162,39 +158,12 @@ export class GravityGunController {
     }
     
     // Add force to held object with WASD keys
-    if (this.isHolding) {
-      let forceDirection = null;
-      
-      switch (event.code) {
-        case 'KeyW': // Push forward
-          forceDirection = new THREE.Vector3(0, 0, -1);
-          break;
-        case 'KeyS': // Pull back
-          forceDirection = new THREE.Vector3(0, 0, 1);
-          break;
-        case 'KeyA': // Push left
-          forceDirection = new THREE.Vector3(-1, 0, 0);
-          break;
-        case 'KeyD': // Push right
-          forceDirection = new THREE.Vector3(1, 0, 0);
-          break;
-        case 'KeyQ': // Push down
-          forceDirection = new THREE.Vector3(0, -1, 0);
-          break;
-        case 'KeyR': // Push up
-          forceDirection = new THREE.Vector3(0, 1, 0);
-          break;
-      }
+    if (this.isHolding && this.heldObjectId) {
+      const forceDirection = this.getForceDirectionFromKey(event.code);
       
       if (forceDirection) {
-        // Apply direction relative to camera orientation
-        forceDirection.applyQuaternion(this.camera.quaternion);
-        
-        // Scale the force
-        forceDirection.multiplyScalar(5);
-        
         // Apply force through event
-        this.eventBus.emit('gravityGun:apply-force', {
+        this.eventBus.emit('physics:apply-force', {
           objectId: this.heldObjectId,
           force: {
             x: forceDirection.x,
@@ -213,7 +182,7 @@ export class GravityGunController {
   onKeyUp(event) {
     if (!this.enabled) return;
     
-    // Add additional key handling if needed
+    // Additional key handling if needed
   }
   
   /**
@@ -223,8 +192,8 @@ export class GravityGunController {
   updateOrientation(gyroData) {
     if (!this.enabled) return;
     
-    // If we're holding an object, ensure the visual beam is updated
-    if (this.isHolding) {
+    // If we're holding an object, update target position based on new orientation
+    if (this.isHolding && this.heldObjectId) {
       this.updateTargetPosition();
     }
   }
@@ -234,28 +203,17 @@ export class GravityGunController {
    * @returns {Object} Object with hit boolean and raycast results
    */
   performRaycast() {
-    // Get raycast data from the weapon view
-    if (!this.weaponView) {
+    // Get weapon raycast data and transform to world space
+    const rayData = this.getWeaponRaycastData();
+    if (!rayData.valid) {
       return { hit: false };
     }
-    
-    const raycastData = this.weaponView.getRaycastData();
-    if (!raycastData) {
-      return { hit: false };
-    }
-    
-    // Transform the raycast data from weapon view space to world space
-    const mainCamera = this.camera;
-    const weaponWorldPosition = this.weaponView.mapToWorldSpace(raycastData.origin, mainCamera);
-    
-    // Get the direction from the weapon's orientation
-    const weaponWorldDirection = this.weaponView.getWorldDirectionFromWeapon(mainCamera.quaternion);
     
     // Draw a debug line in the main scene to visualize the raycast
-    this.drawDebugRaycast(weaponWorldPosition, weaponWorldDirection);
+    this.drawDebugRaycast(rayData.position, rayData.direction);
     
     // Set up raycaster with max distance
-    this.raycaster.set(weaponWorldPosition, weaponWorldDirection);
+    this.raycaster.set(rayData.position, rayData.direction);
     this.raycaster.far = this.maxPickupDistance;
     
     // Raycast to find intersected objects
@@ -266,6 +224,7 @@ export class GravityGunController {
       intersect.object.userData && intersect.object.userData.physicsId
     );
     
+    // Process results
     if (physicsIntersects.length > 0) {
       const hitObject = physicsIntersects[0].object;
       
@@ -275,15 +234,43 @@ export class GravityGunController {
       return {
         hit: true,
         intersection: physicsIntersects[0],
-        weaponPosition: weaponWorldPosition,
-        weaponDirection: weaponWorldDirection
+        weaponPosition: rayData.position,
+        weaponDirection: rayData.direction
       };
     }
     
+    // If we got here, no physics objects were hit
     return {
       hit: false,
-      weaponPosition: weaponWorldPosition,
-      weaponDirection: weaponWorldDirection
+      weaponPosition: rayData.position,
+      weaponDirection: rayData.direction
+    };
+  }
+  
+  /**
+   * Get weapon raycast data transformed to world space
+   * @returns {Object} Raycast data with position and direction vectors
+   */
+  getWeaponRaycastData() {
+    // Get raycast data from the weapon view
+    if (!this.weaponView) {
+      return { valid: false };
+    }
+    
+    const raycastData = this.weaponView.getRaycastData();
+    if (!raycastData) {
+      return { valid: false };
+    }
+    
+    // Transform the raycast data from weapon view space to world space
+    const mainCamera = this.camera;
+    const position = this.weaponView.mapToWorldSpace(raycastData.origin, mainCamera);
+    const direction = this.weaponView.getWorldDirectionFromWeapon(mainCamera.quaternion);
+    
+    return {
+      valid: true,
+      position,
+      direction
     };
   }
   
@@ -297,66 +284,39 @@ export class GravityGunController {
     
     if (rayResult.hit) {
       // Get the physics object ID from the userData
-      this.heldObjectId = rayResult.intersection.object.userData.physicsId;
+      const objectId = rayResult.intersection.object.userData.physicsId;
       
       // Calculate initial pickup distance (to maintain during holding)
       const hitPoint = rayResult.intersection.point;
       const weaponPosition = rayResult.weaponPosition;
+      let pickupDistance = 3; // Default
       
       if (hitPoint && weaponPosition) {
         // Calculate the distance from weapon to hit point
-        this.pickupDistance = new THREE.Vector3(
+        pickupDistance = new THREE.Vector3(
           hitPoint.x - weaponPosition.x,
           hitPoint.y - weaponPosition.y,
           hitPoint.z - weaponPosition.z
         ).length();
-      } else {
-        // Default distance if calculation not possible
-        this.pickupDistance = 3;
       }
       
-      // Create ray data for physics system with safety checks
-      const ray = {
-        origin: rayResult.weaponPosition ? {
-          x: rayResult.weaponPosition.x || 0,
-          y: rayResult.weaponPosition.y || 0,
-          z: rayResult.weaponPosition.z || 0
-        } : {x: 0, y: 0, z: 0},
-        direction: rayResult.weaponDirection ? {
-          x: rayResult.weaponDirection.x || 0,
-          y: rayResult.weaponDirection.y || 0,
-          z: rayResult.weaponDirection.z || 0
-        } : {x: 0, y: 0, z: 0},
-        // The collision point in world space is needed by the physics manager
-        hitPoint: rayResult.intersection.point ? {
-          x: rayResult.intersection.point.x || 0,
-          y: rayResult.intersection.point.y || 0,
-          z: rayResult.intersection.point.z || 0
-        } : {x: 0, y: 0, z: 0}
-      };
+      // Create ray data for physics system
+      const ray = this.createRayData(rayResult);
       
-      // Create pickup data with all necessary information
-      const pickupData = { 
-        ray, 
-        sourceId: 'local',
-        objectId: this.heldObjectId
-      };
+      // Store information locally before sending to physics system
+      this.heldObjectId = objectId;
+      this.pickupDistance = pickupDistance;
+      this.lastPickupTime = Date.now();
       
-      // Emit pickup event to physics system
-      this.eventBus.emit('gravityGun:pickup', pickupData);
+      // Emit direct pickup command to physics system
+      this.eventBus.emit('physics:pickup-object', {
+        objectId: objectId,
+        ray: ray,
+        playerId: 'local',
+        holdDistance: pickupDistance
+      });
       
-      // Set holding state
-      this.isHolding = true;
-      this.lastPickupTime = Date.now(); // Record the pickup time
-      
-      // Object pickup completed
-      
-      // Add a small delay before updating target position to ensure pickup event is processed first
-      setTimeout(() => {
-        this.updateTargetPosition();
-      }, 50); // 50ms delay to ensure pickup event is processed first
-      
-      // Make sure the object is highlighted while held
+      // Highlight the object we're trying to pick up
       this.highlightIntersectedObject(rayResult.intersection.object);
     }
   }
@@ -365,71 +325,70 @@ export class GravityGunController {
    * Drop the currently held object
    */
   dropObject() {
-    if (!this.isHolding) return;
-    
-    // Debug removed
+    if (!this.isHolding || !this.heldObjectId) return;
     
     // Add a protection against accidental drops right after pickup
     const now = Date.now();
     if (this.lastPickupTime && now - this.lastPickupTime < 500) {
-      // Silently block the drop
-      return;
+      return; // Silently block the drop
     }
     
-    // Emit drop event with context
-    this.eventBus.emit('gravityGun:drop', {
+    // Direct command to physics system
+    this.eventBus.emit('physics:drop-object', {
       objectId: this.heldObjectId,
       playerId: 'local'
     });
     
-    // Remove highlight
+    // Clear visual highlighting
     this.removeObjectHighlights();
-    
-    // Reset holding state and pickup distance
-    this.isHolding = false;
-    this.heldObjectId = null;
-    this.pickupDistance = null;
   }
-  
-  /**
-   * Initial pickup distance (set on first pickup)
-   */
-  pickupDistance = null;
   
   /**
    * Update the target position for held objects
    */
   updateTargetPosition() {
-    if (!this.isHolding || !this.weaponView || !this.heldObjectId) return;
+    if (!this.isHolding || !this.heldObjectId) return;
     
-    // Get raycast data from the weapon view
+    // Get weapon raycast data transformed to world space
+    const rayData = this.getWeaponRaycastData();
+    if (!rayData.valid) return;
+    
+    // Calculate target position based on pickup distance
+    const targetPosition = this.calculateTargetPosition(rayData);
+    
+    // Get weapon rotation from raycast data
     const raycastData = this.weaponView.getRaycastData();
     if (!raycastData) return;
     
-    // Transform to world space
-    const mainCamera = this.camera;
-    const weaponWorldPosition = this.weaponView.mapToWorldSpace(raycastData.origin, mainCamera);
-    const weaponWorldDirection = this.weaponView.getWorldDirectionFromWeapon(mainCamera.quaternion);
-    
-    // Use the stored pickup distance if available, otherwise use default
-    const holdDistance = this.pickupDistance !== null ? this.pickupDistance : 3;
-    
-    // Update target position along the raycast line
-    const targetPosition = weaponWorldPosition.clone().add(
-      weaponWorldDirection.clone().multiplyScalar(holdDistance)
-    );
-    
-    // Send to physics system with weapon rotation (not camera rotation)
-    // This ensures the object follows the weapon orientation
-    this.eventBus.emit('gravityGun:update-target', {
+    // Send to physics system
+    this.eventBus.emit('physics:update-target', {
       objectId: this.heldObjectId,
-      position: targetPosition,
+      position: {
+        x: targetPosition.x,
+        y: targetPosition.y,
+        z: targetPosition.z
+      },
       rotation: raycastData.weaponWorldQuaternion
     });
   }
   
   /**
-   * Handle object pickup events (from local or remote players)
+   * Calculate the target position for a held object
+   * @param {Object} rayData - Raycast data with position and direction
+   * @returns {THREE.Vector3} Target position
+   */
+  calculateTargetPosition(rayData) {
+    // Use the stored pickup distance if available, otherwise use default
+    const holdDistance = this.pickupDistance !== null ? this.pickupDistance : 3;
+    
+    // Calculate position along the raycast line
+    return rayData.position.clone().add(
+      rayData.direction.clone().multiplyScalar(holdDistance)
+    );
+  }
+  
+  /**
+   * Handle object pickup events from physics system
    * @param {Object} data - Pickup event data
    */
   handleObjectPickup(data) {
@@ -440,7 +399,7 @@ export class GravityGunController {
       this.heldObjectId = id;
       this.isHolding = true;
       
-      // Find the object in the scene to highlight it
+      // Find and highlight the object in the scene
       this.scene.traverse((object) => {
         if (object.userData && object.userData.physicsId === id) {
           this.highlightIntersectedObject(object);
@@ -450,18 +409,19 @@ export class GravityGunController {
   }
   
   /**
-   * Handle object drop events (from local or remote players)
+   * Handle object drop events from physics system
    * @param {Object} data - Drop event data
    */
   handleObjectDrop(data) {
     const { id, playerId } = data;
     
-    // If this is our object, reset our state
+    // Only respond if this is our held object
     if (playerId === 'local' && this.heldObjectId === id) {
       this.heldObjectId = null;
       this.isHolding = false;
+      this.pickupDistance = null;
       
-      // Remove object highlight when dropped
+      // Remove visual highlighting
       this.removeObjectHighlights();
     }
   }
@@ -490,7 +450,7 @@ export class GravityGunController {
     // Generate random properties for the object
     const randomObject = this.generateRandomObjectProps();
     
-    // Emit event to create the physics object
+    // Command physics system to create the object
     this.eventBus.emit('physics:spawn-object', {
       ...randomObject,
       position: {
@@ -499,19 +459,6 @@ export class GravityGunController {
         z: spawnPosition.z
       }
     });
-    
-    // Show temporary feedback for object spawning
-    if (this.reticle && this.reticle.material) {
-      const originalColor = this.reticle.material.color.clone();
-      this.reticle.material.color.set(0xffff00); // Yellow flash
-      
-      // Reset after a short delay
-      setTimeout(() => {
-        if (this.reticle && this.reticle.material) {
-          this.reticle.material.color.copy(originalColor);
-        }
-      }, 200);
-    }
   }
   
   /**
@@ -599,13 +546,6 @@ export class GravityGunController {
       
       // Store reference to highlighted object
       this.highlightedObject = object;
-      
-      // Clear highlight after a short delay
-      setTimeout(() => {
-        if (this.highlightedObject === object && !this.isHolding) {
-          this.removeObjectHighlights();
-        }
-      }, 500);
     }
   }
   
@@ -656,6 +596,81 @@ export class GravityGunController {
     if (this.debugRayLine) {
       this.debugRayLine.visible = this.showDebugRay;
     }
+  }
+  
+  /**
+   * Update weapon visual highlight based on whether a target is found
+   * @param {boolean} targetFound - Whether a valid target has been found
+   */
+  updateWeaponHighlight(targetFound) {
+    if (!this.isHolding) {
+      this.eventBus.emit('gravityGun:highlight', { targetFound });
+    }
+  }
+  
+  /**
+   * Get force direction vector based on keyboard input
+   * @param {string} keyCode - The keyboard key code
+   * @returns {THREE.Vector3|null} Force direction vector or null if no direction
+   */
+  getForceDirectionFromKey(keyCode) {
+    let direction = null;
+    
+    switch (keyCode) {
+      case 'KeyW': // Push forward
+        direction = new THREE.Vector3(0, 0, -1);
+        break;
+      case 'KeyS': // Pull back
+        direction = new THREE.Vector3(0, 0, 1);
+        break;
+      case 'KeyA': // Push left
+        direction = new THREE.Vector3(-1, 0, 0);
+        break;
+      case 'KeyD': // Push right
+        direction = new THREE.Vector3(1, 0, 0);
+        break;
+      case 'KeyQ': // Push down
+        direction = new THREE.Vector3(0, -1, 0);
+        break;
+      case 'KeyR': // Push up
+        direction = new THREE.Vector3(0, 1, 0);
+        break;
+      default:
+        return null;
+    }
+    
+    // Apply direction relative to camera orientation
+    direction.applyQuaternion(this.camera.quaternion);
+    
+    // Scale the force
+    direction.multiplyScalar(5);
+    
+    return direction;
+  }
+  
+  /**
+   * Create ray data structure from raycast result for physics system
+   * @param {Object} rayResult - Raycast result data
+   * @returns {Object} Formatted ray data for physics system
+   */
+  createRayData(rayResult) {
+    return {
+      origin: rayResult.weaponPosition ? {
+        x: rayResult.weaponPosition.x || 0,
+        y: rayResult.weaponPosition.y || 0,
+        z: rayResult.weaponPosition.z || 0
+      } : {x: 0, y: 0, z: 0},
+      direction: rayResult.weaponDirection ? {
+        x: rayResult.weaponDirection.x || 0,
+        y: rayResult.weaponDirection.y || 0,
+        z: rayResult.weaponDirection.z || 0
+      } : {x: 0, y: 0, z: 0},
+      hitPoint: rayResult.intersection && rayResult.intersection.point ? {
+        x: rayResult.intersection.point.x || 0,
+        y: rayResult.intersection.point.y || 0,
+        z: rayResult.intersection.point.z || 0
+      } : {x: 0, y: 0, z: 0}
+    };
   }
   
   /**
