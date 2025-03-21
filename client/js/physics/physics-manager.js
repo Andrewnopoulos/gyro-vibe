@@ -472,16 +472,16 @@ export class PhysicsManager {
     desiredPosition.vsub(currentPosition, displacement);
 
     // PD controller constants
-    const k_p = 10; // Proportional gain (stiffness)
-    const k_d = 5;  // Derivative gain (damping)
+    this.k_p = this.k_p !== undefined ? this.k_p : 14.5; // Proportional gain (stiffness)
+    this.k_d = this.k_d !== undefined ? this.k_d : 0.5;  // Derivative gain (damping)
 
     // Calculate force
     const force = new CANNON.Vec3();
-    displacement.scale(k_p, force); // Proportional force
+    displacement.scale(this.k_p, force); // Proportional force
 
     // Add damping force
     const dampingForce = new CANNON.Vec3();
-    this.heldBody.velocity.scale(-k_d, dampingForce);
+    this.heldBody.velocity.scale(-this.k_d, dampingForce);
     force.vadd(dampingForce, force);
 
     // Compensate for gravity (assuming -9.82 m/s² in y-direction)

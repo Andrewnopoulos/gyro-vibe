@@ -30,7 +30,7 @@ export class GravityGunController {
     
     // Create debug raycast line for visualization in world space
     this.debugRayLine = null;
-    this.showDebugRay = true; // Set to false in production
+    this.showDebugRay = false; // Set to false in production
     this.createDebugRayLine();
     
     // Set up event listeners

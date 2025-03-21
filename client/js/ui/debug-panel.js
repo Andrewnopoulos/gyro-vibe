@@ -1,19 +1,21 @@
 import { DEBUG_CONFIG } from '../config.js';
 
 /**
- * Debug panel for multiplayer testing
+ * Debug panel for multiplayer testing and physics controls
  */
 export class DebugPanel {
   /**
    * @param {EventBus} eventBus - Application event bus
    * @param {GameStateManager} gameStateManager - Game state manager
+   * @param {PhysicsManager} physicsManager - Physics manager (optional)
    */
-  constructor(eventBus, gameStateManager) {
+  constructor(eventBus, gameStateManager, physicsManager = null) {
     this.eventBus = eventBus;
     this.gameStateManager = gameStateManager;
+    this.physicsManager = physicsManager;
     this.panel = null;
     
-    if (DEBUG_CONFIG.ENABLE_MULTIPLAYER_DEBUG) {
+    if (DEBUG_CONFIG.ENABLE_MULTIPLAYER_DEBUG || physicsManager) {
       this.createDebugPanel();
       this.setupEventListeners();
       
@@ -55,7 +57,7 @@ export class DebugPanel {
     
     // Create title
     const title = document.createElement('div');
-    title.textContent = 'MULTIPLAYER DEBUG MODE';
+    title.textContent = 'DEBUG MODE';
     title.style.fontWeight = 'bold';
     title.style.marginBottom = '10px';
     title.style.textAlign = 'center';
@@ -68,79 +70,205 @@ export class DebugPanel {
     controls.style.flexDirection = 'column';
     controls.style.gap = '5px';
     
-    // Create/join room buttons
-    const roomControls = document.createElement('div');
-    roomControls.style.display = 'flex';
-    roomControls.style.gap = '5px';
-    roomControls.style.marginBottom = '5px';
+    // Add gravity gun controls if physics manager is available
+    if (this.physicsManager) {
+      this.addGravityGunControls(controls);
+    }
     
-    const createRoomBtn = document.createElement('button');
-    createRoomBtn.textContent = 'Create Room';
-    createRoomBtn.style.flex = '1';
-    createRoomBtn.onclick = () => this.createDebugRoom();
-    roomControls.appendChild(createRoomBtn);
-    
-    const joinRoomInput = document.createElement('input');
-    joinRoomInput.type = 'text';
-    joinRoomInput.placeholder = 'Room Code';
-    joinRoomInput.style.width = '80px';
-    joinRoomInput.style.padding = '3px';
-    roomControls.appendChild(joinRoomInput);
-    
-    const joinRoomBtn = document.createElement('button');
-    joinRoomBtn.textContent = 'Join';
-    joinRoomBtn.onclick = () => {
-      const roomCode = joinRoomInput.value.trim();
-      if (roomCode) {
-        this.gameStateManager.joinRoom(roomCode, DEBUG_CONFIG.DEBUG_USERNAME);
-      }
-    };
-    roomControls.appendChild(joinRoomBtn);
-    
-    controls.appendChild(roomControls);
-    
-    // Toggle first-person button
-    const toggleFpBtn = document.createElement('button');
-    toggleFpBtn.textContent = 'Toggle First Person Mode';
-    toggleFpBtn.onclick = () => {
-      this.eventBus.emit('debug:toggle-first-person');
-    };
-    controls.appendChild(toggleFpBtn);
-    
-    // Simulate gyro movement button
-    const simulateGyroBtn = document.createElement('button');
-    simulateGyroBtn.textContent = 'Simulate Gyro Movement';
-    simulateGyroBtn.onclick = () => {
-      // Emit sample gyro data that changes over time to simulate movement
-      this.startGyroSimulation();
-    };
-    controls.appendChild(simulateGyroBtn);
-    
-    // Leave room button
-    const leaveRoomBtn = document.createElement('button');
-    leaveRoomBtn.textContent = 'Leave Room';
-    leaveRoomBtn.onclick = () => {
-      this.gameStateManager.leaveRoom();
-    };
-    controls.appendChild(leaveRoomBtn);
-    
-    // Status display
-    this.statusDisplay = document.createElement('div');
-    this.statusDisplay.style.marginTop = '10px';
-    this.statusDisplay.style.padding = '5px';
-    this.statusDisplay.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
-    this.statusDisplay.style.borderRadius = '3px';
-    this.statusDisplay.style.fontSize = '11px';
-    this.statusDisplay.textContent = 'Not connected to any room';
-    
-    // Add sections to panel
-    this.panel.appendChild(controls);
-    this.panel.appendChild(this.statusDisplay);
+    // Only add multiplayer controls if enabled
+    if (DEBUG_CONFIG.ENABLE_MULTIPLAYER_DEBUG) {
+      // Create/join room buttons
+      const roomControls = document.createElement('div');
+      roomControls.style.display = 'flex';
+      roomControls.style.gap = '5px';
+      roomControls.style.marginBottom = '5px';
+      
+      const createRoomBtn = document.createElement('button');
+      createRoomBtn.textContent = 'Create Room';
+      createRoomBtn.style.flex = '1';
+      createRoomBtn.onclick = () => this.createDebugRoom();
+      roomControls.appendChild(createRoomBtn);
+      
+      const joinRoomInput = document.createElement('input');
+      joinRoomInput.type = 'text';
+      joinRoomInput.placeholder = 'Room Code';
+      joinRoomInput.style.width = '80px';
+      joinRoomInput.style.padding = '3px';
+      roomControls.appendChild(joinRoomInput);
+      
+      const joinRoomBtn = document.createElement('button');
+      joinRoomBtn.textContent = 'Join';
+      joinRoomBtn.onclick = () => {
+        const roomCode = joinRoomInput.value.trim();
+        if (roomCode) {
+          this.gameStateManager.joinRoom(roomCode, DEBUG_CONFIG.DEBUG_USERNAME);
+        }
+      };
+      roomControls.appendChild(joinRoomBtn);
+      
+      controls.appendChild(roomControls);
+      
+      // Toggle first-person button
+      const toggleFpBtn = document.createElement('button');
+      toggleFpBtn.textContent = 'Toggle First Person Mode';
+      toggleFpBtn.onclick = () => {
+        this.eventBus.emit('debug:toggle-first-person');
+      };
+      controls.appendChild(toggleFpBtn);
+      
+      // Simulate gyro movement button
+      const simulateGyroBtn = document.createElement('button');
+      simulateGyroBtn.textContent = 'Simulate Gyro Movement';
+      simulateGyroBtn.onclick = () => {
+        // Emit sample gyro data that changes over time to simulate movement
+        this.startGyroSimulation();
+      };
+      controls.appendChild(simulateGyroBtn);
+      
+      // Leave room button
+      const leaveRoomBtn = document.createElement('button');
+      leaveRoomBtn.textContent = 'Leave Room';
+      leaveRoomBtn.onclick = () => {
+        this.gameStateManager.leaveRoom();
+      };
+      controls.appendChild(leaveRoomBtn);
+      
+      // Status display
+      this.statusDisplay = document.createElement('div');
+      this.statusDisplay.style.marginTop = '10px';
+      this.statusDisplay.style.padding = '5px';
+      this.statusDisplay.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+      this.statusDisplay.style.borderRadius = '3px';
+      this.statusDisplay.style.fontSize = '11px';
+      this.statusDisplay.textContent = 'Not connected to any room';
+      
+      // Add sections to panel
+      this.panel.appendChild(controls);
+      this.panel.appendChild(this.statusDisplay);
+    } else {
+      // Just add the controls section if we're only using physics debug
+      this.panel.appendChild(controls);
+    }
     
     // Add to document
     document.body.appendChild(this.panel);
     
     console.log('Debug panel created');
+  }
+  
+  /**
+   * Add gravity gun control sliders to debug panel
+   * @param {HTMLElement} container - Container to add controls to
+   */
+  addGravityGunControls(container) {
+    // Create gravity gun controls section
+    const gravityGunSection = document.createElement('div');
+    gravityGunSection.style.marginBottom = '10px';
+    gravityGunSection.style.padding = '5px';
+    gravityGunSection.style.backgroundColor = 'rgba(0, 100, 255, 0.2)';
+    gravityGunSection.style.borderRadius = '3px';
+    
+    // Section title
+    const sectionTitle = document.createElement('div');
+    sectionTitle.textContent = 'GRAVITY GUN CONTROLS';
+    sectionTitle.style.fontWeight = 'bold';
+    sectionTitle.style.marginBottom = '5px';
+    sectionTitle.style.fontSize = '11px';
+    gravityGunSection.appendChild(sectionTitle);
+    
+    // k_p slider (stiffness)
+    const kpContainer = document.createElement('div');
+    kpContainer.style.display = 'flex';
+    kpContainer.style.alignItems = 'center';
+    kpContainer.style.marginBottom = '5px';
+    
+    const kpLabel = document.createElement('div');
+    kpLabel.textContent = 'Stiffness (k_p):';
+    kpLabel.style.flex = '1';
+    kpLabel.style.fontSize = '11px';
+    kpContainer.appendChild(kpLabel);
+    
+    const kpValue = document.createElement('div');
+    kpValue.textContent = this.physicsManager.k_p || '14.5';
+    kpValue.style.width = '30px';
+    kpValue.style.textAlign = 'right';
+    kpValue.style.fontSize = '11px';
+    kpContainer.appendChild(kpValue);
+    
+    const kpSlider = document.createElement('input');
+    kpSlider.type = 'range';
+    kpSlider.min = '1';
+    kpSlider.max = '30';
+    kpSlider.step = '0.5';
+    kpSlider.value = this.physicsManager.k_p || '14.5';
+    kpSlider.style.width = '100%';
+    kpSlider.style.marginTop = '3px';
+    kpSlider.oninput = () => {
+      const value = parseFloat(kpSlider.value);
+      this.physicsManager.k_p = value;
+      kpValue.textContent = value.toFixed(1);
+    };
+    
+    // k_d slider (damping)
+    const kdContainer = document.createElement('div');
+    kdContainer.style.display = 'flex';
+    kdContainer.style.alignItems = 'center';
+    kdContainer.style.marginBottom = '5px';
+    
+    const kdLabel = document.createElement('div');
+    kdLabel.textContent = 'Damping (k_d):';
+    kdLabel.style.flex = '1';
+    kdLabel.style.fontSize = '11px';
+    kdContainer.appendChild(kdLabel);
+    
+    const kdValue = document.createElement('div');
+    kdValue.textContent = this.physicsManager.k_d || '0.5';
+    kdValue.style.width = '30px';
+    kdValue.style.textAlign = 'right';
+    kdValue.style.fontSize = '11px';
+    kdContainer.appendChild(kdValue);
+    
+    const kdSlider = document.createElement('input');
+    kdSlider.type = 'range';
+    kdSlider.min = '0';
+    kdSlider.max = '20';
+    kdSlider.step = '0.5';
+    kdSlider.value = this.physicsManager.k_d || '0.5';
+    kdSlider.style.width = '100%';
+    kdSlider.style.marginTop = '3px';
+    kdSlider.oninput = () => {
+      const value = parseFloat(kdSlider.value);
+      this.physicsManager.k_d = value;
+      kdValue.textContent = value.toFixed(1);
+    };
+    
+    // Reset button
+    const resetButton = document.createElement('button');
+    resetButton.textContent = 'Reset to Defaults';
+    resetButton.style.width = '100%';
+    resetButton.style.padding = '3px';
+    resetButton.style.marginTop = '5px';
+    resetButton.onclick = () => {
+      // Reset to defaults
+      this.physicsManager.k_p = 10;
+      this.physicsManager.k_d = 5;
+      
+      // Update sliders and values
+      kpSlider.value = '10';
+      kpValue.textContent = '10';
+      kdSlider.value = '5';
+      kdValue.textContent = '5';
+    };
+    
+    // Add all elements to container
+    gravityGunSection.appendChild(kpContainer);
+    gravityGunSection.appendChild(kpSlider);
+    gravityGunSection.appendChild(kdContainer);
+    gravityGunSection.appendChild(kdSlider);
+    gravityGunSection.appendChild(resetButton);
+    
+    // Add the gravity gun controls to the container
+    container.appendChild(gravityGunSection);
   }
   
   /**

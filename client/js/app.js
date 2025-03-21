@@ -47,11 +47,12 @@ class App {
     // Initialize lobby manager for room management UI
     this.lobbyManager = new LobbyManager(this.eventBus, this.gameStateManager);
     
-    // Initialize debug panel if debug mode is enabled
+    // Initialize gravity gun controller
+    this.gravityGunController = new GravityGunController(this.eventBus, this.sceneManager, this.weaponView);
+    
+    // Initialize debug panel if debug mode is enabled or for physics debugging
     // (Only used for testing, the lobby manager is the primary multiplayer UI)
-    if (DEBUG_CONFIG.ENABLE_MULTIPLAYER_DEBUG) {
-      this.debugPanel = new DebugPanel(this.eventBus, this.gameStateManager);
-    }
+    this.debugPanel = new DebugPanel(this.eventBus, this.gameStateManager, this.physicsManager);
     
     // Setup update loop for game components
     this.setupUpdateLoop();

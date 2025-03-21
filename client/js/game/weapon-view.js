@@ -222,18 +222,18 @@ export class WeaponView {
     this.raycastOrigin.position.set(0, height / 2 + 0.05, depth + 0.1);
     phoneContainer.add(this.raycastOrigin);
     
-    // Create a smaller, less obtrusive visual indicator for the raycast origin
-    const originIndicator = new THREE.Mesh(
-      new THREE.SphereGeometry(0.01, 8, 8),
-      new THREE.MeshBasicMaterial({ 
-        color: 0x00ff00, 
-        transparent: true,
-        opacity: 0.7,
-        visible: false // Only visible when highlighted
-      })
-    );
-    originIndicator.name = 'raycastOriginIndicator';
-    this.raycastOrigin.add(originIndicator);
+    // // Create a smaller, less obtrusive visual indicator for the raycast origin
+    // const originIndicator = new THREE.Mesh(
+    //   new THREE.SphereGeometry(0.01, 8, 8),
+    //   new THREE.MeshBasicMaterial({ 
+    //     color: 0x00ff00, 
+    //     transparent: true,
+    //     opacity: 0.7,
+    //     visible: false // Only visible when highlighted
+    //   })
+    // );
+    // originIndicator.name = 'raycastOriginIndicator';
+    // this.raycastOrigin.add(originIndicator);
     
     // Position the phone as a weapon in first-person view
     this.weaponPhone.position.set(0.25, -0.2, -0.8);
