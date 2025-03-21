@@ -440,6 +440,9 @@ export class WeaponView {
         }
       }
     });
+    // Add event listeners for page flipping animations
+    this.eventBus.on('weapon:flip-left', () => this.startFlipLeft());
+    this.eventBus.on('weapon:flip-right', () => this.startFlipRight());
     window.addEventListener('resize', this.onWindowResize.bind(this), false);
   }
 

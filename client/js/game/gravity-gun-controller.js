@@ -139,12 +139,21 @@ export class GravityGunController {
     // Prevent repeat events while key is held down
     if (event.repeat) return;
     
-    if (event.code === 'KeyE') {
+    if (event.code === 'Space') {
       if (!this.isHolding) {
         this.pickupObject();
       } else {
         this.dropObject();
       }
+    }
+    
+    // Page flipping with Q and E keys
+    if (event.code === 'KeyQ') {
+      this.eventBus.emit('weapon:flip-left');
+    }
+    
+    if (event.code === 'KeyE') {
+      this.eventBus.emit('weapon:flip-right');
     }
     
     // Toggle debug raycast visualization with V key

@@ -81,8 +81,10 @@ export class FirstPersonController {
       S/Arrow Down - Move Backward<br>
       A/Arrow Left - Move Left<br>
       D/Arrow Right - Move Right<br>
-      Q - Toggle Rune Mode<br>
-      E - Gravity Gun (pickup/drop objects)<br>
+      Left Shift - Toggle Rune Mode<br>
+      Space - Gravity Gun (pickup/drop objects)<br>
+      Q - Flip Page Left<br>
+      E - Flip Page Right<br>
       T - Spawn Random Object<br>
       V - Toggle Debug Raycast<br>
       Mouse - Look Around<br>
@@ -359,7 +361,7 @@ export class FirstPersonController {
       case 'KeyD':
         this.moveRight = true;
         break;
-      case 'KeyQ':
+      case 'ShiftLeft':
         // Only toggle on keydown, not on key hold
         if (!event.repeat) {
           this.toggleRuneMode();
