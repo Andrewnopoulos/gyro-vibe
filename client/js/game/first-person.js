@@ -42,9 +42,6 @@ export class FirstPersonController {
     // Create weapon view for first-person
     this.weaponView = new WeaponView(eventBus, this.container);
     
-    // Create gravity gun controller
-    // this.gravityGunController = new GravityGunController(eventBus, sceneManager, this.weaponView);
-    
     this.createUI();
     this.setupEventListeners();
     

@@ -1,15 +1,15 @@
-The physics handling and movement control code is located primarily in the PhysicsManager class:
+How to Use the Animations
+The startFlipLeft() and startFlipRight() methods are ready to trigger the animations, but they need to be called based on your game’s input system. For example:
 
-  1. Physics handling for pickups: Lines 269-389
-    - pickupObject() method (line 269)
-    - tryPickupById() method (line 302)
-    - prepareBodyForHolding() method (line 419)
-  2. Movement control: Lines 460-538
-    - updateHeldBody() method (line 460)
-    - Force calculation in lines 483-530
-    - Rotation control in lines 540-562
+Gestures: If your game uses touch controls, you could tie swipes to these methods (e.g., swipe left for startFlipLeft).
+Events: Add event listeners in setupEventListeners like this:
 
-  The most critical part is the updateHeldBody() method which contains the sophisticated force system that creates smooth movement of
-  held objects.
+this.eventBus.on('weapon:flip-left', () => this.startFlipLeft());
+this.eventBus.on('weapon:flip-right', () => this.startFlipRight());
 
-  
+Then emit these events (this.eventBus.emit('weapon:flip-left')) when appropriate in your game logic.
+
+Notes
+Visuals: The spellbook is basic (brown covers, white pages). You could enhance it with textures or more detailed geometry if desired.
+Rune Effects: I simplified these to apply to the spellbook’s center. You might want to adjust positions or target specific parts (e.g., pages) further.
+Testing: The position (0.25, -0.2, -0.8) and rotation -Math.PI / 2 are kept from the phone; tweak these if the spellbook doesn’t sit right in your view.
