@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { DEFAULT_CAMERA_POSITION } from '../config.js';
 import { PhoneModel } from './phone-model.js';
-import { Environment } from './environment.js';
+import { Environment } from './environment/index.js';
 import { Lighting } from './lighting.js';
 import { easeOutCubic } from '../utils/math.js';
 
