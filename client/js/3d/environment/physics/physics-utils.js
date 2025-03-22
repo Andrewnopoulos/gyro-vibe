@@ -532,8 +532,6 @@ export class PhysicsUtils {
       }
     }
     
-    console.log('Added body at:', body.position, 'Total bodies:', physicsManager.world.bodies.length);
-    
     return { body, id };
   }
 

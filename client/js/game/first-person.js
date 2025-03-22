@@ -1,7 +1,5 @@
 import * as THREE from 'three';
 import { PLAYER_HEIGHT, LOOK_SPEED, MOVE_SPEED } from '../config.js';
-import { GravityGunController } from './gravity-gun-controller.js';
-import { WeaponView } from './weapon-view.js';
 
 /**
  * Manages first-person mode controls
@@ -44,9 +42,6 @@ export class FirstPersonController {
     // UI elements
     this.controlsGuide = null;
     this.runeModeIndicator = null;
-    
-    // Create weapon view for first-person
-    this.weaponView = new WeaponView(eventBus, this.container);
     
     this.createUI();
     this.setupEventListeners();
@@ -403,11 +398,6 @@ export class FirstPersonController {
     // Determine if player is moving for weapon bob effect
     const isMoving = this.moveForward || this.moveBackward || this.moveLeft || this.moveRight || 
                      (this.godMode && (this.moveUp || this.moveDown));
-    
-    // Update weapon view
-    if (this.weaponView) {
-      this.weaponView.update(delta, isMoving);
-    }
   }
 
   /**
@@ -541,13 +531,6 @@ export class FirstPersonController {
         // Only toggle on keydown, not on key hold
         if (!event.repeat) {
           this.toggleRuneMode();
-        }
-        break;
-      case 'KeyV':
-        // Toggle debug raycast visualization
-        if (!event.repeat && this.weaponView) {
-          this.weaponView.toggleDebugRaycast();
-          console.log('Debug raycast visualization toggled');
         }
         break;
     }
@@ -1379,18 +1362,6 @@ export class FirstPersonController {
     
     if (this.debugCanvas && this.debugCanvas.parentNode) {
       this.debugCanvas.parentNode.removeChild(this.debugCanvas);
-    }
-    
-    // Dispose of the gravity gun controller
-    if (this.gravityGunController) {
-      this.gravityGunController.dispose();
-      this.gravityGunController = null;
-    }
-    
-    // Dispose of the weapon view
-    if (this.weaponView) {
-      this.weaponView.dispose();
-      this.weaponView = null;
     }
   }
 }
