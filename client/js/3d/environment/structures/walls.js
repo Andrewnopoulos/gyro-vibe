@@ -166,13 +166,9 @@ export class VillageWalls {
     
     // Add physics if available
     if (this.physicsUtils) {
-      console.log("physics utils exists")
       // Create a box shape for the wall
       const wallShape = new CANNON.Box(new CANNON.Vec3(wallLength/2, height/2, thickness/2));
       this.physicsUtils.addPhysicsShape(wall, wallShape, 0);
-    } else
-    {
-      console.log("physics utils missing")
     }
     
     return wall;

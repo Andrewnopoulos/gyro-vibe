@@ -40,6 +40,11 @@ export class PhysicsManager {
     groundBody.addShape(groundShape);
     groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2); // Rotate to be horizontal
     this.world.addBody(groundBody);
+    
+    // Notify the system that the physics manager is ready
+    if (this.eventBus) {
+      this.eventBus.emit('physics:manager-ready', this);
+    }
   }
   
   setupEventListeners() {

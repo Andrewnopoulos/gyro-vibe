@@ -71,14 +71,9 @@ export class SceneManager {
     // Create lighting
     this.lighting = new Lighting(this.scene);
     
-    // Get physics manager if available (via event bus)
-    let physicsManager = null;
-    this.eventBus.emit('physics:request-manager', (manager) => {
-      physicsManager = manager;
-    });
-    
-    // Create environment with physics support
-    this.environment = new Environment(this.scene, physicsManager, this.eventBus);
+    // Create environment with event bus and let it get physics manager when ready
+    // We're not passing physicsManager directly to avoid initialization order issues
+    this.environment = new Environment(this.scene, null, this.eventBus);
     
     // Create phone model
     this.phoneModel = new PhoneModel(this.scene, this.eventBus);

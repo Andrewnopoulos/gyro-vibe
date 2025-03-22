@@ -42,8 +42,8 @@ export class Environment {
     // Define material properties for different surface types
     this.materials = createMaterials();
     
-    // Create physics utilities
-    this.physicsUtils = new PhysicsUtils(physicsManager, this.materials);
+    // Create physics utilities with event bus for lazy loading
+    this.physicsUtils = new PhysicsUtils(physicsManager, this.materials, this.eventBus);
     
     // Initialize environment
     this.createSkybox();

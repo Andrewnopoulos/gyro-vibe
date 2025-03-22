@@ -6,30 +6,83 @@ import * as CANNON from 'cannon-es';
  */
 export class PhysicsUtils {
   /**
-   * @param {PhysicsManager} physicsManager - Physics manager for collision bodies
+   * @param {PhysicsManager|null} physicsManager - Physics manager for collision bodies
    * @param {Object} materials - Material definitions
+   * @param {EventBus} eventBus - Application event bus
    */
-  constructor(physicsManager, materials) {
+  constructor(physicsManager, materials, eventBus) {
     this.physicsManager = physicsManager;
     this.materials = materials;
+    this.eventBus = eventBus;
+    this.physicsMaterial = null; // Will be initialized when physics manager is available
     this.debugWireframes = new Map(); // Map of physicsId -> debug wireframe mesh
     this.debugMode = false; // Debug mode flag
+    this.pendingOperations = []; // Queue for operations pending physics manager
     
-    // Create physics materials and contacts
+    // If physics manager is provided and ready, set up materials directly
     if (this.physicsManager && this.physicsManager.world) {
       this.setupPhysicsMaterials();
+    } 
+    // Otherwise try to get it through the event bus
+    else if (this.eventBus) {
+      // Try to get synchronously first
+      this.getPhysicsManager();
+      
+      // Set up listener for when it becomes available
+      this.eventBus.on('physics:manager-ready', (manager) => {
+        console.log("Physics manager is ready now");
+        this.physicsManager = manager;
+        if (this.physicsManager && this.physicsManager.world) {
+          this.setupPhysicsMaterials();
+        }
+      });
     }
+  }
+  
+  /**
+   * Get physics manager, fetching it via event bus if not already available
+   * @returns {PhysicsManager|null} The physics manager
+   */
+  getPhysicsManager() {
+    if (!this.physicsManager && this.eventBus) {
+      // Try to get the physics manager synchronously first
+      let manager = null;
+      this.eventBus.emit('physics:request-manager', (m) => {
+        manager = m;
+      });
+      
+      if (manager) {
+        this.physicsManager = manager;
+        // Initialize physics materials now that we have the manager
+        if (this.physicsManager && this.physicsManager.world) {
+          this.setupPhysicsMaterials();
+        }
+      } else {
+        // If synchronous request failed, register for when it becomes available
+        this.eventBus.on('physics:manager-ready', (manager) => {
+          this.physicsManager = manager;
+          // Initialize physics materials now that we have the manager
+          if (this.physicsManager && this.physicsManager.world) {
+            this.setupPhysicsMaterials();
+          }
+        });
+      }
+    }
+    return this.physicsManager;
   }
   
   /**
    * Set up physics materials and contact properties for environment objects
    */
   setupPhysicsMaterials() {
+    const physicsManager = this.getPhysicsManager();
+    if (!physicsManager || !physicsManager.world) return;
+    
     // Create a default material for environment objects
     this.physicsMaterial = new CANNON.Material('environmentMaterial');
     
     // Get default material from physics manager (used by spawned objects)
-    const defaultMaterial = this.physicsManager.world.defaultMaterial;
+    const defaultMaterial = physicsManager.world.defaultMaterial;
     
     // Create contact between environment objects and default physics objects
     const contactMaterial = new CANNON.ContactMaterial(
@@ -44,7 +97,7 @@ export class PhysicsUtils {
     );
     
     // Add the contact material to the world
-    this.physicsManager.world.addContactMaterial(contactMaterial);
+    physicsManager.world.addContactMaterial(contactMaterial);
   }
   
   /**
@@ -54,9 +107,10 @@ export class PhysicsUtils {
   toggleDebugMode(enabled) {
     this.debugMode = enabled;
     
-    if (this.physicsManager && this.physicsManager.physicsBodies) {
+    const physicsManager = this.getPhysicsManager();
+    if (physicsManager && physicsManager.physicsBodies) {
       // Process all physics bodies
-      this.physicsManager.physicsBodies.forEach((physicsObj, id) => {
+      physicsManager.physicsBodies.forEach((physicsObj, id) => {
         if (this.debugMode) {
           // Create wireframes for all existing physics bodies
           this.createDebugWireframe(physicsObj, id);
@@ -94,7 +148,8 @@ export class PhysicsUtils {
    * @param {string} id - Unique ID for the physics body
    */
   createDebugWireframe(physicsObj, id) {
-    if (!this.debugMode || !physicsObj || !physicsObj.body || !this.physicsManager.scene) return;
+    const physicsManager = this.getPhysicsManager();
+    if (!this.debugMode || !physicsObj || !physicsObj.body || !physicsManager || !physicsManager.scene) return;
     
     // Remove any existing wireframe for this object
     this.removeDebugWireframe(id);
@@ -189,7 +244,7 @@ export class PhysicsUtils {
     wireframeGroup.quaternion.copy(body.quaternion);
     
     // Add to scene
-    this.physicsManager.scene.add(wireframeGroup);
+    physicsManager.scene.add(wireframeGroup);
     
     // Store reference
     this.debugWireframes.set(id, wireframeGroup);
@@ -200,10 +255,11 @@ export class PhysicsUtils {
    * @param {string} id - ID of the physics body
    */
   updateDebugWireframe(id) {
-    if (!this.debugMode || !this.debugWireframes.has(id) || !this.physicsManager.physicsBodies.has(id)) return;
+    const physicsManager = this.getPhysicsManager();
+    if (!this.debugMode || !this.debugWireframes.has(id) || !physicsManager || !physicsManager.physicsBodies.has(id)) return;
     
     const wireframe = this.debugWireframes.get(id);
-    const physicsObj = this.physicsManager.physicsBodies.get(id);
+    const physicsObj = physicsManager.physicsBodies.get(id);
     
     // Update position and rotation
     wireframe.position.copy(physicsObj.body.position);
@@ -218,10 +274,11 @@ export class PhysicsUtils {
     if (!this.debugWireframes.has(id)) return;
     
     const wireframe = this.debugWireframes.get(id);
+    const physicsManager = this.getPhysicsManager();
     
     // Remove from scene
-    if (this.physicsManager.scene) {
-      this.physicsManager.scene.remove(wireframe);
+    if (physicsManager && physicsManager.scene) {
+      physicsManager.scene.remove(wireframe);
     }
     
     // Dispose geometries and materials
@@ -259,7 +316,44 @@ export class PhysicsUtils {
    * @param {number} mass - Physics mass (0 for static)
    */
   addPhysicsBox(mesh, mass) {
-    if (!this.physicsManager) return;
+    // Ensure physics manager is available or queue this operation for later
+    const physicsManager = this.getPhysicsManager();
+    
+    if (!physicsManager) {
+      console.log("Physics manager not available yet, queuing box operation for later");
+      
+      // Queue this operation for when physics manager becomes available
+      if (this.eventBus) {
+        // Use a handler we can remove after execution
+        const handler = (manager) => {
+          this.physicsManager = manager;
+          if (this.physicsManager && this.physicsManager.world) {
+            this.setupPhysicsMaterials();
+            // Execute the queued operation
+            this._executeAddPhysicsBox(mesh, mass);
+            // Remove the listener to prevent multiple executions
+            this.eventBus.off('physics:manager-ready', handler);
+          }
+        };
+        this.eventBus.on('physics:manager-ready', handler);
+      }
+      return;
+    }
+    
+    return this._executeAddPhysicsBox(mesh, mass);
+  }
+  
+  /**
+   * Internal method to execute the physics box addition
+   * @private
+   */
+  _executeAddPhysicsBox(mesh, mass) {
+    const physicsManager = this.physicsManager;
+    
+    if (!physicsManager || !physicsManager.world) {
+      console.error("Physics manager or world not available for box");
+      return null;
+    }
     
     // Get dimensions from mesh geometry
     const size = new THREE.Vector3();
@@ -288,39 +382,35 @@ export class PhysicsUtils {
     // Always add the physicsId to the mesh userData, whether static or not
     mesh.userData.physicsId = id;
     
-    // Add to physics world if available
-    if (this.physicsManager.world) {
-      this.physicsManager.world.addBody(body);
-    }
+    // Add to physics world
+    physicsManager.world.addBody(body);
     
-    // Add to the physicsBodies map in the physics manager if available
-    if (this.physicsManager.physicsBodies) {
-      const physicsObj = {
-        body: body,
-        mesh: mesh,
-        properties: {
-          size: { x: size.x, y: size.y, z: size.z },
-          mass: mass,
-          color: mesh.material.color.getHex(),
-          shape: 'box',
-          metallic: false,
-          restitution: mass > 0 ? 0.3 : this.materials.stone.physics.restitution,
-          friction: mass > 0 ? 0.5 : this.materials.stone.physics.friction
-        }
-      };
+    // Add to the physicsBodies map
+    const physicsObj = {
+      body: body,
+      mesh: mesh,
+      properties: {
+        size: { x: size.x, y: size.y, z: size.z },
+        mass: mass,
+        color: mesh.material.color.getHex(),
+        shape: 'box',
+        metallic: false,
+        restitution: mass > 0 ? 0.3 : this.materials.stone.physics.restitution,
+        friction: mass > 0 ? 0.5 : this.materials.stone.physics.friction
+      }
+    };
+    
+    physicsManager.physicsBodies.set(id, physicsObj);
+    
+    // Handle debug mode
+    if (this.debugMode) {
+      // Create debug wireframe
+      this.createDebugWireframe(physicsObj, id);
       
-      this.physicsManager.physicsBodies.set(id, physicsObj);
-      
-      // Handle debug mode
-      if (this.debugMode) {
-        // Create debug wireframe
-        this.createDebugWireframe(physicsObj, id);
-        
-        // Hide the original mesh
-        if (mesh) {
-          physicsObj.originalVisibility = mesh.visible;
-          mesh.visible = false;
-        }
+      // Hide the original mesh
+      if (mesh) {
+        physicsObj.originalVisibility = mesh.visible;
+        mesh.visible = false;
       }
     }
     
@@ -334,9 +424,46 @@ export class PhysicsUtils {
    * @param {number} mass - Physics mass (0 for static)
    */
   addPhysicsShape(mesh, shape, mass) {
-    console.log("checking this.physicsmanager link");
-    if (!this.physicsManager) return;
-    console.log("success!!");
+    // Ensure physics manager is available or queue this operation for later
+    const physicsManager = this.getPhysicsManager();
+    
+    if (!physicsManager) {
+      console.log("Physics manager not available yet, queuing operation for later");
+      
+      // Queue this operation for when physics manager becomes available
+      if (this.eventBus) {
+        const queuedOperation = { mesh, shape, mass };
+        // Use a handler we can remove after execution
+        const handler = (manager) => {
+          this.physicsManager = manager;
+          if (this.physicsManager && this.physicsManager.world) {
+            this.setupPhysicsMaterials();
+            // Execute the queued operation
+            this._executeAddPhysicsShape(mesh, shape, mass);
+            // Remove the listener to prevent multiple executions
+            this.eventBus.off('physics:manager-ready', handler);
+          }
+        };
+        this.eventBus.on('physics:manager-ready', handler);
+      }
+      return;
+    }
+    
+    return this._executeAddPhysicsShape(mesh, shape, mass);
+  }
+  
+  /**
+   * Internal method to execute the physics shape addition
+   * @private
+   */
+  _executeAddPhysicsShape(mesh, shape, mass) {
+    const physicsManager = this.physicsManager;
+    
+    if (!physicsManager || !physicsManager.world) {
+      console.error("Physics manager or world not available");
+      return null;
+    }
+    
     // Create body
     const body = new CANNON.Body({
       mass: mass,
@@ -349,8 +476,6 @@ export class PhysicsUtils {
       material: this.physicsMaterial // Use the environment material
     });
     body.addShape(shape);
-
-
     
     // Generate a unique ID for this object
     const id = `physics_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -358,10 +483,8 @@ export class PhysicsUtils {
     // Always add the physicsId to the mesh userData, whether static or not
     mesh.userData.physicsId = id;
     
-    // Add to physics world if available
-    if (this.physicsManager.world) {
-      this.physicsManager.world.addBody(body);
-    }
+    // Add to physics world
+    physicsManager.world.addBody(body);
     
     // Get bounding box for size estimate
     const size = new THREE.Vector3();
@@ -379,41 +502,37 @@ export class PhysicsUtils {
       restitution = this.materials.stone.physics.restitution;
       friction = this.materials.stone.physics.friction;
     }
-
-    console.log("hello there")
     
-    // Add to the physicsBodies map in the physics manager if available
-    if (this.physicsManager.physicsBodies) {
-      const physicsObj = {
-        body: body,
-        mesh: mesh,
-        properties: {
-          size: { x: size.x, y: size.y, z: size.z },
-          mass: mass,
-          color: mesh.material.color ? mesh.material.color.getHex() : 0x808080,
-          shape: shape instanceof CANNON.Cylinder ? 'cylinder' : 'box',
-          metallic: false,
-          restitution: restitution,
-          friction: friction
-        }
-      };
+    // Add to the physicsBodies map in the physics manager
+    const physicsObj = {
+      body: body,
+      mesh: mesh,
+      properties: {
+        size: { x: size.x, y: size.y, z: size.z },
+        mass: mass,
+        color: mesh.material.color ? mesh.material.color.getHex() : 0x808080,
+        shape: shape instanceof CANNON.Cylinder ? 'cylinder' : 'box',
+        metallic: false,
+        restitution: restitution,
+        friction: friction
+      }
+    };
+    
+    physicsManager.physicsBodies.set(id, physicsObj);
+    
+    // Handle debug mode
+    if (this.debugMode) {
+      // Create debug wireframe
+      this.createDebugWireframe(physicsObj, id);
       
-      this.physicsManager.physicsBodies.set(id, physicsObj);
-      
-      // Handle debug mode
-      if (this.debugMode) {
-        // Create debug wireframe
-        this.createDebugWireframe(physicsObj, id);
-        
-        // Hide the original mesh
-        if (mesh) {
-          physicsObj.originalVisibility = mesh.visible;
-          mesh.visible = false;
-        }
+      // Hide the original mesh
+      if (mesh) {
+        physicsObj.originalVisibility = mesh.visible;
+        mesh.visible = false;
       }
     }
-
-    console.log('Added body at:', body.position, 'Total bodies:', this.physicsManager.world.bodies.length);
+    
+    console.log('Added body at:', body.position, 'Total bodies:', physicsManager.world.bodies.length);
     
     return { body, id };
   }
@@ -426,7 +545,8 @@ export class PhysicsUtils {
    * @param {number} mass - Physics mass (0 for static)
    */
   addPhysicsShapeWithHollow(mesh, outerShape, innerShape, mass) {
-    if (!this.physicsManager) return;
+    const physicsManager = this.getPhysicsManager();
+    if (!physicsManager) return;
     
     // For static bodies, we can use multiple shapes to create a hollow effect
     // For simplicity we're using separate shapes for walls
@@ -457,14 +577,14 @@ export class PhysicsUtils {
       });
       innerBody.addShape(innerShape);
       innerBody.collisionResponse = false; // Don't respond to collisions
-      if (this.physicsManager.world) {
-        this.physicsManager.world.addBody(innerBody);
+      if (physicsManager.world) {
+        physicsManager.world.addBody(innerBody);
       }
     }
     
     // Add to physics world if available
-    if (this.physicsManager.world) {
-      this.physicsManager.world.addBody(body);
+    if (physicsManager.world) {
+      physicsManager.world.addBody(body);
     }
     
     // Get bounding box for size estimate
@@ -473,7 +593,7 @@ export class PhysicsUtils {
     mesh.geometry.boundingBox.getSize(size);
     
     // Add to the physicsBodies map in the physics manager if available
-    if (this.physicsManager.physicsBodies) {
+    if (physicsManager.physicsBodies) {
       const physicsObj = {
         body: body,
         mesh: mesh,
@@ -490,7 +610,7 @@ export class PhysicsUtils {
         }
       };
       
-      this.physicsManager.physicsBodies.set(id, physicsObj);
+      physicsManager.physicsBodies.set(id, physicsObj);
       
       // Handle debug mode
       if (this.debugMode) {
@@ -529,7 +649,8 @@ export class PhysicsUtils {
    * @param {number} rotation - Building rotation
    */
   createHollowBuildingPhysics(mesh, width, height, depth, rotation = 0) {
-    if (!this.physicsManager) return;
+    const physicsManager = this.getPhysicsManager();
+    if (!physicsManager) return;
     
     const halfWidth = width / 2;
     const halfDepth = depth / 2;
@@ -579,8 +700,8 @@ export class PhysicsUtils {
     }
     
     // Add to physics world if available
-    if (this.physicsManager.world) {
-      this.physicsManager.world.addBody(buildingBody);
+    if (physicsManager.world) {
+      physicsManager.world.addBody(buildingBody);
     }
     
     // Generate a unique ID for this building
@@ -591,7 +712,7 @@ export class PhysicsUtils {
     
     // Also register with physics manager for proper interaction
     const size = new THREE.Vector3(width, height, depth);
-    if (this.physicsManager.physicsBodies) {
+    if (physicsManager.physicsBodies) {
       const physicsObj = {
         body: buildingBody,
         mesh: mesh,
@@ -606,7 +727,7 @@ export class PhysicsUtils {
         }
       };
       
-      this.physicsManager.physicsBodies.set(id, physicsObj);
+      physicsManager.physicsBodies.set(id, physicsObj);
       
       // Handle debug mode
       if (this.debugMode) {
