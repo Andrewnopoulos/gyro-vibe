@@ -552,14 +552,14 @@ export const SpellEffects = {
           y: blackHoleContainer.position.y,
           z: blackHoleContainer.position.z
         },
-        strength: strength * 2, // Increased strength for more pull
-        radius: effectRadius * 4 // QUADRUPLED for maximum range - to ensure objects are pulled from far away
+        strength: strength * 1.5, // Moderate strength increase (reduced from 2x to 1.5x)
+        radius: effectRadius * 4 // Keeping the wider radius for better range
       });
     }
     
-    // Apply gravitational pull effect even more frequently (every 16ms = ~60fps)
-    // for smoother and more responsive physics interaction
-    const pullInterval = setInterval(applyGravitationalPull, 16);
+    // Apply gravitational pull effect frequently (every 25ms = ~40fps)
+    // for smooth physics interaction with better performance
+    const pullInterval = setInterval(applyGravitationalPull, 25);
     
     // Setup animation
     const startTime = Date.now();

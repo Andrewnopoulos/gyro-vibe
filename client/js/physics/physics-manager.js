@@ -1278,12 +1278,12 @@ export class PhysicsManager {
         const minDistance = 0.5; // Minimum distance threshold to prevent excessive forces
         const adjustedDistance = Math.max(distance, minDistance);
         
-        // Much stronger inverse square calculation with higher base multiplier (20.0)
-        // and steeper falloff for more dramatic, closer-range effects
-        const distanceFactor = Math.min(1.0, 2.0 / (adjustedDistance * adjustedDistance * 0.5));
+        // More moderate inverse square calculation that still provides good attraction
+        // but doesn't overwhelm physics objects
+        const distanceFactor = Math.min(1.0, 1.5 / (adjustedDistance * adjustedDistance * 0.7));
         
-        // Dramatically increased force multiplier (from 5.0 to 30.0)
-        const forceMagnitude = effectStrength * body.mass * 30.0 * distanceFactor;
+        // Moderate force multiplier (reduced from 30.0 to 12.0)
+        const forceMagnitude = effectStrength * body.mass * 12.0 * distanceFactor;
         
         console.log(`Applying force of magnitude ${forceMagnitude.toFixed(2)} to object ${objectId}`);
         

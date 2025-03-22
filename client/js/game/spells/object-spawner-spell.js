@@ -267,9 +267,9 @@ export class ObjectSpawnerSpell extends Spell {
    * @returns {number} Mass value
    */
   calculateChannelMass(progress) {
-    // Start very light (0.1) and grow heavier up to 15 at max channel
+    // Start very light (0.2) and grow heavier up to 10 at max channel
     // Cubic curve gives rapid growth toward the end for dramatic effect
-    return 0.1 + (progress * progress * progress * 14.9); // Cubic growth for mass
+    return 0.2 + (progress * progress * progress * 9.8); // Cubic growth for mass
   }
   
   /**
