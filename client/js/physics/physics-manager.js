@@ -57,6 +57,7 @@ export class PhysicsManager {
     this.eventBus.on('physics:update-target', this.updateHeldObjectTarget.bind(this));
     this.eventBus.on('physics:apply-force', this.applyForceToObject.bind(this));
     this.eventBus.on('physics:spawn-object', this.createPhysicsObject.bind(this));
+    this.eventBus.on('physics:update-object', this.updatePhysicsObject.bind(this));
     
     // Multiplayer events
     this.eventBus.on('multiplayer:room-joined', this.handleRoomJoined.bind(this));
@@ -1008,6 +1009,210 @@ export class PhysicsManager {
         force: force,
         playerId: 'local'
       });
+    }
+  }
+  
+  /**
+   * Update properties of an existing physics object
+   * @param {Object} data - Update data with object ID and properties to update
+   */
+  updatePhysicsObject(data) {
+    const { id } = data;
+    
+    if (!id || !this.physicsBodies.has(id)) {
+      console.warn('Cannot update physics object: invalid ID or object not found', id);
+      return;
+    }
+    
+    const physicsObj = this.physicsBodies.get(id);
+    const { body, mesh } = physicsObj;
+    
+    // Update scale/size if specified
+    if (data.scale !== undefined) {
+      // Update the visual object size
+      let scaleValue = data.scale;
+      if (typeof scaleValue === 'number') {
+        // If scale is a single number, apply uniformly
+        mesh.scale.set(scaleValue, scaleValue, scaleValue);
+      } else if (typeof scaleValue === 'object') {
+        // If scale is an object with x, y, z components
+        mesh.scale.x = scaleValue.x !== undefined ? scaleValue.x : mesh.scale.x;
+        mesh.scale.y = scaleValue.y !== undefined ? scaleValue.y : mesh.scale.y;
+        mesh.scale.z = scaleValue.z !== undefined ? scaleValue.z : mesh.scale.z;
+      }
+      
+      // Update physics body shape if possible
+      // For spheres, update radius
+      if (body.shapes[0] instanceof CANNON.Sphere) {
+        // Calculate new radius based on average scale
+        const avgScale = (mesh.scale.x + mesh.scale.y + mesh.scale.z) / 3;
+        const originalSize = physicsObj.properties.size;
+        const originalRadius = (originalSize.x + originalSize.y + originalSize.z) / 6;
+        const newRadius = originalRadius * avgScale;
+        
+        // Remove old shape
+        body.removeShape(body.shapes[0]);
+        
+        // Add new shape with updated radius
+        const newShape = new CANNON.Sphere(newRadius);
+        body.addShape(newShape);
+      }
+      // For boxes, update half-extents
+      else if (body.shapes[0] instanceof CANNON.Box) {
+        const originalSize = physicsObj.properties.size;
+        
+        // Remove old shape
+        body.removeShape(body.shapes[0]);
+        
+        // Calculate new half-extents
+        const halfExtents = new CANNON.Vec3(
+          (originalSize.x * mesh.scale.x) / 2,
+          (originalSize.y * mesh.scale.y) / 2,
+          (originalSize.z * mesh.scale.z) / 2
+        );
+        
+        // Add new shape with updated half-extents
+        const newShape = new CANNON.Box(halfExtents);
+        body.addShape(newShape);
+      }
+      // For cylinders, update radius and height
+      else if (body.shapes[0] instanceof CANNON.Cylinder) {
+        const originalSize = physicsObj.properties.size;
+        
+        // Remove old shape
+        body.removeShape(body.shapes[0]);
+        
+        // Calculate new dimensions
+        const originalRadius = Math.max(originalSize.x, originalSize.z) / 2;
+        const newRadius = originalRadius * Math.max(mesh.scale.x, mesh.scale.z);
+        const newHeight = originalSize.y * mesh.scale.y;
+        
+        // Add new shape with updated dimensions
+        const newShape = new CANNON.Cylinder(newRadius, newRadius, newHeight, 12);
+        body.addShape(newShape);
+      }
+      
+      // Update mass properties to reflect the new size
+      if (body.shapes.length > 0) {
+        body.updateMassProperties();
+      }
+    }
+    
+    // Update mass if specified
+    if (data.mass !== undefined) {
+      body.mass = data.mass;
+      body.updateMassProperties();
+      
+      // Store updated mass in properties
+      physicsObj.properties.mass = data.mass;
+    }
+    
+    // Update velocity if specified
+    if (data.velocity) {
+      const vel = data.velocity;
+      body.velocity.set(
+        vel.x !== undefined ? vel.x : body.velocity.x,
+        vel.y !== undefined ? vel.y : body.velocity.y,
+        vel.z !== undefined ? vel.z : body.velocity.z
+      );
+      
+      // Wake up the body if it was sleeping
+      if (body.sleepState === CANNON.Body.SLEEPING) {
+        body.wakeUp();
+      }
+    }
+    
+    // Apply visual effects if specified
+    if (data.visualEffect) {
+      this.applyVisualEffect(id, data.visualEffect);
+    }
+    
+    // Sync updates to other clients if in multiplayer
+    if (this.socketManager) {
+      this.socketManager.emit('physics:update-object', {
+        id,
+        ...data,
+        playerId: 'local'
+      });
+    }
+  }
+  
+  /**
+   * Apply visual effects to a physics object
+   * @param {string} id - Object ID
+   * @param {Object} effectData - Effect parameters
+   */
+  applyVisualEffect(id, effectData) {
+    if (!this.physicsBodies.has(id)) return;
+    
+    const physicsObj = this.physicsBodies.get(id);
+    const { mesh } = physicsObj;
+    
+    const { type, intensity } = effectData;
+    
+    switch (type) {
+      case 'pulse':
+        // Flash the material
+        if (mesh.material) {
+          // Store original parameters if not already saved
+          if (!mesh.userData.originalEmissive) {
+            mesh.userData.originalEmissive = mesh.material.emissive.clone();
+            mesh.userData.originalEmissiveIntensity = mesh.material.emissiveIntensity || 0;
+          }
+          
+          // Apply pulsing glow based on intensity
+          const emissiveColor = new THREE.Color(mesh.material.color).multiplyScalar(0.5);
+          mesh.material.emissive = emissiveColor;
+          mesh.material.emissiveIntensity = intensity * 0.5;
+          
+          // Schedule restoration of original properties
+          if (mesh.userData.emissiveResetTimeout) {
+            clearTimeout(mesh.userData.emissiveResetTimeout);
+          }
+          
+          mesh.userData.emissiveResetTimeout = setTimeout(() => {
+            if (mesh.material) {
+              mesh.material.emissive.copy(mesh.userData.originalEmissive);
+              mesh.material.emissiveIntensity = mesh.userData.originalEmissiveIntensity;
+            }
+          }, 100);
+        }
+        break;
+        
+      case 'channeling':
+        // Add glowing outline effect while object is being channeled
+        if (mesh.material) {
+          if (!mesh.userData.originalEmissive) {
+            mesh.userData.originalEmissive = mesh.material.emissive.clone();
+            mesh.userData.originalEmissiveIntensity = mesh.material.emissiveIntensity || 0;
+          }
+          
+          // Yellowy-orange glow for channeling
+          mesh.material.emissive.set(0xffaa00);
+          mesh.material.emissiveIntensity = 0.3 + (intensity * 0.7);
+        }
+        break;
+        
+      case 'release':
+        // Flash effect when releasing a channeled object
+        if (mesh.material) {
+          // Bright flash on release
+          mesh.material.emissive.set(0xffffff);
+          mesh.material.emissiveIntensity = 1.0;
+          
+          // Fade out effect
+          setTimeout(() => {
+            if (mesh.material) {
+              mesh.material.emissive.set(0);
+              mesh.material.emissiveIntensity = 0;
+            }
+          }, 300);
+        }
+        break;
+        
+      default:
+        // Unknown effect type
+        console.warn('Unknown visual effect type:', type);
     }
   }
   
