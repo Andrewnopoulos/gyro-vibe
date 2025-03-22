@@ -47,7 +47,7 @@ export class WeaponView {
     this.isFlipping = false;
     this.flipDirection = null;
     this.flipStartTime = 0;
-    this.flipDuration = 0.5; // 0.5 seconds for flip animation
+    this.flipDuration = 0.25; // 0.25 seconds for flip animation
 
     // Define the offset quaternion for correct orientation
     this.offsetQuaternion = new THREE.Quaternion().setFromAxisAngle(
