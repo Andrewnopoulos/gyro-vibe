@@ -562,7 +562,7 @@ export class PhysicsUtils {
     body.addShape(outerShape);
     
     // Generate a unique ID for this object
-    const id = `physics_hollow_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const id = `env_hollow_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     // Always add the physicsId to the mesh userData, whether static or not
     mesh.userData.physicsId = id;

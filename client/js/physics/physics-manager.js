@@ -310,22 +310,43 @@ export class PhysicsManager {
   }
   
   /**
-   * Attempt to pick up an object by its ID
-   * @param {string} objectId - ID of the object to pick up
-   * @param {string} playerId - ID of the player picking up the object
-   * @returns {boolean} True if pickup was successful
+   * Determine if an object is pickable based on ID and physics properties
+   * @param {string} objectId - The physics ID of the object
+   * @returns {boolean} Whether the object is pickable
    */
-  tryPickupById(objectId, playerId) {
+  isObjectPickable(objectId) {
     if (!this.physicsBodies.has(objectId)) {
       return false;
     }
     
     const entry = this.physicsBodies.get(objectId);
     
+    // Check if it's an environment object by ID prefix
+    if (objectId.startsWith('env_') || objectId.startsWith('building_')) {
+      return false;
+    }
+    
     // Don't pick up static bodies
     if (entry.body.mass <= 0) {
       return false;
     }
+    
+    return true;
+  }
+
+  /**
+   * Attempt to pick up an object by its ID
+   * @param {string} objectId - ID of the object to pick up
+   * @param {string} playerId - ID of the player picking up the object
+   * @returns {boolean} True if pickup was successful
+   */
+  tryPickupById(objectId, playerId) {
+    // Check if the object is pickable
+    if (!this.isObjectPickable(objectId)) {
+      return false;
+    }
+    
+    const entry = this.physicsBodies.get(objectId);
     
     // Found the body, use it directly
     this.heldBody = entry.body;
@@ -381,14 +402,17 @@ export class PhysicsManager {
     // Find which body was hit
     const hitBody = result.body;
     
-    // Don't pick up static bodies
-    if (hitBody.mass <= 0) {
+    // Get the object ID
+    const hitObjectId = this.getIdFromBody(hitBody);
+    
+    // Check if object is pickable
+    if (!hitObjectId || !this.isObjectPickable(hitObjectId)) {
       return false;
     }
 
     // Store the hit body as the held body
     this.heldBody = hitBody;
-    this.heldBodyId = this.getIdFromBody(hitBody);
+    this.heldBodyId = hitObjectId;
     this.holdingPlayerId = playerId || 'local';
     
     // Calculate the offset from the hit point

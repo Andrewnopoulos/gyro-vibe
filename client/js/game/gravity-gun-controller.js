@@ -217,6 +217,26 @@ export class GravityGunController {
   }
   
   /**
+   * Determine if an object is pickable based on ID and physics properties
+   * @param {string} physicsId - The physics ID of the object
+   * @param {Object} physicsObj - The physics object data
+   * @returns {boolean} Whether the object is pickable
+   */
+  isObjectPickable(physicsId, physicsObj) {
+    // Check if it's an environment object by ID prefix
+    if (physicsId.startsWith('env_') || physicsId.startsWith('building_')) {
+      return false;
+    }
+    
+    // Check if it's a static body (mass <= 0)
+    if (physicsObj && physicsObj.body && physicsObj.body.mass <= 0) {
+      return false;
+    }
+    
+    return true;
+  }
+
+  /**
    * Perform a raycast from the weapon position
    * @returns {Object} Object with hit boolean and raycast results
    */
@@ -238,9 +258,31 @@ export class GravityGunController {
     const intersects = this.raycaster.intersectObjects(this.scene.children, true);
 
     // Filter out objects without physics
-    const physicsIntersects = intersects.filter(intersect => 
-      intersect.object.userData && intersect.object.userData.physicsId
-    );
+    const physicsIntersects = [];
+    
+    // Process intersects to filter for pickable objects
+    for (const intersect of intersects) {
+      if (!intersect.object.userData || !intersect.object.userData.physicsId) {
+        continue;
+      }
+      
+      const physicsId = intersect.object.userData.physicsId;
+      
+      // Get physics manager to check if object is pickable
+      let isPickable = false;
+      
+      // Use synchronous approach to avoid complexity
+      this.eventBus.emit('physics:request-manager', (physicsManager) => {
+        if (physicsManager && physicsManager.physicsBodies.has(physicsId)) {
+          const physicsObj = physicsManager.physicsBodies.get(physicsId);
+          isPickable = this.isObjectPickable(physicsId, physicsObj);
+        }
+      });
+      
+      if (isPickable) {
+        physicsIntersects.push(intersect);
+      }
+    }
     
     // Process results
     if (physicsIntersects.length > 0) {
@@ -257,7 +299,7 @@ export class GravityGunController {
       };
     }
     
-    // If we got here, no physics objects were hit
+    // If we got here, no pickable physics objects were hit
     return {
       hit: false,
       weaponPosition: rayData.position,
@@ -298,6 +340,8 @@ export class GravityGunController {
   pickupObject() {
     if (!this.enabled || this.isHolding) return;
     const rayResult = this.performRaycast();
+    
+    // If we got a hit, it's already been filtered as a pickable object
     if (rayResult.hit) {
         const objectId = rayResult.intersection.object.userData.physicsId;
         const weaponPosition = rayResult.weaponPosition;
