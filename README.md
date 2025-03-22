@@ -1,4 +1,4 @@
-# Gyro-Vibe
+# MAGE FIGHT
 
 A web application that uses WebSockets to connect a mobile device to a PC and transmits gyroscope and accelerometer data in real-time.
 

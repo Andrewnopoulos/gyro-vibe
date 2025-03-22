@@ -55,7 +55,7 @@ export class LobbyManager {
     
     // Create title
     const title = document.createElement('h1');
-    title.textContent = 'Gyro-Vibe Multiplayer';
+    title.textContent = 'MAGE FIGHT Multiplayer';
     title.style.margin = '0 0 20px 0';
     title.style.fontSize = '24px';
     title.style.color = '#4fc3f7';

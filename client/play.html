@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Gyro-Vibe - Play Now</title>
+  <title>MAGE FIGHT - Play Now</title>
   <script type="importmap">
     {
       "imports": {
@@ -602,7 +602,7 @@
   <div id="splashScreen" class="splash-overlay">
     <div class="splash-container">
       <div class="splash-header">
-        <h2 class="splash-title">Welcome to Gyro-Vibe</h2>
+        <h2 class="splash-title">Welcome to MAGE FIGHT</h2>
         <p class="splash-subtitle">The Ultimate Motion Controller Experience</p>
       </div>
       
@@ -640,7 +640,7 @@
 
   <div class="container">
     <div class="header">
-      <h1>Gyro-Vibe Multiplayer</h1>
+      <h1>MAGE FIGHT Multiplayer</h1>
     </div>
     
     <div class="game-area" id="lobbyScreen">
@@ -738,7 +738,7 @@
       
       // Check if we should show the splash screen
       // We'll use localStorage to remember if the user has seen it
-      const hasSeenSplash = localStorage.getItem('gyroVibe_hasSeenSplash');
+      const hasSeenSplash = localStorage.getItem('mageFight_hasSeenSplash');
       
       if (!hasSeenSplash) {
         // Show splash screen
@@ -751,7 +751,7 @@
       // Handle continue button click
       continueBtn.addEventListener('click', () => {
         // Save that user has seen the splash
-        localStorage.setItem('gyroVibe_hasSeenSplash', 'true');
+        localStorage.setItem('mageFight_hasSeenSplash', 'true');
         
         // Hide with animation
         splashScreen.style.opacity = '0';
