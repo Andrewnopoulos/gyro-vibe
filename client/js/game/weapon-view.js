@@ -451,7 +451,7 @@ export class WeaponView {
   /**
    * Start flipping the page to the left
    */
-  startFlipLeft() {
+  startFlipRight() {
     if (this.isFlipping) return;
     
     // Check if we're already at the first page
@@ -485,7 +485,7 @@ export class WeaponView {
   /**
    * Start flipping the page to the right
    */
-  startFlipRight() {
+  startFlipLeft() {
     if (this.isFlipping) return;
     
     // Check if we're already at the last page
