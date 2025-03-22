@@ -458,7 +458,7 @@ export class PhysicsManager {
   }
   
   /**
-   * Prepare a physics body for being held (modify gravity, mass)
+   * Prepare a physics body for being held (modify gravity, mass, and angular factors)
    * @param {CANNON.Body} body - The body to prepare
    */
   prepareBodyForHolding(body) {
@@ -473,7 +473,23 @@ export class PhysicsManager {
     body.originalMass = body.mass;
     // Use a percentage of original mass (minimum 0.5)
     body.mass = Math.max(0.5, body.originalMass * 0.3);
+    
+    // Store original angular properties to restore later
+    body.originalAngularDamping = body.angularDamping;
+    body.originalAngularFactor = body.angularFactor.clone();
+    
+    // Increase angular damping to reduce rotation while held
+    body.angularDamping = 0.9; // High damping to quickly stop rotation
+    
+    // Optionally, completely restrict rotation while held
+    // This prevents the crazy rotation behavior
+    body.angularFactor.set(0, 0, 0);
+    
+    // Update mass and inertia properties
     body.updateMassProperties();
+    
+    // Reset any existing angular velocity
+    body.angularVelocity.set(0, 0, 0);
     
     // Force the body to wake up if it's asleep
     if (body.sleepState === CANNON.Body.SLEEPING) {
@@ -532,9 +548,16 @@ export class PhysicsManager {
     // Apply the force
     this.heldBody.applyForce(force, this.heldBody.position);
 
-    // Optional: Reduce angular velocity for stability
-    this.heldBody.angularVelocity.scale(0.8, this.heldBody.angularVelocity);
+    // Apply stronger angular damping for much better rotation stability
+    this.heldBody.angularVelocity.scale(0.2, this.heldBody.angularVelocity);
+    
+    // If rotational stability is still a problem, we can add this to completely stop rotation
+    if (this.heldBody.angularVelocity.lengthSquared() > 0.01) {
+      // Apply counter torque to reduce rotation more aggressively when rotation is significant
+      const counterTorque = this.heldBody.angularVelocity.clone().scale(-2.0 * this.heldBody.mass);
+      this.heldBody.applyTorque(counterTorque);
     }
+  }
   
   /**
    * Drop the currently held object
@@ -579,9 +602,23 @@ export class PhysicsManager {
     // Restore original mass
     if (body.originalMass !== undefined) {
       body.mass = body.originalMass;
-      body.updateMassProperties();
       delete body.originalMass;
     }
+    
+    // Restore original angular damping
+    if (body.originalAngularDamping !== undefined) {
+      body.angularDamping = body.originalAngularDamping;
+      delete body.originalAngularDamping;
+    }
+    
+    // Restore original angular factor
+    if (body.originalAngularFactor !== undefined) {
+      body.angularFactor.copy(body.originalAngularFactor);
+      delete body.originalAngularFactor;
+    }
+    
+    // Apply all changes to mass and inertia properties
+    body.updateMassProperties();
   }
   
   /**
@@ -1389,6 +1426,9 @@ export class PhysicsManager {
       this.targetPosition.set(position.x, position.y, position.z);
     }
     
+    // Comment out rotation updates to prevent erratic rotation
+    // We'll focus on position-only updates for stability
+    /*
     // If rotation provided, update target rotation with safety checks
     if (rotation && rotation.x !== undefined && rotation.y !== undefined && 
         rotation.z !== undefined && rotation.w !== undefined) {
@@ -1399,6 +1439,7 @@ export class PhysicsManager {
       
       this.targetRotation.set(rotation.x, rotation.y, rotation.z, rotation.w);
     }
+    */
     
     // Force the held body to wake up if it's asleep
     if (this.heldBody.sleepState === CANNON.Body.SLEEPING) {

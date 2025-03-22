@@ -27,6 +27,27 @@ export class GravityGunSpell extends Spell {
 
     this.eventBus = options.eventBus;
     this.isHolding = false;
+    
+    // Listen for physics events to keep our state synchronized
+    this.setupEventListeners();
+  }
+  
+  /**
+   * Set up event listeners to keep track of physics state
+   */
+  setupEventListeners() {
+    // Listen for physics events to update our holding state
+    this.eventBus.on('physics:object-pickup', (data) => {
+      if (data.playerId === 'local') {
+        this.isHolding = true;
+      }
+    });
+    
+    this.eventBus.on('physics:object-drop', (data) => {
+      if (data.playerId === 'local') {
+        this.isHolding = false;
+      }
+    });
   }
 
   /**
@@ -34,21 +55,37 @@ export class GravityGunSpell extends Spell {
    * @param {Object} context - Casting context
    */
   toggleGravityGun(context) {
-    // Simply emit an event that will be caught by the gravity gun controller
-    if (!this.isHolding) {
-      this.eventBus.emit('gravity-gun:action-pickup');
-    } else {
-      this.eventBus.emit('gravity-gun:action-drop');
-    }
+    // Get current holdingObject state from the physics system
+    let physicsIsHolding = false;
     
-    // Play sound effect
-    this.eventBus.emit('audio:play', { 
-      sound: this.isHolding ? 'gravityRelease' : 'gravityCapture', 
-      volume: 0.7
+    // Check if something is actually being held in the physics system
+    this.eventBus.emit('physics:request-manager', (physicsManager) => {
+      if (physicsManager && physicsManager.heldBody) {
+        physicsIsHolding = true;
+      }
     });
     
-    // Toggle state for next time
-    this.isHolding = !this.isHolding;
+    // If something is being held, drop it
+    if (physicsIsHolding) {
+      this.eventBus.emit('gravity-gun:action-drop');
+      this.isHolding = false; // Update our state
+      
+      // Play release sound
+      this.eventBus.emit('audio:play', { 
+        sound: 'gravityRelease', 
+        volume: 0.7
+      });
+    } else {
+      // Not holding anything, attempt to pick up
+      this.eventBus.emit('gravity-gun:action-pickup');
+      
+      // We'll update isHolding in the event listener after we know if pickup was successful
+      // But play the capture sound anyway since it's a good feedback for casting the spell
+      this.eventBus.emit('audio:play', { 
+        sound: 'gravityCapture', 
+        volume: 0.7
+      });
+    }
   }
   
   /**

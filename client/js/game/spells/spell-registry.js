@@ -161,7 +161,7 @@ export class SpellRegistry {
       eventBus: this.eventBus,
       page: 5,
       cooldown: 10, // Longer cooldown for this powerful spell
-      duration: 15,  // How long the black hole lasts
+      duration: 10,  // How long the black hole lasts
       strength: 12  // Gravitational strength
     });
     this.registerSpell(blackHoleSpell);
