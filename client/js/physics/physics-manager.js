@@ -1248,7 +1248,11 @@ export class PhysicsManager {
       const { body } = physicsObj;
       totalObjects++;
       
-      // Skip static objects
+      // Skip objects that can't be picked up using the same criteria as gravity gun
+      // 1. Skip objects with environment or building prefixes
+      if (objectId.startsWith('env_') || objectId.startsWith('building_')) return;
+      
+      // 2. Skip static objects (mass <= 0)
       if (body.mass <= 0) return;
       
       // Skip objects being held
@@ -1291,35 +1295,11 @@ export class PhysicsManager {
         const force = direction.scale(forceMagnitude);
         body.applyForce(force, body.position);
         
-        // Add visual effect to affected objects
-        if (physicsObj.mesh && physicsObj.mesh.material) {
-          // Add slight purple glow to indicate object is being affected
-          if (!physicsObj.originalEmissive) {
-            physicsObj.originalEmissive = physicsObj.mesh.material.emissive ? 
-              physicsObj.mesh.material.emissive.clone() : 
-              new THREE.Color(0x000000);
-            
-            physicsObj.originalEmissiveIntensity = 
-              physicsObj.mesh.material.emissiveIntensity || 0;
-          }
-          
-          // Make the glow stronger as objects get closer
-          const glowIntensity = 0.2 + ((effectRadius - distance) / effectRadius) * 0.8;
-          physicsObj.mesh.material.emissive = new THREE.Color(0x330066);
-          physicsObj.mesh.material.emissiveIntensity = glowIntensity;
-        }
-        
         // Wake up the body if it's sleeping
         if (body.sleepState === CANNON.Body.SLEEPING) {
           body.wakeUp();
         }
-      } else if (physicsObj.originalEmissive) {
-        // Reset emissive if object moves out of range
-        physicsObj.mesh.material.emissive.copy(physicsObj.originalEmissive);
-        physicsObj.mesh.material.emissiveIntensity = physicsObj.originalEmissiveIntensity;
-        delete physicsObj.originalEmissive;
-        delete physicsObj.originalEmissiveIntensity;
-      }
+      } 
     });
     
     console.log(`Black hole effect summary: ${affectedObjects} of ${totalObjects} objects affected`);
@@ -1346,7 +1326,11 @@ export class PhysicsManager {
     this.physicsBodies.forEach((physicsObj, objectId) => {
       const { body } = physicsObj;
       
-      // Skip static objects
+      // Skip objects that can't be picked up using the same criteria as gravity gun
+      // 1. Skip objects with environment or building prefixes
+      if (objectId.startsWith('env_') || objectId.startsWith('building_')) return;
+      
+      // 2. Skip static objects (mass <= 0)
       if (body.mass <= 0) return;
       
       // Skip objects being held
@@ -1374,28 +1358,6 @@ export class PhysicsManager {
         // Add stronger upward component for more dramatic "explosion" visual effect
         const upwardForce = new CANNON.Vec3(0, forceMagnitude * 1.0, 0); // Doubled upward component
         body.applyForce(upwardForce, body.position);
-        
-        // Add visual effect to affected objects
-        if (physicsObj.mesh && physicsObj.mesh.material) {
-          // Add orange glow for explosion effect
-          physicsObj.mesh.material.emissive = new THREE.Color(0xFF3300);
-          physicsObj.mesh.material.emissiveIntensity = 0.8;
-          
-          // Schedule reset of emissive effect
-          setTimeout(() => {
-            if (physicsObj.mesh && physicsObj.mesh.material) {
-              if (physicsObj.originalEmissive) {
-                physicsObj.mesh.material.emissive.copy(physicsObj.originalEmissive);
-                physicsObj.mesh.material.emissiveIntensity = physicsObj.originalEmissiveIntensity;
-                delete physicsObj.originalEmissive;
-                delete physicsObj.originalEmissiveIntensity;
-              } else {
-                physicsObj.mesh.material.emissive.set(0, 0, 0);
-                physicsObj.mesh.material.emissiveIntensity = 0;
-              }
-            }
-          }, 1000);
-        }
         
         // Wake up the body if it's sleeping
         if (body.sleepState === CANNON.Body.SLEEPING) {
