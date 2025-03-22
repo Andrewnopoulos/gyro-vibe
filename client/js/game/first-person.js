@@ -88,10 +88,9 @@ export class FirstPersonController {
       A/Arrow Left - Move Left<br>
       D/Arrow Right - Move Right<br>
       Left Shift - Toggle Rune Mode<br>
-      Space - Gravity Gun (pickup/drop objects)<br>
+      Space - Cast Current Page Spell<br>
       Q - Flip Page Left<br>
       E - Flip Page Right<br>
-      T - Spawn Random Object<br>
       V - Toggle Debug Raycast<br>
       Mouse - Look Around<br>
       <strong>Mobile Controls:</strong><br>
@@ -214,6 +213,21 @@ export class FirstPersonController {
     this.eventBus.on('debug:toggle-god-mode', (data) => {
       this.toggleGodMode(data.enabled);
     });
+    
+    // Provide camera access for spell systems
+    this.eventBus.on('camera:get-position', (callback) => {
+      if (typeof callback === 'function' && this.camera) {
+        callback(this.camera.position.clone());
+      }
+    });
+    
+    this.eventBus.on('camera:get-direction', (callback) => {
+      if (typeof callback === 'function' && this.camera) {
+        const direction = new THREE.Vector3(0, 0, -1);
+        direction.applyQuaternion(this.camera.quaternion);
+        callback(direction);
+      }
+    });
   }
   
   /**
@@ -242,8 +256,7 @@ export class FirstPersonController {
           Q - Move Up<br>
           E - Move Down<br>
           Left Shift - Toggle Rune Mode<br>
-          Space - Gravity Gun (pickup/drop objects)<br>
-          T - Spawn Random Object<br>
+          Space - Cast Current Page Spell<br>
           V - Toggle Debug Raycast<br>
           Mouse - Look Around<br>
           <strong>Mobile Controls:</strong><br>

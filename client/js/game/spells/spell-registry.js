@@ -1,6 +1,8 @@
 import { Spell } from './spell.js';
 import { CircleSpell } from './circle-spell.js';
 import { TriangleSpell } from './triangle-spell.js';
+import { ObjectSpawnerSpell } from './object-spawner-spell.js';
+import { GravityGunSpell } from './gravity-gun-spell.js';
 
 /**
  * Registry for all available spells
@@ -136,6 +138,22 @@ export class SpellRegistry {
       cooldown: 5
     });
     this.registerSpell(fireballSpell);
+    
+    // Object Spawner Spell
+    const objectSpawnerSpell = new ObjectSpawnerSpell({
+      eventBus: this.eventBus,
+      page: 3,
+      cooldown: 2
+    });
+    this.registerSpell(objectSpawnerSpell);
+    
+    // Gravity Gun Spell
+    const gravityGunSpell = new GravityGunSpell({
+      eventBus: this.eventBus,
+      page: 4,
+      cooldown: 0.5
+    });
+    this.registerSpell(gravityGunSpell);
   }
 
   /**

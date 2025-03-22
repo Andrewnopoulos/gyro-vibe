@@ -101,6 +101,10 @@ export class GravityGunController {
     // Listen for physics events to update controller state
     this.eventBus.on('physics:object-pickup', this.handleObjectPickup.bind(this));
     this.eventBus.on('physics:object-drop', this.handleObjectDrop.bind(this));
+    
+    // Listen for spell-triggered gravity gun actions
+    this.eventBus.on('gravity-gun:action-pickup', this.pickupObject.bind(this));
+    this.eventBus.on('gravity-gun:action-drop', this.dropObject.bind(this));
   }
   
   /**
@@ -148,13 +152,7 @@ export class GravityGunController {
     // Prevent repeat events while key is held down
     if (event.repeat) return;
     
-    if (event.code === 'Space') {
-      if (!this.isHolding) {
-        this.pickupObject();
-      } else {
-        this.dropObject();
-      }
-    }
+    // Remove Space key handling from here; it's now handled by the spell system
     
     // Page flipping with Q and E keys
     if (event.code === 'KeyQ') {
@@ -170,10 +168,7 @@ export class GravityGunController {
       this.toggleDebugRaycast();
     }
     
-    // Spawn random physics object with T key
-    if (event.code === 'KeyT') {
-      this.spawnRandomObject();
-    }
+    // Removed T key for spawning objects; now using spells instead
     
     // Add force to held object with WASD keys
     if (this.isHolding && this.heldObjectId) {

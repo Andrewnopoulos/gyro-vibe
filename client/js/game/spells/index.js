@@ -6,6 +6,8 @@ import { SpellEffects } from './spell-effects.js';
 import { Spell } from './spell.js';
 import { CircleSpell } from './circle-spell.js';
 import { TriangleSpell } from './triangle-spell.js';
+import { ObjectSpawnerSpell } from './object-spawner-spell.js';
+import { GravityGunSpell } from './gravity-gun-spell.js';
 import { SpellAudioManager } from './audio-manager.js';
 
 // Export main spell classes
@@ -15,5 +17,7 @@ export {
   Spell,
   CircleSpell,
   TriangleSpell,
+  ObjectSpawnerSpell,
+  GravityGunSpell,
   SpellAudioManager
 };

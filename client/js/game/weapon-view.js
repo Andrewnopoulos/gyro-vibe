@@ -939,13 +939,18 @@ export class WeaponView {
     this.eventBus.on('weapon:flip-left', () => this.startFlipLeft());
     this.eventBus.on('weapon:flip-right', () => this.startFlipRight());
     
-    // Listen for key presses for page flipping (Q/E keys)
+    // Listen for key presses for page flipping (Q/E keys) and spell casting
     document.addEventListener('keydown', (event) => {
+      if (event.repeat) return; // Prevent repeat events while key is held down
+      
       if (!this.isFlipping) {
         if (event.code === 'KeyQ') {
           this.startFlipLeft();
         } else if (event.code === 'KeyE') {
           this.startFlipRight();
+        } else if (event.code === 'Space') {
+          // Cast space bar spell on current page
+          this.castSpaceBarSpell();
         }
       }
     });
@@ -1131,6 +1136,81 @@ export class WeaponView {
   toggleDebugRaycast(show) {
     this.showDebugRaycast = false;
     this.updateDebugRaycast();
+  }
+  
+  /**
+   * Cast a space bar activated spell on the current page
+   */
+  castSpaceBarSpell() {
+    // Check if we're on the instruction page - no casting allowed
+    if (this.currentPage === 0) {
+      console.log('Cannot cast on instruction page');
+      this.showCastingError('Cannot cast on instruction page!');
+      return;
+    }
+    
+    // Get the spell for the current page
+    const spell = this.spellRegistry.getSpellByPage(this.currentPage);
+    
+    if (!spell) {
+      console.log('No spell on current page');
+      this.showCastingError('No spell on this page!');
+      return;
+    }
+    
+    // Only cast if this is a space bar spell
+    if (spell.shape.toLowerCase() !== 'space') {
+      console.log('This spell requires drawing a specific shape');
+      this.showCastingError(`Draw a ${spell.shape} to cast this spell!`);
+      return;
+    }
+    
+    // Check if the spell is on cooldown
+    if (!spell.isReady()) {
+      console.log('Spell on cooldown');
+      this.showCastingError('Spell still recharging!');
+      return;
+    }
+    
+    // All checks passed, cast the spell!
+    console.log(`Casting ${spell.name} with space bar`);
+    spell.cast({
+      camera: this.weaponCamera,
+      scene: this.weaponScene,
+      spellbook: this.spellbook
+    });
+    
+    // Flash the pages as visual feedback for spell casting
+    this.flashPagesOnCast();
+  }
+  
+  /**
+   * Flash pages as visual feedback when casting a space bar spell
+   */
+  flashPagesOnCast() {
+    if (!this.leftPage || !this.rightPage) return;
+    
+    // Store original materials
+    const leftOriginalMaterial = this.leftPage.material.clone();
+    const rightOriginalMaterial = this.rightPage.material.clone();
+    
+    // Create glow material
+    const glowMaterial = new THREE.MeshBasicMaterial({
+      color: 0x00aaff,
+      map: leftOriginalMaterial.map,
+      transparent: true,
+      opacity: 0.8
+    });
+    
+    // Apply glow material
+    this.leftPage.material = glowMaterial.clone();
+    this.rightPage.material = glowMaterial.clone();
+    
+    // Restore original materials after a delay
+    setTimeout(() => {
+      if (this.leftPage) this.leftPage.material = leftOriginalMaterial;
+      if (this.rightPage) this.rightPage.material = rightOriginalMaterial;
+    }, 300);
   }
 
   /**
