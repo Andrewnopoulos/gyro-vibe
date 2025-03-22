@@ -67,6 +67,8 @@ export class Tavern {
     
     // Add physics if available
     if (this.physicsUtils) {
+      // SIMPLIFIED APPROACH: Create a clone with the correct world position and use the standard method
+      
       // Calculate world position accounting for tavern position and rotation
       const rotationY = Math.PI / 4; // Same as tavern rotation
       const relativeX = 3;
@@ -76,18 +78,25 @@ export class Tavern {
       const worldX = position.x + relativeX * Math.cos(rotationY) - relativeZ * Math.sin(rotationY);
       const worldZ = position.z + relativeX * Math.sin(rotationY) + relativeZ * Math.cos(rotationY);
       
-      const chimneyWorldPos = {
-        x: worldX,
-        y: 6.5,
-        z: worldZ
-      };
+      // Create a temporary mesh with the correct world position
+      const worldChimney = chimney.clone();
+      worldChimney.position.set(worldX, 6.5, worldZ);
+      worldChimney.rotation.y = rotationY;
       
-      const chimneyMesh = {
-        position: chimneyWorldPos,
-        rotation: { y: rotationY }
-      };
+      // Add to scene temporarily
+      const originalChimney = chimney;
+      this.scene.add(worldChimney);
       
-      this.physicsUtils.addPhysicsBox(chimney, 0);
+      // Use the standard method which works with gravity gun
+      this.physicsUtils.addPhysicsBox(worldChimney, 0);
+      
+      // Copy the physics ID to the original mesh
+      if (worldChimney.userData && worldChimney.userData.physicsId) {
+        originalChimney.userData.physicsId = worldChimney.userData.physicsId;
+      }
+      
+      // Remove the temporary mesh
+      this.scene.remove(worldChimney);
     }
   }
 
@@ -120,8 +129,57 @@ export class Tavern {
     
     // Add physics if available
     if (this.physicsUtils) {
-      this.physicsUtils.addPhysicsShape(post, new CANNON.Cylinder(0.1, 0.1, 4, 8), 0);
-      this.physicsUtils.addPhysicsBox(sign, 0);
+      // SIMPLIFIED APPROACH: Create clones with the correct world positions and use the standard methods
+      
+      // Calculate rotated positions
+      const rotationY = Math.PI / 4; // Same as tavern rotation
+      const relativeX = 4.5;
+      const relativeZ = 4.5;
+      
+      // Calculate world positions
+      const worldX = position.x + relativeX * Math.cos(rotationY) - relativeZ * Math.sin(rotationY);
+      const worldZ = position.z + relativeX * Math.sin(rotationY) + relativeZ * Math.cos(rotationY);
+      
+      // Handle post physics
+      const worldPost = post.clone();
+      worldPost.position.set(worldX, 2, worldZ);
+      worldPost.rotation.y = rotationY;
+      
+      // Add to scene temporarily
+      const originalPost = post;
+      this.scene.add(worldPost);
+      
+      // Use standard method with cylinder shape
+      const postShape = new CANNON.Cylinder(0.1, 0.1, 4, 8);
+      this.physicsUtils.addPhysicsShape(worldPost, postShape, 0);
+      
+      // Copy the physics ID to the original mesh
+      if (worldPost.userData && worldPost.userData.physicsId) {
+        originalPost.userData.physicsId = worldPost.userData.physicsId;
+      }
+      
+      // Remove the temporary mesh
+      this.scene.remove(worldPost);
+      
+      // Handle sign physics
+      const worldSign = sign.clone();
+      worldSign.position.set(worldX, 3.5, worldZ);
+      worldSign.rotation.y = rotationY;
+      
+      // Add to scene temporarily
+      const originalSign = sign;
+      this.scene.add(worldSign);
+      
+      // Use standard method for the sign
+      this.physicsUtils.addPhysicsBox(worldSign, 0);
+      
+      // Copy the physics ID to the original mesh
+      if (worldSign.userData && worldSign.userData.physicsId) {
+        originalSign.userData.physicsId = worldSign.userData.physicsId;
+      }
+      
+      // Remove the temporary mesh
+      this.scene.remove(worldSign);
     }
   }
 }

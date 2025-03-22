@@ -85,16 +85,32 @@ export class BuildingUtils {
     
     // Add physics if available
     if (this.physicsUtils) {
-      // Adjust the position to account for the group's position
-      const absolutePosition = new THREE.Vector3(position.x, height / 2, position.z);
+      // SIMPLIFIED APPROACH: use the built-in addPhysicsBox method which is already known to work
+      // with the gravity gun controller
       
-      // Add hollow building physics
-      const buildingMesh = {
-        position: absolutePosition,
-        rotation: { y: rotation }
-      };
+      // First make sure the wallsMesh has a position that matches the building's world position
+      // This is important for the gravity gun to work properly
+      const worldBuildingMesh = wallsMesh.clone();
+      worldBuildingMesh.position.set(position.x, height/2, position.z);
+      worldBuildingMesh.rotation.y = rotation;
       
-      this.physicsUtils.createHollowBuildingPhysics(wallsMesh, width, height, depth, rotation);
+      // Add the mesh to the scene temporarily so it can be found by raycasting
+      // (We'll remove it after adding physics)
+      const originalMesh = wallsMesh;
+      this.scene.add(worldBuildingMesh);
+      
+      // Use the standard method for adding physics, which ensures proper registration
+      // with the physics manager and proper setup for gravity gun interaction
+      this.physicsUtils.addPhysicsBox(worldBuildingMesh, 0); // 0 mass = static
+      
+      // Copy the physics ID from the temporary mesh to the original mesh
+      // This ensures the original mesh in the group can be interacted with
+      if (worldBuildingMesh.userData && worldBuildingMesh.userData.physicsId) {
+        originalMesh.userData.physicsId = worldBuildingMesh.userData.physicsId;
+      }
+      
+      // Remove the temporary mesh from the scene as it was just for physics setup
+      this.scene.remove(worldBuildingMesh);
     }
     
     return {

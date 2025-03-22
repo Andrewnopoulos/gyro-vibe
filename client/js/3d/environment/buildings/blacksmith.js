@@ -88,8 +88,61 @@ export class Blacksmith {
     
     // Add physics if available
     if (this.physicsUtils) {
-      this.physicsUtils.addPhysicsBox(forgeBase, 0);
-      this.physicsUtils.addPhysicsBox(chimney, 0);
+      // SIMPLIFIED APPROACH: Create clones with the correct world positions and use the standard methods
+      
+      // Calculate rotated positions
+      const rotationY = -Math.PI / 6; // Same as blacksmith rotation
+      const forgeRelativeX = 2;
+      const forgeRelativeZ = 3;
+      const chimneyRelativeX = 2;
+      const chimneyRelativeZ = 3.5;
+      
+      // Calculate world positions using rotation matrix
+      const forgeWorldX = position.x + forgeRelativeX * Math.cos(rotationY) - forgeRelativeZ * Math.sin(rotationY);
+      const forgeWorldZ = position.z + forgeRelativeX * Math.sin(rotationY) + forgeRelativeZ * Math.cos(rotationY);
+      
+      const chimneyWorldX = position.x + chimneyRelativeX * Math.cos(rotationY) - chimneyRelativeZ * Math.sin(rotationY);
+      const chimneyWorldZ = position.z + chimneyRelativeX * Math.sin(rotationY) + chimneyRelativeZ * Math.cos(rotationY);
+      
+      // Handle forge physics
+      const worldForge = forgeBase.clone();
+      worldForge.position.set(forgeWorldX, 0.5, forgeWorldZ);
+      worldForge.rotation.y = rotationY;
+      
+      // Add to scene temporarily
+      const originalForge = forgeBase;
+      this.scene.add(worldForge);
+      
+      // Use standard method for the forge
+      this.physicsUtils.addPhysicsBox(worldForge, 0);
+      
+      // Copy the physics ID to the original mesh
+      if (worldForge.userData && worldForge.userData.physicsId) {
+        originalForge.userData.physicsId = worldForge.userData.physicsId;
+      }
+      
+      // Remove the temporary mesh
+      this.scene.remove(worldForge);
+      
+      // Handle chimney physics
+      const worldChimney = chimney.clone();
+      worldChimney.position.set(chimneyWorldX, 3, chimneyWorldZ);
+      worldChimney.rotation.y = rotationY;
+      
+      // Add to scene temporarily
+      const originalChimney = chimney;
+      this.scene.add(worldChimney);
+      
+      // Use standard method for the chimney
+      this.physicsUtils.addPhysicsBox(worldChimney, 0);
+      
+      // Copy the physics ID to the original mesh
+      if (worldChimney.userData && worldChimney.userData.physicsId) {
+        originalChimney.userData.physicsId = worldChimney.userData.physicsId;
+      }
+      
+      // Remove the temporary mesh
+      this.scene.remove(worldChimney);
     }
   }
 
@@ -122,8 +175,56 @@ export class Blacksmith {
     
     // Add physics if available
     if (this.physicsUtils) {
-      this.physicsUtils.addPhysicsBox(anvilBase, 0);
-      this.physicsUtils.addPhysicsBox(anvilTop, 0);
+      // SIMPLIFIED APPROACH: Create clones with the correct world positions and use the standard methods
+      
+      // Calculate rotated positions
+      const rotationY = -Math.PI / 6; // Same as blacksmith rotation
+      const anvilRelativeX = 0;
+      const anvilRelativeZ = 3;
+      
+      // Calculate world positions
+      const anvilWorldX = position.x + anvilRelativeX * Math.cos(rotationY) - anvilRelativeZ * Math.sin(rotationY);
+      const anvilWorldZ = position.z + anvilRelativeX * Math.sin(rotationY) + anvilRelativeZ * Math.cos(rotationY);
+      
+      // Handle anvil base physics
+      const worldAnvilBase = anvilBase.clone();
+      worldAnvilBase.position.set(anvilWorldX, 0.5, anvilWorldZ);
+      worldAnvilBase.rotation.y = rotationY;
+      
+      // Add to scene temporarily
+      const originalAnvilBase = anvilBase;
+      this.scene.add(worldAnvilBase);
+      
+      // Use standard method for the anvil base
+      this.physicsUtils.addPhysicsBox(worldAnvilBase, 0);
+      
+      // Copy the physics ID to the original mesh
+      if (worldAnvilBase.userData && worldAnvilBase.userData.physicsId) {
+        originalAnvilBase.userData.physicsId = worldAnvilBase.userData.physicsId;
+      }
+      
+      // Remove the temporary mesh
+      this.scene.remove(worldAnvilBase);
+      
+      // Handle anvil top physics
+      const worldAnvilTop = anvilTop.clone();
+      worldAnvilTop.position.set(anvilWorldX, 1.15, anvilWorldZ);
+      worldAnvilTop.rotation.y = rotationY;
+      
+      // Add to scene temporarily
+      const originalAnvilTop = anvilTop;
+      this.scene.add(worldAnvilTop);
+      
+      // Use standard method for the anvil top
+      this.physicsUtils.addPhysicsBox(worldAnvilTop, 0);
+      
+      // Copy the physics ID to the original mesh
+      if (worldAnvilTop.userData && worldAnvilTop.userData.physicsId) {
+        originalAnvilTop.userData.physicsId = worldAnvilTop.userData.physicsId;
+      }
+      
+      // Remove the temporary mesh
+      this.scene.remove(worldAnvilTop);
     }
   }
 }

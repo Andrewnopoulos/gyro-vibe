@@ -109,7 +109,38 @@ export class Houses {
     
     // Add physics if available
     if (this.physicsUtils) {
-      this.physicsUtils.addPhysicsBox(chimney, 0);
+      // SIMPLIFIED APPROACH: Create a clone with the correct world position and use the standard method
+      
+      // Get the house rotation from the parent group
+      const rotation = houseGroup.rotation.y;
+      
+      // Calculate the world position based on the local offsets and house position
+      const worldX = houseGroup.position.x + (chimneyX * Math.cos(rotation) - chimneyZ * Math.sin(rotation));
+      const worldZ = houseGroup.position.z + (chimneyX * Math.sin(rotation) + chimneyZ * Math.cos(rotation));
+      
+      // Create a temporary mesh with the correct world position
+      const worldChimney = chimney.clone();
+      worldChimney.position.set(
+        worldX,
+        dimensions.height + chimneyHeight/2,
+        worldZ
+      );
+      worldChimney.rotation.y = rotation;
+      
+      // Add to scene temporarily
+      const originalChimney = chimney;
+      this.scene.add(worldChimney);
+      
+      // Use the standard method which works with gravity gun
+      this.physicsUtils.addPhysicsBox(worldChimney, 0);
+      
+      // Copy the physics ID to the original mesh
+      if (worldChimney.userData && worldChimney.userData.physicsId) {
+        originalChimney.userData.physicsId = worldChimney.userData.physicsId;
+      }
+      
+      // Remove the temporary mesh
+      this.scene.remove(worldChimney);
     }
   }
 }
