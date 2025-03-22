@@ -10,6 +10,7 @@ export class StatusDisplay {
     this.deviceStatus = document.getElementById('deviceStatus');
     this.calibrateBtn = document.getElementById('calibrateBtn');
     this.qrcodeElement = document.getElementById('qrcode');
+    this.instructionsElement = document.getElementById('instructions');
     this.debugToggleBtn = document.getElementById('debugToggleBtn');
     this.debugSection = document.getElementById('debugSection');
     this.debugShowing = false;
@@ -134,6 +135,11 @@ export class StatusDisplay {
   showQRCode(show) {
     if (this.qrcodeElement) {
       this.qrcodeElement.style.display = show ? 'block' : 'none';
+      
+      // Also show/hide instructions panel
+      if (this.instructionsElement) {
+        this.instructionsElement.style.display = show ? 'block' : 'none';
+      }
       
       // Section headers have been removed
       

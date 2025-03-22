@@ -39,8 +39,23 @@ export class LobbyManager {
     
     if (this.lobbyShowing) {
       this.showLobby();
+      
+      // Hide instructions when lobby is shown
+      const instructionsElement = document.getElementById('instructions');
+      if (instructionsElement) {
+        instructionsElement.style.display = 'none';
+      }
     } else {
       this.hideLobby();
+      
+      // Show instructions only if QR code is visible
+      const qrcodeElement = document.getElementById('qrcode');
+      const instructionsElement = document.getElementById('instructions');
+      if (qrcodeElement && instructionsElement) {
+        if (qrcodeElement.style.display === 'block') {
+          instructionsElement.style.display = 'block';
+        }
+      }
     }
     
     // Update button text
