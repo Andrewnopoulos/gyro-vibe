@@ -128,6 +128,19 @@ export class SceneManager {
     
     // Listen for time of day change requests
     this.eventBus.on('scene:set-time-of-day', this.setTimeOfDay.bind(this));
+    
+    // Add event listeners to provide scene and camera to other components
+    this.eventBus.on('scene:get-scene', (callback) => {
+      if (typeof callback === 'function') {
+        callback(this.scene);
+      }
+    });
+    
+    this.eventBus.on('scene:get-camera', (callback) => {
+      if (typeof callback === 'function') {
+        callback(this.camera);
+      }
+    });
   }
   
   /**

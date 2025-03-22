@@ -489,7 +489,7 @@ export const SpellEffects = {
     blackHoleContainer.add(disk);
     blackHoleContainer.add(particles);
     
-    // Position black hole in front of player
+    // Position black hole in front of player initially, but then it stays fixed
     if (camera) {
       const direction = new THREE.Vector3(0, 0, -1);
       direction.applyQuaternion(camera.quaternion);
@@ -498,11 +498,21 @@ export const SpellEffects = {
       blackHoleContainer.position.copy(camera.position);
       blackHoleContainer.position.add(direction.multiplyScalar(5)); // 5 units in front
       
-      // Make it slightly lower than eye level
-      blackHoleContainer.position.y -= 1.0;
+      // Make it at a good height to affect most physics objects
+      // Using a higher position than before to have better effect on falling objects
+      blackHoleContainer.position.y = 3.0; // Fixed height above ground
+      
+      // Store the initial position - we won't update this later
+      const initialPosition = blackHoleContainer.position.clone();
+      
+      console.log('Black hole created at fixed position:', 
+        initialPosition.x.toFixed(2), 
+        initialPosition.y.toFixed(2), 
+        initialPosition.z.toFixed(2)
+      );
     } else {
       // Fallback position
-      blackHoleContainer.position.set(0, 0, -5);
+      blackHoleContainer.position.set(0, 1.5, -5);
     }
     
     // Add to scene
@@ -520,7 +530,19 @@ export const SpellEffects = {
     
     // Setup physics attraction
     function applyGravitationalPull() {
-      if (!eventBus) return;
+      if (!eventBus) {
+        console.error('Black hole has no eventBus to communicate with physics');
+        return;
+      }
+      
+      // Log the black hole position for debugging
+      console.log('Black hole applying gravitational pull at:', 
+        blackHoleContainer.position.x.toFixed(2),
+        blackHoleContainer.position.y.toFixed(2),
+        blackHoleContainer.position.z.toFixed(2),
+        'with radius:', effectRadius,
+        'and strength:', strength
+      );
       
       // Emit an event to apply force to all nearby physics objects
       eventBus.emit('physics:apply-black-hole', {
@@ -531,12 +553,12 @@ export const SpellEffects = {
           z: blackHoleContainer.position.z
         },
         strength: strength,
-        radius: effectRadius
+        radius: effectRadius * 2 // DOUBLED for testing - to ensure objects are in range
       });
     }
     
-    // Apply gravitational pull effect periodically
-    const pullInterval = setInterval(applyGravitationalPull, 100);
+    // Apply gravitational pull effect more frequently (every 50ms instead of 100ms)
+    const pullInterval = setInterval(applyGravitationalPull, 50);
     
     // Setup animation
     const startTime = Date.now();
@@ -626,6 +648,8 @@ export const SpellEffects = {
         glowMaterial.color.setHex(0xFF5500);
         diskMaterial.color.setHex(0xFF9900);
       }
+      
+      // NOTE: We do NOT update the black hole position here, keeping it static in the world
       
       animationFrameId = requestAnimationFrame(animate);
     };

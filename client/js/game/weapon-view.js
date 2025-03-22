@@ -685,10 +685,28 @@ export class WeaponView {
     
     // All checks passed, cast the spell!
     console.log(`Casting ${spell.name}`);
+    
+    // For spells that need to affect the main world, we need to get access to the main scene
+    // Request the main scene from the event bus
+    let mainScene = null;
+    this.eventBus.emit('scene:get-scene', (scene) => {
+      mainScene = scene;
+    });
+    
     spell.cast({
       camera: this.weaponCamera,
-      scene: this.weaponScene,
-      spellbook: this.spellbook
+      scene: mainScene || this.weaponScene, // Use main scene if available, otherwise fall back to weapon scene
+      weaponScene: this.weaponScene, // Also pass weaponScene in case spell needs to add visual effects to the weapon
+      spellbook: this.spellbook,
+      mainCamera: null, // Will be populated by the event bus below if available
+      eventBus: this.eventBus // Make sure we're passing the event bus to the spell
+    });
+    
+    // Also try to get the main camera for positioning
+    this.eventBus.emit('scene:get-camera', (camera) => {
+      if (camera && spell.updateMainCamera) {
+        spell.updateMainCamera(camera);
+      }
     });
     
     // Apply the visual effect based on the spell shape
@@ -1182,10 +1200,28 @@ export class WeaponView {
     
     // All checks passed, cast the spell!
     console.log(`Casting ${spell.name} with space bar`);
+    
+    // For spells that need to affect the main world, we need to get access to the main scene
+    // Request the main scene from the event bus
+    let mainScene = null;
+    this.eventBus.emit('scene:get-scene', (scene) => {
+      mainScene = scene;
+    });
+    
     spell.cast({
       camera: this.weaponCamera,
-      scene: this.weaponScene,
-      spellbook: this.spellbook
+      scene: mainScene || this.weaponScene, // Use main scene if available, otherwise fall back to weapon scene
+      weaponScene: this.weaponScene, // Also pass weaponScene in case spell needs to add visual effects to the weapon
+      spellbook: this.spellbook,
+      mainCamera: null, // Will be populated by the event bus below if available
+      eventBus: this.eventBus // Make sure we're passing the event bus to the spell
+    });
+    
+    // Also try to get the main camera for positioning
+    this.eventBus.emit('scene:get-camera', (camera) => {
+      if (camera && spell.updateMainCamera) {
+        spell.updateMainCamera(camera);
+      }
     });
     
     // Flash the pages as visual feedback for spell casting

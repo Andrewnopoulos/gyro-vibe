@@ -1237,9 +1237,16 @@ export class PhysicsManager {
     const effectStrength = strength || 10;
     const effectRadius = radius || 10;
     
+    // Count objects for debugging
+    let totalObjects = 0;
+    let affectedObjects = 0;
+    
+    console.log(`Physics manager processing black hole at (${blackHolePos.x.toFixed(2)}, ${blackHolePos.y.toFixed(2)}, ${blackHolePos.z.toFixed(2)}) with radius ${effectRadius}`);
+    
     // Iterate through all physics bodies
     this.physicsBodies.forEach((physicsObj, objectId) => {
       const { body } = physicsObj;
+      totalObjects++;
       
       // Skip static objects
       if (body.mass <= 0) return;
@@ -1250,8 +1257,14 @@ export class PhysicsManager {
       // Calculate distance to black hole
       const distance = body.position.distanceTo(blackHolePos);
       
+      // Debug log this object's position
+      console.log(`Object ${objectId} at (${body.position.x.toFixed(2)}, ${body.position.y.toFixed(2)}, ${body.position.z.toFixed(2)}), distance: ${distance.toFixed(2)} from black hole`);
+      
       // Only affect objects within radius
       if (distance < effectRadius) {
+        affectedObjects++;
+        console.log(`Object ${objectId} is being affected by black hole! Distance: ${distance.toFixed(2)}`);
+        
         // Notify that this object is affected (for explosion tracking)
         this.eventBus.emit(`physics:affected-by-${id}`, objectId);
         
@@ -1260,8 +1273,15 @@ export class PhysicsManager {
         blackHolePos.vsub(body.position, direction);
         direction.normalize();
         
-        // Force strength decreases with squared distance
-        const forceMagnitude = effectStrength * body.mass * (1 - (distance / effectRadius));
+        // Force strength decreases with squared distance for more realistic gravity
+        // Using inverse square law with a minimum threshold to avoid excessive forces at very close distances
+        // Increased base multiplier to 5.0 for more noticeable effect
+        const minDistance = 0.5; // Minimum distance threshold to prevent excessive forces
+        const adjustedDistance = Math.max(distance, minDistance);
+        const distanceFactor = Math.min(1.0, 1.0 / (adjustedDistance * adjustedDistance));
+        const forceMagnitude = effectStrength * body.mass * 5.0 * distanceFactor;
+        
+        console.log(`Applying force of magnitude ${forceMagnitude.toFixed(2)} to object ${objectId}`);
         
         // Apply force toward black hole
         const force = direction.scale(forceMagnitude);
@@ -1297,6 +1317,8 @@ export class PhysicsManager {
         delete physicsObj.originalEmissiveIntensity;
       }
     });
+    
+    console.log(`Black hole effect summary: ${affectedObjects} of ${totalObjects} objects affected`);
   }
   
   /**

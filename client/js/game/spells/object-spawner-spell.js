@@ -420,7 +420,7 @@ export class ObjectSpawnerSpell extends Spell {
       cameraDirection.clone().multiplyScalar(distance)
     );
     
-    // Offset a bit downward to appear from hands
+    // Positioned higher to better interact with black hole
     spawnPosition.y -= 0.3;
     
     // Less random offset during channeling to make it feel more controlled
@@ -491,14 +491,14 @@ export class ObjectSpawnerSpell extends Spell {
       return;
     }
     
-    // Adjust spawn position to be from the player's hands
-    // Spawn position 1.5-2.5 meters in front of the camera, slightly lower than camera height
+    // Adjust spawn position to be high above player for better black hole interaction
+    // Spawn position 1.5-2.5 meters in front of the camera, but much higher
     const distance = 1.5 + Math.random();
     const spawnPosition = cameraPosition.clone().add(
       cameraDirection.clone().multiplyScalar(distance)
     );
     
-    // Offset a bit downward to appear from hands
+    // Positioned much higher to better interact with black hole
     spawnPosition.y -= 0.3;
     
     // Add some random offset to prevent objects spawning exactly on top of each other

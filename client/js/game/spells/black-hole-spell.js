@@ -32,7 +32,7 @@ export class BlackHoleSpell extends Spell {
     this.eventBus = options.eventBus;
     this.duration = options.duration || 3; // Default 3 seconds duration
     this.strength = options.strength || 10;
-    this.effectRadius = 10; // Area of effect radius
+    this.effectRadius = 15; // Increased area of effect radius
     
     // Store active effect references for cleanup
     this.activeEffects = [];
@@ -45,8 +45,33 @@ export class BlackHoleSpell extends Spell {
   castBlackHole(context) {
     console.log('Casting black hole spell');
     
-    // Create black hole effect
-    const blackHoleEffect = SpellEffects.createBlackHole(context, {
+    // For logging
+    if (context.scene) {
+      console.log('Using scene:', context.scene.type);
+    } else {
+      console.warn('No scene provided in context');
+    }
+    
+    // Get main camera for positioning if available
+    let mainCamera = context.mainCamera;
+    if (!mainCamera) {
+      // Try to get it via event bus as a fallback
+      this.eventBus.emit('scene:get-camera', (camera) => {
+        mainCamera = camera;
+      });
+    }
+
+    // Always use the main scene if available, not the weapon scene
+    const effectContext = {
+      ...context,
+      // If both scene and mainCamera are provided, use them
+      scene: context.scene,
+      camera: mainCamera || context.camera,
+      eventBus: this.eventBus // Make sure to pass the event bus to the effect
+    };
+    
+    // Create black hole effect as a static object in the world
+    const blackHoleEffect = SpellEffects.createBlackHole(effectContext, {
       duration: this.duration,
       strength: this.strength,
       radius: 0.5, // Visual size of black hole
@@ -64,6 +89,18 @@ export class BlackHoleSpell extends Spell {
           this.activeEffects.splice(index, 1);
         }
       }, (this.duration + 1) * 1000); // Duration + explosion time
+      
+      // Log where the black hole was created
+      console.log('Black hole created successfully');
+      
+      // Notify user about the black hole creation with some visual feedback
+      this.eventBus.emit('notification:show', {
+        message: 'Singularity created!',
+        duration: 2000,
+        type: 'spell'
+      });
+    } else {
+      console.error('Failed to create black hole effect');
     }
     
     // Play sound effect
@@ -71,6 +108,16 @@ export class BlackHoleSpell extends Spell {
       sound: 'blackHole', 
       volume: 0.8
     });
+  }
+  
+  /**
+   * Update main camera reference if provided after initialization
+   * @param {THREE.Camera} camera - Main world camera
+   */
+  updateMainCamera(camera) {
+    if (camera && this.activeEffects.length > 0) {
+      console.log('Updated main camera reference for black hole');
+    }
   }
   
   /**
@@ -242,8 +289,8 @@ export class BlackHoleSpell extends Spell {
     
     // Draw additional description
     const additionalText = 
-      'Creates a temporary gravitational singularity that pulls nearby objects toward it. ' +
-      'After 3 seconds, the black hole collapses violently, pushing all objects outward with explosive force.';
+      'Creates a stationary gravitational singularity in front of you. The black hole remains fixed in place, ' +
+      'pulling nearby objects toward it. After 3 seconds, it collapses violently, pushing all objects outward with explosive force.';
     
     this.wrapText(
       context,
