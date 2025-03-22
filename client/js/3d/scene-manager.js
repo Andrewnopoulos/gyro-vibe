@@ -78,7 +78,7 @@ export class SceneManager {
     });
     
     // Create environment with physics support
-    this.environment = new Environment(this.scene, physicsManager);
+    this.environment = new Environment(this.scene, physicsManager, this.eventBus);
     
     // Create phone model
     this.phoneModel = new PhoneModel(this.scene, this.eventBus);

@@ -22,9 +22,15 @@ export class FirstPersonController {
     this.moveBackward = false;
     this.moveLeft = false;
     this.moveRight = false;
+    this.moveUp = false;     // New - for God Mode vertical movement
+    this.moveDown = false;   // New - for God Mode vertical movement
     this.velocity = new THREE.Vector3();
     this.direction = new THREE.Vector3();
     this.enabled = false;
+    
+    // God Mode
+    this.godMode = false;    // New - God Mode toggle
+    this.godModeIndicator = null; // New - UI indicator for God Mode
     
     // Rune mode variables
     this.runeMode = false;
@@ -116,6 +122,27 @@ export class FirstPersonController {
     // Add to document.body for fixed positioning
     document.body.appendChild(this.runeModeIndicator);
     
+    // Create God Mode indicator
+    this.godModeIndicator = document.createElement('div');
+    this.godModeIndicator.style.position = 'fixed';
+    this.godModeIndicator.style.top = '100px'; // Position below rune mode indicator
+    this.godModeIndicator.style.left = '50%';
+    this.godModeIndicator.style.transform = 'translateX(-50%)';
+    this.godModeIndicator.style.padding = '10px 20px';
+    this.godModeIndicator.style.backgroundColor = 'rgba(255, 215, 0, 0.8)'; // Gold color
+    this.godModeIndicator.style.color = 'black';
+    this.godModeIndicator.style.fontSize = '18px';
+    this.godModeIndicator.style.fontWeight = 'bold';
+    this.godModeIndicator.style.borderRadius = '6px';
+    this.godModeIndicator.style.zIndex = '2000';
+    this.godModeIndicator.style.display = 'none'; // Hidden by default
+    this.godModeIndicator.style.boxShadow = '0 0 15px rgba(255, 215, 0, 0.9)';
+    this.godModeIndicator.textContent = '🚀 GOD MODE ACTIVE 🚀';
+    this.godModeIndicator.id = 'god-mode-indicator';
+    
+    // Add to document.body
+    document.body.appendChild(this.godModeIndicator);
+    
     // Create debug visualization canvas for touch paths
     this.debugCanvas = document.createElement('canvas');
     this.debugCanvas.style.position = 'fixed';
@@ -182,6 +209,68 @@ export class FirstPersonController {
     
     // Listen for rune recognition events
     this.eventBus.on('mobile:rune-cast', this.handleRuneCast.bind(this));
+    
+    // Listen for God Mode toggle events
+    this.eventBus.on('debug:toggle-god-mode', (data) => {
+      this.toggleGodMode(data.enabled);
+    });
+  }
+  
+  /**
+   * Toggle God Mode
+   * @param {boolean} enabled - Whether God Mode should be enabled
+   */
+  toggleGodMode(enabled) {
+    // Set God Mode state
+    this.godMode = enabled !== undefined ? enabled : !this.godMode;
+    
+    // Update UI indicator
+    if (this.godModeIndicator) {
+      this.godModeIndicator.style.display = this.godMode ? 'block' : 'none';
+    }
+    
+    // Update controls guide with God Mode instructions if active
+    if (this.controlsGuide) {
+      if (this.godMode) {
+        // Update controls guide to include God Mode keys
+        this.controlsGuide.innerHTML = `
+          <strong>Controls (GOD MODE):</strong><br>
+          W/Arrow Up - Move Forward<br>
+          S/Arrow Down - Move Backward<br>
+          A/Arrow Left - Move Left<br>
+          D/Arrow Right - Move Right<br>
+          Q - Move Up<br>
+          E - Move Down<br>
+          Left Shift - Toggle Rune Mode<br>
+          Space - Gravity Gun (pickup/drop objects)<br>
+          T - Spawn Random Object<br>
+          V - Toggle Debug Raycast<br>
+          Mouse - Look Around<br>
+          <strong>Mobile Controls:</strong><br>
+          Touch Drag - Look Around / Draw Runes
+        `;
+      } else {
+        // Restore normal controls guide
+        this.controlsGuide.innerHTML = `
+          <strong>Controls:</strong><br>
+          W/Arrow Up - Move Forward<br>
+          S/Arrow Down - Move Backward<br>
+          A/Arrow Left - Move Left<br>
+          D/Arrow Right - Move Right<br>
+          Left Shift - Toggle Rune Mode<br>
+          Space - Gravity Gun (pickup/drop objects)<br>
+          Q - Flip Page Left<br>
+          E - Flip Page Right<br>
+          T - Spawn Random Object<br>
+          V - Toggle Debug Raycast<br>
+          Mouse - Look Around<br>
+          <strong>Mobile Controls:</strong><br>
+          Touch Drag - Look Around / Draw Runes
+        `;
+      }
+    }
+    
+    console.log(`God Mode ${this.godMode ? 'enabled' : 'disabled'}`);
   }
 
   /**
@@ -239,32 +328,68 @@ export class FirstPersonController {
     this.velocity.x -= this.velocity.x * 10.0 * delta;
     this.velocity.z -= this.velocity.z * 10.0 * delta;
     
+    // God Mode: Add vertical movement
+    if (this.godMode) {
+      // Add vertical velocity component
+      if (!this.velocity.y) this.velocity.y = 0;
+      this.velocity.y -= this.velocity.y * 10.0 * delta;
+    }
+    
     // Set movement direction based on key states
     this.direction.z = Number(this.moveForward) - Number(this.moveBackward);
     this.direction.x = Number(this.moveLeft) - Number(this.moveRight);
+    
+    // God Mode: Add vertical direction
+    if (this.godMode) {
+      this.direction.y = Number(this.moveUp) - Number(this.moveDown);
+    } else {
+      this.direction.y = 0;
+    }
+    
     this.direction.normalize(); // Normalize for consistent movement speed
     
     // Move in the direction the camera is facing
-    if (this.moveForward || this.moveBackward) this.velocity.z -= this.direction.z * MOVE_SPEED * delta * 100;
-    if (this.moveLeft || this.moveRight) this.velocity.x -= this.direction.x * MOVE_SPEED * delta * 100;
+    const movementSpeed = this.godMode ? MOVE_SPEED * 1.5 : MOVE_SPEED; // Faster in God Mode
+    
+    if (this.moveForward || this.moveBackward) 
+      this.velocity.z -= this.direction.z * movementSpeed * delta * 100;
+    if (this.moveLeft || this.moveRight) 
+      this.velocity.x -= this.direction.x * movementSpeed * delta * 100;
+    if (this.godMode && (this.moveUp || this.moveDown))
+      this.velocity.y -= this.direction.y * movementSpeed * delta * 100;
     
     // Calculate new camera position based on velocity
     const cameraDirection = new THREE.Vector3();
     this.camera.getWorldDirection(cameraDirection);
     
-    // Project movement onto the XZ plane (horizontal movement only)
-    const forward = new THREE.Vector3(cameraDirection.x, 0, cameraDirection.z).normalize();
-    const right = new THREE.Vector3(forward.z, 0, -forward.x);
-    
-    // Apply movement
-    this.camera.position.add(forward.multiplyScalar(-this.velocity.z * delta));
-    this.camera.position.add(right.multiplyScalar(-this.velocity.x * delta));
-    
-    // Maintain player height
-    this.camera.position.y = PLAYER_HEIGHT;
+    if (this.godMode) {
+      // God Mode: Full 3D movement along camera direction
+      const forward = new THREE.Vector3(cameraDirection.x, 0, cameraDirection.z).normalize();
+      const right = new THREE.Vector3(forward.z, 0, -forward.x);
+      const up = new THREE.Vector3(0, 1, 0);
+      
+      // Apply movement
+      this.camera.position.add(forward.multiplyScalar(-this.velocity.z * delta));
+      this.camera.position.add(right.multiplyScalar(-this.velocity.x * delta));
+      this.camera.position.add(up.multiplyScalar(this.velocity.y * delta));
+      
+      // No height constraint in God Mode
+    } else {
+      // Normal mode: Project movement onto the XZ plane (horizontal movement only)
+      const forward = new THREE.Vector3(cameraDirection.x, 0, cameraDirection.z).normalize();
+      const right = new THREE.Vector3(forward.z, 0, -forward.x);
+      
+      // Apply movement
+      this.camera.position.add(forward.multiplyScalar(-this.velocity.z * delta));
+      this.camera.position.add(right.multiplyScalar(-this.velocity.x * delta));
+      
+      // Maintain player height in normal mode
+      this.camera.position.y = PLAYER_HEIGHT;
+    }
     
     // Determine if player is moving for weapon bob effect
-    const isMoving = this.moveForward || this.moveBackward || this.moveLeft || this.moveRight;
+    const isMoving = this.moveForward || this.moveBackward || this.moveLeft || this.moveRight || 
+                     (this.godMode && (this.moveUp || this.moveDown));
     
     // Update weapon view
     if (this.weaponView) {
@@ -383,6 +508,18 @@ export class FirstPersonController {
       case 'KeyD':
         this.moveRight = true;
         break;
+      case 'KeyQ':
+        // In God Mode: move up, otherwise use original function
+        if (this.godMode) {
+          this.moveUp = true;
+        }
+        break;
+      case 'KeyE':
+        // In God Mode: move down, otherwise use original function
+        if (this.godMode) {
+          this.moveDown = true;
+        }
+        break;
       case 'ShiftLeft':
         // Only toggle on keydown, not on key hold
         if (!event.repeat) {
@@ -422,6 +559,16 @@ export class FirstPersonController {
       case 'ArrowRight':
       case 'KeyD':
         this.moveRight = false;
+        break;
+      case 'KeyQ':
+        if (this.godMode) {
+          this.moveUp = false;
+        }
+        break;
+      case 'KeyE':
+        if (this.godMode) {
+          this.moveDown = false;
+        }
         break;
     }
   }
@@ -1207,6 +1354,10 @@ export class FirstPersonController {
     
     if (this.runeModeIndicator && this.runeModeIndicator.parentNode) {
       this.runeModeIndicator.parentNode.removeChild(this.runeModeIndicator);
+    }
+    
+    if (this.godModeIndicator && this.godModeIndicator.parentNode) {
+      this.godModeIndicator.parentNode.removeChild(this.godModeIndicator);
     }
     
     if (this.debugCanvas && this.debugCanvas.parentNode) {

@@ -14,6 +14,7 @@ export class DebugPanel {
     this.gameStateManager = gameStateManager;
     this.physicsManager = physicsManager;
     this.panel = null;
+    this.physicsUtils = null; // Will be set via event if available
     
     if (DEBUG_CONFIG.ENABLE_MULTIPLAYER_DEBUG || physicsManager) {
       this.createDebugPanel();
@@ -33,6 +34,13 @@ export class DebugPanel {
           this.startGyroSimulation();
         }, 1500);
       }
+      
+      // Request physics utils reference
+      this.eventBus.emit('physics:request-utils', (utils) => {
+        if (utils) {
+          this.physicsUtils = utils;
+        }
+      });
     }
   }
   
@@ -269,6 +277,102 @@ export class DebugPanel {
     
     // Add the gravity gun controls to the container
     container.appendChild(gravityGunSection);
+    
+    // Add physics debug section
+    this.addPhysicsDebugControls(container);
+  }
+  
+  /**
+   * Add physics debug controls
+   * @param {HTMLElement} container - Container to add controls to
+   */
+  addPhysicsDebugControls(container) {
+    // Create physics debug section
+    const debugSection = document.createElement('div');
+    debugSection.style.marginBottom = '10px';
+    debugSection.style.marginTop = '10px';
+    debugSection.style.padding = '5px';
+    debugSection.style.backgroundColor = 'rgba(255, 100, 0, 0.2)';
+    debugSection.style.borderRadius = '3px';
+    
+    // Section title
+    const sectionTitle = document.createElement('div');
+    sectionTitle.textContent = 'PHYSICS DEBUG';
+    sectionTitle.style.fontWeight = 'bold';
+    sectionTitle.style.marginBottom = '5px';
+    sectionTitle.style.fontSize = '11px';
+    debugSection.appendChild(sectionTitle);
+    
+    // Toggle for physics debug wireframes
+    const wireframeContainer = document.createElement('div');
+    wireframeContainer.style.display = 'flex';
+    wireframeContainer.style.alignItems = 'center';
+    wireframeContainer.style.marginBottom = '5px';
+    
+    const wireframeLabel = document.createElement('div');
+    wireframeLabel.textContent = 'Show Physics Wireframes:';
+    wireframeLabel.style.flex = '1';
+    wireframeLabel.style.fontSize = '11px';
+    wireframeContainer.appendChild(wireframeLabel);
+    
+    const wireframeToggle = document.createElement('input');
+    wireframeToggle.type = 'checkbox';
+    wireframeToggle.checked = false;
+    wireframeToggle.onchange = () => {
+      // Toggle physics debug wireframes
+      if (this.physicsUtils) {
+        this.physicsUtils.toggleDebugMode(wireframeToggle.checked);
+        this.updateStatus(`Physics wireframes ${wireframeToggle.checked ? 'enabled' : 'disabled'}`);
+      } else {
+        this.updateStatus('Physics utils not available', true);
+      }
+    };
+    wireframeContainer.appendChild(wireframeToggle);
+    
+    // Add wireframe description
+    const wireframeDescription = document.createElement('div');
+    wireframeDescription.textContent = 'Shows wireframe representation of all physics bodies in the scene';
+    wireframeDescription.style.fontSize = '10px';
+    wireframeDescription.style.color = '#ccc';
+    wireframeDescription.style.marginBottom = '10px';
+    
+    // God Mode toggle
+    const godModeContainer = document.createElement('div');
+    godModeContainer.style.display = 'flex';
+    godModeContainer.style.alignItems = 'center';
+    godModeContainer.style.marginBottom = '5px';
+    
+    const godModeLabel = document.createElement('div');
+    godModeLabel.textContent = 'God Mode:';
+    godModeLabel.style.flex = '1';
+    godModeLabel.style.fontSize = '11px';
+    godModeContainer.appendChild(godModeLabel);
+    
+    const godModeToggle = document.createElement('input');
+    godModeToggle.type = 'checkbox';
+    godModeToggle.checked = false;
+    godModeToggle.onchange = () => {
+      // Toggle god mode
+      this.eventBus.emit('debug:toggle-god-mode', { enabled: godModeToggle.checked });
+      this.updateStatus(`God Mode ${godModeToggle.checked ? 'enabled' : 'disabled'}`);
+    };
+    godModeContainer.appendChild(godModeToggle);
+    
+    // Add god mode description
+    const godModeDescription = document.createElement('div');
+    godModeDescription.textContent = 'Ignore physics collisions and fly freely in all directions (WASD + Q/E for up/down)';
+    godModeDescription.style.fontSize = '10px';
+    godModeDescription.style.color = '#ccc';
+    godModeDescription.style.marginBottom = '5px';
+    
+    // Add all elements to container
+    debugSection.appendChild(wireframeContainer);
+    debugSection.appendChild(wireframeDescription);
+    debugSection.appendChild(godModeContainer);
+    debugSection.appendChild(godModeDescription);
+    
+    // Add the physics debug controls to the container
+    container.appendChild(debugSection);
   }
   
   /**

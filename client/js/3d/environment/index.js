@@ -30,10 +30,12 @@ export class Environment {
   /**
    * @param {THREE.Scene} scene - The Three.js scene
    * @param {PhysicsManager} physicsManager - Physics manager for collision bodies (optional)
+   * @param {EventBus} eventBus - Application event bus
    */
-  constructor(scene, physicsManager = null) {
+  constructor(scene, physicsManager = null, eventBus = null) {
     this.scene = scene;
     this.physicsManager = physicsManager;
+    this.eventBus = eventBus;
     this.objects = new Map(); // Store references to environment objects
     this.spawnPoints = []; // Player spawn locations
     
@@ -50,6 +52,39 @@ export class Environment {
     
     // Add atmospheric fog
     this.scene.fog = new THREE.FogExp2(0xd6cca1, 0.02);
+    
+    // Set up event handlers
+    this.setupEventListeners();
+  }
+  
+  /**
+   * Set up event listeners for physics debug and other functionality
+   */
+  setupEventListeners() {
+    if (this.eventBus) {
+      // Listen for physics utils requests from other components
+      this.eventBus.on('physics:request-utils', (callback) => {
+        if (typeof callback === 'function') {
+          callback(this.physicsUtils);
+        }
+      });
+      
+      // Listen for update events to update debug wireframes
+      this.eventBus.on('scene:update', this.update.bind(this));
+    }
+  }
+  
+  /**
+   * Update environment on each frame
+   * @param {Object} data - Update data with delta time
+   */
+  update(data) {
+    const { delta } = data;
+    
+    // Update physics debug wireframes if needed
+    if (this.physicsUtils && this.physicsUtils.debugMode) {
+      this.physicsUtils.updateDebugWireframes();
+    }
   }
 
   /**
