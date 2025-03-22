@@ -509,15 +509,19 @@ export class FirstPersonController {
         this.moveRight = true;
         break;
       case 'KeyQ':
-        // In God Mode: move up, otherwise use original function
+        // In God Mode: move up, otherwise flip spellbook page left
         if (this.godMode) {
           this.moveUp = true;
+        } else if (!event.repeat) {
+          this.eventBus.emit('weapon:flip-left');
         }
         break;
       case 'KeyE':
-        // In God Mode: move down, otherwise use original function
+        // In God Mode: move down, otherwise flip spellbook page right
         if (this.godMode) {
           this.moveDown = true;
+        } else if (!event.repeat) {
+          this.eventBus.emit('weapon:flip-right');
         }
         break;
       case 'ShiftLeft':
