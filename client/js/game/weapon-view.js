@@ -676,10 +676,10 @@ export class WeaponView {
       return;
     }
     
-    // Check if the spell is on cooldown
+    // Check if the spell is on cooldown - show visual feedback instead of error
     if (!spell.isReady()) {
       console.log('Spell on cooldown');
-      this.showCastingError('Spell still recharging!');
+      this.flashCooldownIndicator();
       return;
     }
     
@@ -701,6 +701,14 @@ export class WeaponView {
         break;
       default:
         this.applyGenericRuneEffect(confidence);
+    }
+    
+    // Create cooldown indicator if this spell has a cooldown
+    if (spell.cooldown > 0) {
+      // Short delay before showing cooldown
+      setTimeout(() => {
+        this.createCooldownIndicator(spell);
+      }, 100);
     }
   }
 
@@ -1165,10 +1173,10 @@ export class WeaponView {
       return;
     }
     
-    // Check if the spell is on cooldown
+    // Check if the spell is on cooldown - show visual feedback instead of error
     if (!spell.isReady()) {
       console.log('Spell on cooldown');
-      this.showCastingError('Spell still recharging!');
+      this.flashCooldownIndicator();
       return;
     }
     
@@ -1185,32 +1193,213 @@ export class WeaponView {
   }
   
   /**
-   * Flash pages as visual feedback when casting a space bar spell
+   * Create cooldown indicator when casting a space bar spell
    */
   flashPagesOnCast() {
-    if (!this.leftPage || !this.rightPage) return;
+    // Create cooldown indicator if this spell has a cooldown
+    const spell = this.spellRegistry.getSpellByPage(this.currentPage);
+    if (spell && spell.cooldown > 0) {
+      // Short delay before showing cooldown
+      setTimeout(() => {
+        this.createCooldownIndicator(spell);
+      }, 100);
+    }
+  }
+  
+  /**
+   * Show visual feedback for spell still on cooldown
+   */
+  flashCooldownIndicator() {
+    // Create a temporary indicator showing that spell is still on cooldown
+    if (!this.spellbook) return;
     
-    // Store original materials
-    const leftOriginalMaterial = this.leftPage.material.clone();
-    const rightOriginalMaterial = this.rightPage.material.clone();
+    // Get the current spell
+    const spell = this.spellRegistry.getSpellByPage(this.currentPage);
+    if (!spell) return;
     
-    // Create glow material
-    const glowMaterial = new THREE.MeshBasicMaterial({
-      color: 0x00aaff,
-      map: leftOriginalMaterial.map,
+    // Get cooldown progress to show how much time remains
+    const progress = spell.getCooldownProgress();
+    
+    // If we already have a cooldown indicator, just make it pulse red
+    if (this.cooldownBar && this.cooldownBar.material) {
+      // Create a quick red pulse effect
+      const origColor = this.cooldownBar.material.color.clone();
+      this.cooldownBar.material.color.set(0xff0000);
+      
+      // Increase opacity temporarily
+      const origOpacity = this.cooldownBar.material.opacity;
+      this.cooldownBar.material.opacity = 0.9;
+      
+      // Return to normal after a moment
+      setTimeout(() => {
+        if (this.cooldownBar && this.cooldownBar.material) {
+          this.cooldownBar.material.color.copy(origColor);
+          this.cooldownBar.material.opacity = origOpacity;
+        }
+      }, 200);
+      return;
+    }
+    
+    // Otherwise create a simple cooldown bar with no animation to show we can't cast
+    this.createCooldownIndicator(spell);
+  }
+  
+  /**
+   * Create cooldown indicator on the book
+   * @param {Spell} spell - The spell to create cooldown indicator for
+   */
+  createCooldownIndicator(spell) {
+    if (!this.spellbook || !spell) return;
+    
+    // Remove any existing cooldown indicator
+    this.removeCooldownIndicator();
+    
+    // Create a cooldown bar at the bottom of the book
+    const barGeometry = new THREE.PlaneGeometry(0.4, 0.03);
+    const barMaterial = new THREE.MeshBasicMaterial({
+      color: 0x3388ff,
       transparent: true,
-      opacity: 0.8
+      opacity: 0.8,
+      depthTest: false // Make sure it's visible on top
     });
     
-    // Apply glow material
-    this.leftPage.material = glowMaterial.clone();
-    this.rightPage.material = glowMaterial.clone();
+    this.cooldownBar = new THREE.Mesh(barGeometry, barMaterial);
+    this.cooldownBar.position.set(0, -0.28, 0.02); // Bottom of the book, slightly above the surface
+    this.cooldownBar.userData.isVisualEffect = true;
+    this.spellbook.add(this.cooldownBar);
     
-    // Restore original materials after a delay
-    setTimeout(() => {
-      if (this.leftPage) this.leftPage.material = leftOriginalMaterial;
-      if (this.rightPage) this.rightPage.material = rightOriginalMaterial;
-    }, 300);
+    // Store start time and total cooldown
+    this.cooldownStartTime = Date.now();
+    this.cooldownDuration = spell.cooldown * 1000; // Convert to milliseconds
+    
+    // Create an empty geometry for background bar
+    const bgBarGeometry = new THREE.PlaneGeometry(0.4, 0.03);
+    const bgBarMaterial = new THREE.MeshBasicMaterial({
+      color: 0x222222,
+      transparent: true,
+      opacity: 0.5,
+      depthTest: false
+    });
+    
+    this.cooldownBarBg = new THREE.Mesh(bgBarGeometry, bgBarMaterial);
+    this.cooldownBarBg.position.set(0, -0.28, 0.015); // Slightly behind the actual bar
+    this.cooldownBarBg.userData.isVisualEffect = true;
+    this.spellbook.add(this.cooldownBarBg);
+    
+    // Start updating the cooldown bar
+    this.updateCooldownBar();
+  }
+  
+  /**
+   * Update cooldown bar size based on remaining cooldown time
+   */
+  updateCooldownBar() {
+    if (!this.cooldownBar || !this.cooldownStartTime) return;
+    
+    const elapsed = Date.now() - this.cooldownStartTime;
+    const remaining = Math.max(0, this.cooldownDuration - elapsed);
+    const progress = remaining / this.cooldownDuration;
+    
+    // Resize the bar based on progress
+    if (this.cooldownBar.geometry) {
+      this.cooldownBar.geometry.dispose();
+      this.cooldownBar.geometry = new THREE.PlaneGeometry(0.4 * progress, 0.03);
+      
+      // Adjust position to keep left-aligned
+      this.cooldownBar.position.x = -0.2 + (0.4 * progress / 2);
+    }
+    
+    // Update color based on progress
+    if (this.cooldownBar.material) {
+      // Change from red to blue as it gets closer to ready
+      const r = Math.min(1, 2 - 2 * progress);
+      const g = Math.min(0.5, progress);
+      const b = Math.min(1, progress * 1.5);
+      this.cooldownBar.material.color.setRGB(r, g, b);
+      
+      // Pulsing effect when almost ready
+      if (progress < 0.2) {
+        const pulse = 0.6 + Math.sin(Date.now() / 100) * 0.4;
+        this.cooldownBar.material.opacity = pulse;
+      }
+    }
+    
+    // Continue updating until cooldown complete
+    if (progress > 0) {
+      requestAnimationFrame(() => this.updateCooldownBar());
+    } else {
+      // Cooldown complete - remove the bar with a nice fade out
+      this.fadeCooldownIndicator();
+    }
+  }
+  
+  /**
+   * Fade out and remove cooldown indicator
+   */
+  fadeCooldownIndicator() {
+    if (!this.cooldownBar || !this.cooldownBarBg) return;
+    
+    // Fade out animation
+    const fadeOutDuration = 500; // ms
+    const startTime = Date.now();
+    
+    const fadeOut = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(1, elapsed / fadeOutDuration);
+      
+      // Calculate opacity
+      const opacity = 1 - progress;
+      
+      if (this.cooldownBar && this.cooldownBar.material) {
+        this.cooldownBar.material.opacity = opacity * 0.8;
+      }
+      
+      if (this.cooldownBarBg && this.cooldownBarBg.material) {
+        this.cooldownBarBg.material.opacity = opacity * 0.5;
+      }
+      
+      if (progress < 1) {
+        requestAnimationFrame(fadeOut);
+      } else {
+        this.removeCooldownIndicator();
+      }
+    };
+    
+    fadeOut();
+  }
+  
+  /**
+   * Remove cooldown indicator
+   */
+  removeCooldownIndicator() {
+    if (this.cooldownBar) {
+      if (this.cooldownBar.parent) {
+        this.cooldownBar.parent.remove(this.cooldownBar);
+      }
+      if (this.cooldownBar.geometry) {
+        this.cooldownBar.geometry.dispose();
+      }
+      if (this.cooldownBar.material) {
+        this.cooldownBar.material.dispose();
+      }
+      this.cooldownBar = null;
+    }
+    
+    if (this.cooldownBarBg) {
+      if (this.cooldownBarBg.parent) {
+        this.cooldownBarBg.parent.remove(this.cooldownBarBg);
+      }
+      if (this.cooldownBarBg.geometry) {
+        this.cooldownBarBg.geometry.dispose();
+      }
+      if (this.cooldownBarBg.material) {
+        this.cooldownBarBg.material.dispose();
+      }
+      this.cooldownBarBg = null;
+    }
+    
+    this.cooldownStartTime = null;
+    this.cooldownDuration = null;
   }
 
   /**
@@ -1235,6 +1424,9 @@ export class WeaponView {
       clearTimeout(this.runeEffectTimeout);
       this.runeEffectTimeout = null;
     }
+    
+    // Clean up cooldown indicators
+    this.removeCooldownIndicator();
     
     // Clean up page textures
     if (this.pageTextures.left) {
