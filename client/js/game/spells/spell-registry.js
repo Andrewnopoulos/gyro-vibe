@@ -154,7 +154,7 @@ export class SpellRegistry {
     
     if (isLeftPage) {
       // Draw title
-      context.font = 'bold 32px serif';
+      context.font = 'bold 40px serif';
       context.textAlign = 'center';
       context.textBaseline = 'top';
       context.fillStyle = '#8B4513';
@@ -162,19 +162,19 @@ export class SpellRegistry {
       
       // Draw decorative line
       context.strokeStyle = '#8B4513';
-      context.lineWidth = 2;
+      context.lineWidth = 3;
       context.beginPath();
-      context.moveTo(margin, margin + 50);
-      context.lineTo(width - margin, margin + 50);
+      context.moveTo(margin, margin + 60);
+      context.lineTo(width - margin, margin + 60);
       context.stroke();
       
       // Draw instructions heading
-      context.font = 'bold 20px serif';
+      context.font = 'bold 28px serif';
       context.textAlign = 'center';
-      context.fillText('Instructions', width / 2, margin + 70);
+      context.fillText('Instructions', width / 2, margin + 80);
       
       // Draw basic instructions
-      context.font = '16px serif';
+      context.font = '22px serif';
       context.textAlign = 'left';
       context.fillStyle = '#000000';
       
@@ -189,37 +189,38 @@ export class SpellRegistry {
         'Start your journey on the next page...'
       ];
       
-      let y = margin + 110;
+      let y = margin + 130;
       for (const line of instructions) {
         context.fillText(line, margin, y);
-        y += 24;
+        y += 30;
       }
       
       // Draw small circle and triangle as examples at the bottom
       context.strokeStyle = '#8B4513';
-      context.lineWidth = 2;
+      context.lineWidth = 3;
       
       // Circle example
       context.beginPath();
-      context.arc(width / 3, height - 100, 30, 0, Math.PI * 2);
+      context.arc(width / 3, height - 120, 40, 0, Math.PI * 2);
       context.stroke();
-      context.fillText('Circle', width / 3, height - 50);
+      context.font = '22px serif';
+      context.fillText('Circle', width / 3, height - 60);
       
       // Triangle example
-      const triangleY = height - 100;
+      const triangleY = height - 120;
       context.beginPath();
-      context.moveTo(width * 2/3, triangleY - 30);
-      context.lineTo(width * 2/3 - 30, triangleY + 20);
-      context.lineTo(width * 2/3 + 30, triangleY + 20);
+      context.moveTo(width * 2/3, triangleY - 40);
+      context.lineTo(width * 2/3 - 40, triangleY + 30);
+      context.lineTo(width * 2/3 + 40, triangleY + 30);
       context.closePath();
       context.stroke();
-      context.fillText('Triangle', width * 2/3, height - 50);
+      context.fillText('Triangle', width * 2/3, height - 60);
       
     } else {
       // Right page - image or additional instructions
       
       // Draw heading
-      context.font = 'bold 24px serif';
+      context.font = 'bold 32px serif';
       context.textAlign = 'center';
       context.textBaseline = 'top';
       context.fillStyle = '#8B4513';
@@ -227,14 +228,14 @@ export class SpellRegistry {
       
       // Draw decorative line
       context.strokeStyle = '#8B4513';
-      context.lineWidth = 2;
+      context.lineWidth = 3;
       context.beginPath();
-      context.moveTo(margin, margin + 40);
-      context.lineTo(width - margin, margin + 40);
+      context.moveTo(margin, margin + 50);
+      context.lineTo(width - margin, margin + 50);
       context.stroke();
       
       // Draw additional tips
-      context.font = '16px serif';
+      context.font = '22px serif';
       context.textAlign = 'left';
       context.fillStyle = '#000000';
       
@@ -250,14 +251,14 @@ export class SpellRegistry {
         'to be open when casting'
       ];
       
-      let y = margin + 60;
+      let y = margin + 70;
       for (const tip of tips) {
         context.fillText(tip, margin, y);
-        y += 24;
+        y += 30;
       }
       
       // Draw page number
-      context.font = '16px serif';
+      context.font = 'bold 20px serif';
       context.textAlign = 'right';
       context.textBaseline = 'bottom';
       context.fillStyle = '#8B4513';

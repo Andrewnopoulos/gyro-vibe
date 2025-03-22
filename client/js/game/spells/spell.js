@@ -131,7 +131,7 @@ export class Spell {
     }
     
     // Draw page number
-    context.font = '16px serif';
+    context.font = 'bold 20px serif';
     context.textAlign = 'left';
     context.textBaseline = 'bottom';
     context.fillStyle = '#8B4513';
@@ -152,7 +152,7 @@ export class Spell {
     context.fillRect(0, 0, width, height);
     
     // Draw spell name
-    context.font = 'bold 24px serif';
+    context.font = 'bold 32px serif';
     context.textAlign = 'center';
     context.textBaseline = 'top';
     context.fillStyle = '#8B4513';
@@ -160,14 +160,14 @@ export class Spell {
     
     // Draw horizontal divider
     context.strokeStyle = '#8B4513';
-    context.lineWidth = 1;
+    context.lineWidth = 2;
     context.beginPath();
-    context.moveTo(margin, margin + 40);
-    context.lineTo(width - margin, margin + 40);
+    context.moveTo(margin, margin + 50);
+    context.lineTo(width - margin, margin + 50);
     context.stroke();
     
     // Draw description - with word wrapping
-    context.font = '18px serif';
+    context.font = '24px serif';
     context.textAlign = 'left';
     context.textBaseline = 'top';
     context.fillStyle = '#000000';
@@ -176,20 +176,20 @@ export class Spell {
       context,
       this.description,
       margin,
-      margin + 60,
+      margin + 70,
       width - (margin * 2),
-      24
+      32
     );
     
     // Draw shape name at the bottom
-    context.font = 'italic 18px serif';
+    context.font = 'italic 24px serif';
     context.fillStyle = '#8B4513';
     context.textAlign = 'center';
     context.textBaseline = 'bottom';
     context.fillText(`Cast with ${this.shape} shape`, width / 2, height - margin);
     
     // Draw page number
-    context.font = '16px serif';
+    context.font = 'bold 20px serif';
     context.textAlign = 'right';
     context.textBaseline = 'bottom';
     context.fillText(`Page ${this.page}`, width - 20, height - 20);

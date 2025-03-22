@@ -319,21 +319,22 @@ export class WeaponView {
   createPageIndicator() {
     this.pageIndicator = document.createElement('div');
     this.pageIndicator.style.position = 'absolute';
-    this.pageIndicator.style.bottom = '20px';
+    this.pageIndicator.style.bottom = '30px';
     this.pageIndicator.style.left = '50%';
     this.pageIndicator.style.transform = 'translateX(-50%)';
-    this.pageIndicator.style.backgroundColor = 'rgba(139, 69, 19, 0.7)';
+    this.pageIndicator.style.backgroundColor = 'rgba(139, 69, 19, 0.85)';
     this.pageIndicator.style.color = '#FFD700';
-    this.pageIndicator.style.padding = '5px 15px';
-    this.pageIndicator.style.borderRadius = '15px';
+    this.pageIndicator.style.padding = '8px 20px';
+    this.pageIndicator.style.borderRadius = '20px';
     this.pageIndicator.style.fontFamily = 'serif';
-    this.pageIndicator.style.fontSize = '16px';
-    this.pageIndicator.style.boxShadow = '0 0 10px rgba(0, 0, 0, 0.5)';
+    this.pageIndicator.style.fontSize = '22px';
+    this.pageIndicator.style.fontWeight = 'bold';
+    this.pageIndicator.style.boxShadow = '0 0 15px rgba(0, 0, 0, 0.6)';
     this.pageIndicator.style.zIndex = '100';
     this.pageIndicator.style.display = 'none'; // Will be shown when spellbook is visible
     
     // Add key hint text
-    this.pageIndicator.innerHTML = 'Page 0 - Instructions <span style="font-size:12px">(Q/E to flip)</span>';
+    this.pageIndicator.innerHTML = 'Page 0 - Instructions <span style="font-size:16px">(Q/E to flip)</span>';
     
     // Append to container
     this.container.appendChild(this.pageIndicator);
@@ -714,17 +715,19 @@ export class WeaponView {
     notification.style.top = '50%';
     notification.style.left = '50%';
     notification.style.transform = 'translate(-50%, -50%)';
-    notification.style.padding = '15px 25px';
-    notification.style.borderRadius = '8px';
-    notification.style.backgroundColor = 'rgba(255, 0, 0, 0.7)';
+    notification.style.padding = '20px 30px';
+    notification.style.borderRadius = '12px';
+    notification.style.backgroundColor = 'rgba(255, 0, 0, 0.8)';
     notification.style.color = 'white';
-    notification.style.fontSize = '20px';
+    notification.style.fontSize = '26px';
     notification.style.fontWeight = 'bold';
     notification.style.textAlign = 'center';
     notification.style.opacity = '0';
     notification.style.transition = 'opacity 0.3s, transform 0.3s';
     notification.style.zIndex = '2000';
     notification.style.pointerEvents = 'none';
+    notification.style.boxShadow = '0 0 20px rgba(255, 0, 0, 0.4)';
+    notification.style.textShadow = '0 0 5px rgba(0, 0, 0, 0.5)';
     notification.textContent = message;
     
     // Add to container
@@ -746,7 +749,7 @@ export class WeaponView {
           notification.parentNode.removeChild(notification);
         }
       }, 300);
-    }, 2000);
+    }, 2500);
   }
 
   /**
