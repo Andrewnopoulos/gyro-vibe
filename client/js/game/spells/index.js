@@ -8,6 +8,7 @@ import { CircleSpell } from './circle-spell.js';
 import { TriangleSpell } from './triangle-spell.js';
 import { ObjectSpawnerSpell } from './object-spawner-spell.js';
 import { GravityGunSpell } from './gravity-gun-spell.js';
+import { BlackHoleSpell } from './black-hole-spell.js';
 import { SpellAudioManager } from './audio-manager.js';
 
 // Export main spell classes
@@ -19,5 +20,6 @@ export {
   TriangleSpell,
   ObjectSpawnerSpell,
   GravityGunSpell,
+  BlackHoleSpell,
   SpellAudioManager
 };

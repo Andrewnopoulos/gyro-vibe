@@ -121,6 +121,38 @@ export class Spell {
         context.stroke();
         break;
         
+      case 'hexagram':
+        // Draw a hexagram (Star of David) for black hole spell
+        const outerRadius = radius;
+        const innerRadius = radius * 0.6;
+        
+        // Draw first triangle (pointing up)
+        context.beginPath();
+        for (let i = 0; i < 3; i++) {
+          const angle = (i * 2 * Math.PI / 3) - Math.PI / 2; // Start from top
+          const x = centerX + outerRadius * Math.cos(angle);
+          const y = centerY + outerRadius * Math.sin(angle);
+          
+          if (i === 0) context.moveTo(x, y);
+          else context.lineTo(x, y);
+        }
+        context.closePath();
+        context.stroke();
+        
+        // Draw second triangle (pointing down)
+        context.beginPath();
+        for (let i = 0; i < 3; i++) {
+          const angle = (i * 2 * Math.PI / 3) + Math.PI / 2; // Start from bottom
+          const x = centerX + outerRadius * Math.cos(angle);
+          const y = centerY + outerRadius * Math.sin(angle);
+          
+          if (i === 0) context.moveTo(x, y);
+          else context.lineTo(x, y);
+        }
+        context.closePath();
+        context.stroke();
+        break;
+        
       default:
         // Draw a question mark for unknown shapes
         context.font = `${radius}px serif`;

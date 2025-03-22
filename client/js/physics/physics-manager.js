@@ -59,6 +59,10 @@ export class PhysicsManager {
     this.eventBus.on('physics:spawn-object', this.createPhysicsObject.bind(this));
     this.eventBus.on('physics:update-object', this.updatePhysicsObject.bind(this));
     
+    // Black hole physics
+    this.eventBus.on('physics:apply-black-hole', this.applyBlackHoleEffect.bind(this));
+    this.eventBus.on('physics:apply-explosion', this.applyExplosionEffect.bind(this));
+    
     // Multiplayer events
     this.eventBus.on('multiplayer:room-joined', this.handleRoomJoined.bind(this));
     this.eventBus.on('multiplayer:room-left', this.handleRoomLeft.bind(this));
@@ -1214,6 +1218,163 @@ export class PhysicsManager {
         // Unknown effect type
         console.warn('Unknown visual effect type:', type);
     }
+  }
+  
+  /**
+   * Apply a black hole effect that attracts nearby physics objects
+   * @param {Object} data - Black hole data including position, strength and radius
+   */
+  applyBlackHoleEffect(data) {
+    const { id, position, strength, radius } = data;
+    
+    if (!position) {
+      console.warn('Invalid position for black hole effect');
+      return;
+    }
+    
+    // Create a vector for the black hole center
+    const blackHolePos = new CANNON.Vec3(position.x, position.y, position.z);
+    const effectStrength = strength || 10;
+    const effectRadius = radius || 10;
+    
+    // Iterate through all physics bodies
+    this.physicsBodies.forEach((physicsObj, objectId) => {
+      const { body } = physicsObj;
+      
+      // Skip static objects
+      if (body.mass <= 0) return;
+      
+      // Skip objects being held
+      if (this.heldBody === body) return;
+      
+      // Calculate distance to black hole
+      const distance = body.position.distanceTo(blackHolePos);
+      
+      // Only affect objects within radius
+      if (distance < effectRadius) {
+        // Notify that this object is affected (for explosion tracking)
+        this.eventBus.emit(`physics:affected-by-${id}`, objectId);
+        
+        // Calculate force direction (towards black hole)
+        const direction = new CANNON.Vec3();
+        blackHolePos.vsub(body.position, direction);
+        direction.normalize();
+        
+        // Force strength decreases with squared distance
+        const forceMagnitude = effectStrength * body.mass * (1 - (distance / effectRadius));
+        
+        // Apply force toward black hole
+        const force = direction.scale(forceMagnitude);
+        body.applyForce(force, body.position);
+        
+        // Add visual effect to affected objects
+        if (physicsObj.mesh && physicsObj.mesh.material) {
+          // Add slight purple glow to indicate object is being affected
+          if (!physicsObj.originalEmissive) {
+            physicsObj.originalEmissive = physicsObj.mesh.material.emissive ? 
+              physicsObj.mesh.material.emissive.clone() : 
+              new THREE.Color(0x000000);
+            
+            physicsObj.originalEmissiveIntensity = 
+              physicsObj.mesh.material.emissiveIntensity || 0;
+          }
+          
+          // Make the glow stronger as objects get closer
+          const glowIntensity = 0.2 + ((effectRadius - distance) / effectRadius) * 0.8;
+          physicsObj.mesh.material.emissive = new THREE.Color(0x330066);
+          physicsObj.mesh.material.emissiveIntensity = glowIntensity;
+        }
+        
+        // Wake up the body if it's sleeping
+        if (body.sleepState === CANNON.Body.SLEEPING) {
+          body.wakeUp();
+        }
+      } else if (physicsObj.originalEmissive) {
+        // Reset emissive if object moves out of range
+        physicsObj.mesh.material.emissive.copy(physicsObj.originalEmissive);
+        physicsObj.mesh.material.emissiveIntensity = physicsObj.originalEmissiveIntensity;
+        delete physicsObj.originalEmissive;
+        delete physicsObj.originalEmissiveIntensity;
+      }
+    });
+  }
+  
+  /**
+   * Apply an explosion effect that pushes objects away
+   * @param {Object} data - Explosion data including position, strength and radius
+   */
+  applyExplosionEffect(data) {
+    const { position, strength, radius } = data;
+    
+    if (!position) {
+      console.warn('Invalid position for explosion effect');
+      return;
+    }
+    
+    // Create a vector for the explosion center
+    const explosionPos = new CANNON.Vec3(position.x, position.y, position.z);
+    const effectStrength = strength || 15;
+    const effectRadius = radius || 15;
+    
+    // Iterate through all physics bodies
+    this.physicsBodies.forEach((physicsObj, objectId) => {
+      const { body } = physicsObj;
+      
+      // Skip static objects
+      if (body.mass <= 0) return;
+      
+      // Skip objects being held
+      if (this.heldBody === body) return;
+      
+      // Calculate distance to explosion center
+      const distance = body.position.distanceTo(explosionPos);
+      
+      // Only affect objects within radius
+      if (distance < effectRadius) {
+        // Calculate force direction (away from explosion)
+        const direction = new CANNON.Vec3();
+        body.position.vsub(explosionPos, direction);
+        direction.normalize();
+        
+        // Force strength decreases with distance
+        const forceMagnitude = effectStrength * body.mass * (1 - (distance / effectRadius));
+        
+        // Apply force away from explosion
+        const force = direction.scale(forceMagnitude);
+        body.applyForce(force, body.position);
+        
+        // Add upward component for more dramatic effect
+        const upwardForce = new CANNON.Vec3(0, forceMagnitude * 0.5, 0);
+        body.applyForce(upwardForce, body.position);
+        
+        // Add visual effect to affected objects
+        if (physicsObj.mesh && physicsObj.mesh.material) {
+          // Add orange glow for explosion effect
+          physicsObj.mesh.material.emissive = new THREE.Color(0xFF3300);
+          physicsObj.mesh.material.emissiveIntensity = 0.8;
+          
+          // Schedule reset of emissive effect
+          setTimeout(() => {
+            if (physicsObj.mesh && physicsObj.mesh.material) {
+              if (physicsObj.originalEmissive) {
+                physicsObj.mesh.material.emissive.copy(physicsObj.originalEmissive);
+                physicsObj.mesh.material.emissiveIntensity = physicsObj.originalEmissiveIntensity;
+                delete physicsObj.originalEmissive;
+                delete physicsObj.originalEmissiveIntensity;
+              } else {
+                physicsObj.mesh.material.emissive.set(0, 0, 0);
+                physicsObj.mesh.material.emissiveIntensity = 0;
+              }
+            }
+          }, 1000);
+        }
+        
+        // Wake up the body if it's sleeping
+        if (body.sleepState === CANNON.Body.SLEEPING) {
+          body.wakeUp();
+        }
+      }
+    });
   }
   
   /**

@@ -399,5 +399,299 @@ export const SpellEffects = {
       element: beamContainer,
       cleanup
     };
+  },
+  
+  /**
+   * Creates a black hole effect that attracts physics objects
+   * @param {Object} context - Casting context
+   * @param {Object} options - Effect options
+   * @returns {Object} Effect instance and cleanup function
+   */
+  createBlackHole(context, options = {}) {
+    const { scene, camera, eventBus } = context;
+    const duration = options.duration || 3; // Default 3 seconds duration
+    const strength = options.strength || 10; // Gravitational strength
+    const radius = options.radius || 0.5; // Visual size of black hole
+    const effectRadius = options.effectRadius || 10; // Range of gravitational effect
+    
+    // Create black hole core
+    const coreGeometry = new THREE.SphereGeometry(radius, 32, 32);
+    const coreMaterial = new THREE.MeshBasicMaterial({
+      color: 0x000000,
+      transparent: true,
+      opacity: 0.9
+    });
+    const core = new THREE.Mesh(coreGeometry, coreMaterial);
+    
+    // Create event horizon glow
+    const glowGeometry = new THREE.SphereGeometry(radius * 1.2, 32, 32);
+    const glowMaterial = new THREE.MeshBasicMaterial({
+      color: 0x6600CC,
+      transparent: true,
+      opacity: 0.6,
+      side: THREE.BackSide,
+      blending: THREE.AdditiveBlending
+    });
+    const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+    
+    // Create outer disk
+    const diskGeometry = new THREE.RingGeometry(radius * 1.2, radius * 3, 32);
+    const diskMaterial = new THREE.MeshBasicMaterial({
+      color: 0x9900FF,
+      transparent: true,
+      opacity: 0.4,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending
+    });
+    const disk = new THREE.Mesh(diskGeometry, diskMaterial);
+    disk.rotation.x = Math.PI / 2; // Make disk horizontal
+    
+    // Create particle system for swirling matter
+    const particleCount = 100;
+    const particleGeometry = new THREE.BufferGeometry();
+    const particleMaterial = new THREE.PointsMaterial({
+      color: 0xBB33FF,
+      size: 0.05,
+      transparent: true,
+      opacity: 0.7,
+      blending: THREE.AdditiveBlending
+    });
+    
+    // Generate random particle positions in a disk shape
+    const particlePositions = new Float32Array(particleCount * 3);
+    const particleVelocities = []; // Store velocities for animation
+    
+    for (let i = 0; i < particleCount; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const distance = (radius * 1.2) + (Math.random() * radius * 3);
+      
+      // Position on disk with random height variation
+      particlePositions[i * 3] = Math.cos(angle) * distance; // x
+      particlePositions[i * 3 + 1] = (Math.random() - 0.5) * 0.2; // y (small height variation)
+      particlePositions[i * 3 + 2] = Math.sin(angle) * distance; // z
+      
+      // Store orbital properties for animation
+      particleVelocities.push({
+        distance: distance,
+        angle: angle,
+        speed: 0.5 + (Math.random() * 1.5),
+        vertSpeed: (Math.random() - 0.5) * 0.2
+      });
+    }
+    
+    particleGeometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+    const particles = new THREE.Points(particleGeometry, particleMaterial);
+    
+    // Create container for black hole
+    const blackHoleContainer = new THREE.Group();
+    blackHoleContainer.add(core);
+    blackHoleContainer.add(glow);
+    blackHoleContainer.add(disk);
+    blackHoleContainer.add(particles);
+    
+    // Position black hole in front of player
+    if (camera) {
+      const direction = new THREE.Vector3(0, 0, -1);
+      direction.applyQuaternion(camera.quaternion);
+      
+      // Position further out to give room for objects to be pulled in
+      blackHoleContainer.position.copy(camera.position);
+      blackHoleContainer.position.add(direction.multiplyScalar(5)); // 5 units in front
+      
+      // Make it slightly lower than eye level
+      blackHoleContainer.position.y -= 1.0;
+    } else {
+      // Fallback position
+      blackHoleContainer.position.set(0, 0, -5);
+    }
+    
+    // Add to scene
+    if (scene) {
+      scene.add(blackHoleContainer);
+    } else {
+      console.warn('No scene available in context');
+    }
+    
+    // Create a unique ID for this black hole's physics
+    const blackHoleId = 'black_hole_' + Date.now();
+    
+    // Store affected objects
+    const affectedObjects = new Set();
+    
+    // Setup physics attraction
+    function applyGravitationalPull() {
+      if (!eventBus) return;
+      
+      // Emit an event to apply force to all nearby physics objects
+      eventBus.emit('physics:apply-black-hole', {
+        id: blackHoleId,
+        position: {
+          x: blackHoleContainer.position.x,
+          y: blackHoleContainer.position.y,
+          z: blackHoleContainer.position.z
+        },
+        strength: strength,
+        radius: effectRadius
+      });
+    }
+    
+    // Apply gravitational pull effect periodically
+    const pullInterval = setInterval(applyGravitationalPull, 100);
+    
+    // Setup animation
+    const startTime = Date.now();
+    let animationFrameId = null;
+    let explosionTriggered = false;
+    
+    const animate = () => {
+      const elapsedTime = (Date.now() - startTime) / 1000;
+      
+      // Check if effect duration complete
+      if (elapsedTime >= duration) {
+        if (!explosionTriggered) {
+          triggerExplosion();
+          explosionTriggered = true;
+        }
+        
+        // Check if we're done with explosion effect (give it 1 second)
+        if (elapsedTime >= duration + 1) {
+          cleanup();
+          return;
+        }
+      }
+      
+      // Rotate disk for swirling effect
+      disk.rotation.y += 0.01;
+      
+      // Animate particles - spiral movement
+      const positions = particleGeometry.attributes.position.array;
+      
+      for (let i = 0; i < particleCount; i++) {
+        const velocity = particleVelocities[i];
+        
+        // Update angle - particles move faster as they get closer to center
+        const speedFactor = 1 + ((radius * 3 - velocity.distance) / (radius * 3)) * 2;
+        velocity.angle += 0.01 * velocity.speed * speedFactor;
+        
+        // Gradually move particles closer to center (spiral effect)
+        velocity.distance -= 0.005 * speedFactor;
+        
+        // If particle reaches center, reset it to outside
+        if (velocity.distance < radius) {
+          velocity.distance = radius * 3;
+          velocity.angle = Math.random() * Math.PI * 2;
+        }
+        
+        // Calculate new position
+        positions[i * 3] = Math.cos(velocity.angle) * velocity.distance;
+        positions[i * 3 + 2] = Math.sin(velocity.angle) * velocity.distance;
+        
+        // Small vertical oscillation
+        positions[i * 3 + 1] += velocity.vertSpeed * 0.01;
+        if (Math.abs(positions[i * 3 + 1]) > 0.2) {
+          velocity.vertSpeed *= -1; // Reverse direction when reaching edge
+        }
+      }
+      
+      particleGeometry.attributes.position.needsUpdate = true;
+      
+      // Pulse the glow
+      const pulseFactor = 1 + Math.sin(elapsedTime * 5) * 0.2;
+      glow.scale.set(pulseFactor, pulseFactor, pulseFactor);
+      
+      // Make black hole grow slightly over time
+      if (elapsedTime < duration) {
+        const growthFactor = 1 + (elapsedTime / duration) * 0.5;
+        core.scale.set(growthFactor, growthFactor, growthFactor);
+      }
+      
+      // Explosion phase animation
+      if (explosionTriggered) {
+        const explosionTime = elapsedTime - duration;
+        const explosionProgress = explosionTime / 1.0; // 1 second explosion
+        
+        // Rapidly expand and fade out
+        const expandFactor = 1 + explosionProgress * 10;
+        glow.scale.set(expandFactor, expandFactor, expandFactor);
+        core.scale.set(expandFactor, expandFactor, expandFactor);
+        disk.scale.set(expandFactor, expandFactor, expandFactor);
+        
+        // Fade out
+        coreMaterial.opacity = 0.9 * (1 - explosionProgress);
+        glowMaterial.opacity = 0.6 * (1 - explosionProgress);
+        diskMaterial.opacity = 0.4 * (1 - explosionProgress);
+        particleMaterial.opacity = 0.7 * (1 - explosionProgress);
+        
+        // Change color to explosive
+        glowMaterial.color.setHex(0xFF5500);
+        diskMaterial.color.setHex(0xFF9900);
+      }
+      
+      animationFrameId = requestAnimationFrame(animate);
+    };
+    
+    // Function to trigger explosion
+    function triggerExplosion() {
+      // Clear the attraction interval
+      clearInterval(pullInterval);
+      
+      // Emit explosion event to apply outward force
+      if (eventBus) {
+        eventBus.emit('physics:apply-explosion', {
+          id: blackHoleId,
+          position: {
+            x: blackHoleContainer.position.x,
+            y: blackHoleContainer.position.y,
+            z: blackHoleContainer.position.z
+          },
+          strength: strength * 3, // Stronger outward force
+          radius: effectRadius * 1.5 // Larger radius than attraction
+        });
+      }
+    }
+    
+    // Listen for objects affected by the black hole
+    if (eventBus) {
+      eventBus.on(`physics:affected-by-${blackHoleId}`, (objectId) => {
+        affectedObjects.add(objectId);
+      });
+    }
+    
+    // Start animation
+    animate();
+    
+    // Create cleanup function
+    const cleanup = () => {
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+      
+      clearInterval(pullInterval);
+      
+      if (eventBus) {
+        // Stop listening for affected objects
+        eventBus.off(`physics:affected-by-${blackHoleId}`);
+      }
+      
+      if (scene) {
+        scene.remove(blackHoleContainer);
+      }
+      
+      // Dispose of all geometries and materials
+      coreGeometry.dispose();
+      coreMaterial.dispose();
+      glowGeometry.dispose();
+      glowMaterial.dispose();
+      diskGeometry.dispose();
+      diskMaterial.dispose();
+      particleGeometry.dispose();
+      particleMaterial.dispose();
+    };
+    
+    return {
+      element: blackHoleContainer,
+      cleanup,
+      blackHoleId
+    };
   }
 };

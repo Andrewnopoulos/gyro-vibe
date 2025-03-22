@@ -3,6 +3,7 @@ import { CircleSpell } from './circle-spell.js';
 import { TriangleSpell } from './triangle-spell.js';
 import { ObjectSpawnerSpell } from './object-spawner-spell.js';
 import { GravityGunSpell } from './gravity-gun-spell.js';
+import { BlackHoleSpell } from './black-hole-spell.js';
 
 /**
  * Registry for all available spells
@@ -154,6 +155,16 @@ export class SpellRegistry {
       cooldown: 0.5
     });
     this.registerSpell(gravityGunSpell);
+    
+    // Black Hole Spell
+    const blackHoleSpell = new BlackHoleSpell({
+      eventBus: this.eventBus,
+      page: 5,
+      cooldown: 10, // Longer cooldown for this powerful spell
+      duration: 3,  // How long the black hole lasts
+      strength: 12  // Gravitational strength
+    });
+    this.registerSpell(blackHoleSpell);
   }
 
   /**
