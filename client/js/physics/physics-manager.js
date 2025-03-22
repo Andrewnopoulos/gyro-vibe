@@ -1273,13 +1273,17 @@ export class PhysicsManager {
         blackHolePos.vsub(body.position, direction);
         direction.normalize();
         
-        // Force strength decreases with squared distance for more realistic gravity
-        // Using inverse square law with a minimum threshold to avoid excessive forces at very close distances
-        // Increased base multiplier to 5.0 for more noticeable effect
+        // Force calculation - dramatically increased to make attraction much stronger
+        // Using modified inverse square law with higher base power
         const minDistance = 0.5; // Minimum distance threshold to prevent excessive forces
         const adjustedDistance = Math.max(distance, minDistance);
-        const distanceFactor = Math.min(1.0, 1.0 / (adjustedDistance * adjustedDistance));
-        const forceMagnitude = effectStrength * body.mass * 5.0 * distanceFactor;
+        
+        // Much stronger inverse square calculation with higher base multiplier (20.0)
+        // and steeper falloff for more dramatic, closer-range effects
+        const distanceFactor = Math.min(1.0, 2.0 / (adjustedDistance * adjustedDistance * 0.5));
+        
+        // Dramatically increased force multiplier (from 5.0 to 30.0)
+        const forceMagnitude = effectStrength * body.mass * 30.0 * distanceFactor;
         
         console.log(`Applying force of magnitude ${forceMagnitude.toFixed(2)} to object ${objectId}`);
         
@@ -1358,15 +1362,17 @@ export class PhysicsManager {
         body.position.vsub(explosionPos, direction);
         direction.normalize();
         
-        // Force strength decreases with distance
-        const forceMagnitude = effectStrength * body.mass * (1 - (distance / effectRadius));
+        // Much more powerful explosion force - dramatically increased multiplier
+        // Distance calculation improved to create stronger forces for closer objects
+        const distanceFactor = Math.pow(1 - (distance / effectRadius), 2); // Squared for stronger falloff
+        const forceMagnitude = effectStrength * body.mass * 6.0 * distanceFactor; // Increased multiplier to 6.0
         
         // Apply force away from explosion
         const force = direction.scale(forceMagnitude);
         body.applyForce(force, body.position);
         
-        // Add upward component for more dramatic effect
-        const upwardForce = new CANNON.Vec3(0, forceMagnitude * 0.5, 0);
+        // Add stronger upward component for more dramatic "explosion" visual effect
+        const upwardForce = new CANNON.Vec3(0, forceMagnitude * 1.0, 0); // Doubled upward component
         body.applyForce(upwardForce, body.position);
         
         // Add visual effect to affected objects
