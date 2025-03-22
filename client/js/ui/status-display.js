@@ -110,8 +110,15 @@ export class StatusDisplay {
   toggleDebugSection() {
     this.debugShowing = !this.debugShowing;
     
+    // Toggle the built-in debug section
     if (this.debugSection) {
       this.debugSection.style.display = this.debugShowing ? 'block' : 'none';
+    }
+    
+    // Also toggle the DebugPanel visibility if it exists
+    const debugPanel = document.getElementById('debug-panel');
+    if (debugPanel) {
+      debugPanel.style.display = this.debugShowing ? 'block' : 'none';
     }
     
     // Update button text

@@ -158,10 +158,11 @@ export class DebugPanel {
       this.panel.appendChild(controls);
     }
     
-    // Add to document
+    // Add to document but keep it hidden by default
     document.body.appendChild(this.panel);
+    this.panel.style.display = 'none';
     
-    console.log('Debug panel created');
+    console.log('Debug panel created (initially hidden)');
   }
   
   /**

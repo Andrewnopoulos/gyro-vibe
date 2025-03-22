@@ -14,12 +14,39 @@ export class LobbyManager {
     this.availableRooms = [];
     this.playerListEl = null;
     this.currentRoomInfo = null;
+    this.lobbyShowing = false;
     
     this.createUI();
     this.setupEventListeners();
     
-    // Show lobby when initialized
-    this.showLobby();
+    // Start with lobby minimized
+    this.hideLobby();
+    
+    // Set up the lobby toggle button
+    this.lobbyToggleBtn = document.getElementById('lobbyToggleBtn');
+    if (this.lobbyToggleBtn) {
+      this.lobbyToggleBtn.addEventListener('click', () => {
+        this.toggleLobby();
+      });
+    }
+  }
+  
+  /**
+   * Toggle lobby visibility
+   */
+  toggleLobby() {
+    this.lobbyShowing = !this.lobbyShowing;
+    
+    if (this.lobbyShowing) {
+      this.showLobby();
+    } else {
+      this.hideLobby();
+    }
+    
+    // Update button text
+    if (this.lobbyToggleBtn) {
+      this.lobbyToggleBtn.textContent = this.lobbyShowing ? 'Hide Multiplayer' : 'Show Multiplayer';
+    }
   }
   
   /**
@@ -492,6 +519,13 @@ export class LobbyManager {
     this.showRoomOverlay();
     this.updateRoomInfo();
     this.hideLobby();
+    this.lobbyShowing = false;
+    
+    // Update toggle button text
+    if (this.lobbyToggleBtn) {
+      this.lobbyToggleBtn.textContent = 'Show Multiplayer';
+    }
+    
     // Don't hide QR code - it should stay visible until mobile device connects
     
     // Add in-room class to body for CSS styling
@@ -508,6 +542,13 @@ export class LobbyManager {
     this.updateRoomInfo();
     this.updatePlayersList(data.players);
     this.hideLobby();
+    this.lobbyShowing = false;
+    
+    // Update toggle button text
+    if (this.lobbyToggleBtn) {
+      this.lobbyToggleBtn.textContent = 'Show Multiplayer';
+    }
+    
     // Don't hide QR code - it should stay visible until mobile device connects
     
     // Add in-room class to body for CSS styling
@@ -699,8 +740,12 @@ export class LobbyManager {
     if (this.lobbyOverlay) {
       this.lobbyOverlay.style.display = 'block';
       this.refreshRoomsList();
+      this.lobbyShowing = true;
       
-      // Section headers have been removed
+      // Update button text
+      if (this.lobbyToggleBtn) {
+        this.lobbyToggleBtn.textContent = 'Hide Multiplayer';
+      }
     }
   }
   
@@ -710,6 +755,12 @@ export class LobbyManager {
   hideLobby() {
     if (this.lobbyOverlay) {
       this.lobbyOverlay.style.display = 'none';
+      this.lobbyShowing = false;
+      
+      // Update button text
+      if (this.lobbyToggleBtn) {
+        this.lobbyToggleBtn.textContent = 'Show Multiplayer';
+      }
       
       // Keep multiplayer section header visible even when lobby is hidden
       // This maintains consistency in the side-by-side layout
