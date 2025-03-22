@@ -855,7 +855,7 @@ export class ObjectSpawnerSpell extends Spell {
       context.fillText(
         tip,
         margin + 20,
-        margin + 280 + (i * 30),
+        margin + 320 + (i * 30),
         width - (margin * 2) - 20
       );
     });

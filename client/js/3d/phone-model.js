@@ -8,10 +8,12 @@ export class PhoneModel {
   /**
    * @param {THREE.Scene} scene - The Three.js scene
    * @param {EventBus} eventBus - The application event bus
+   * @param {THREE.LoadingManager} loadingManager - Loading manager for tracking assets
    */
-  constructor(scene, eventBus) {
+  constructor(scene, eventBus, loadingManager = null) {
     this.scene = scene;
     this.eventBus = eventBus;
+    this.loadingManager = loadingManager;
     this.phone = null;
     this.calibrationMode = false;
     this.runeMode = false;
@@ -23,8 +25,18 @@ export class PhoneModel {
       -Math.PI / 2
     );
     
+    // Notify about model loading if we have event bus
+    if (this.eventBus) {
+      this.eventBus.emit('asset:load-start', { type: 'model', count: 1 });
+    }
+    
     this.createPhoneModel();
     this.setupEventListeners();
+    
+    // Mark phone model as loaded
+    if (this.eventBus) {
+      this.eventBus.emit('asset:load-complete', { type: 'model', count: 1 });
+    }
   }
   
   /**

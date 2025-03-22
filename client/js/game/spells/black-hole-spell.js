@@ -296,7 +296,7 @@ export class BlackHoleSpell extends Spell {
       context,
       additionalText,
       margin,
-      margin + 140,
+      margin + 200,
       width - (margin * 2),
       32
     );
@@ -307,7 +307,7 @@ export class BlackHoleSpell extends Spell {
       context,
       'WARNING: Use with caution! Powerful singularities can disrupt the fabric of reality itself.',
       margin,
-      margin + 240,
+      margin + 400,
       width - (margin * 2),
       32
     );

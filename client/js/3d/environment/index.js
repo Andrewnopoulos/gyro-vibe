@@ -31,13 +31,22 @@ export class Environment {
    * @param {THREE.Scene} scene - The Three.js scene
    * @param {PhysicsManager} physicsManager - Physics manager for collision bodies (optional)
    * @param {EventBus} eventBus - Application event bus
+   * @param {THREE.LoadingManager} loadingManager - Loading manager for tracking assets
    */
-  constructor(scene, physicsManager = null, eventBus = null) {
+  constructor(scene, physicsManager = null, eventBus = null, loadingManager = null) {
     this.scene = scene;
     this.physicsManager = physicsManager;
     this.eventBus = eventBus;
+    this.loadingManager = loadingManager;
     this.objects = new Map(); // Store references to environment objects
     this.spawnPoints = []; // Player spawn locations
+    
+    // Notify about environment assets loading if we have event bus
+    if (this.eventBus) {
+      // Estimate total number of environment assets
+      this.eventBus.emit('asset:load-start', { type: 'texture', count: 5 }); // Estimate for textures
+      this.eventBus.emit('asset:load-start', { type: 'model', count: 1 });  // Estimate for models
+    }
     
     // Define material properties for different surface types
     this.materials = createMaterials();
@@ -55,6 +64,12 @@ export class Environment {
     
     // Set up event handlers
     this.setupEventListeners();
+    
+    // Mark environment assets as loaded
+    if (this.eventBus) {
+      this.eventBus.emit('asset:load-complete', { type: 'texture', count: 5 });
+      this.eventBus.emit('asset:load-complete', { type: 'model', count: 1 });
+    }
   }
   
   /**

@@ -29,6 +29,7 @@ export class WeaponView {
     this.raycastBeam = null;
     this.debugRaycast = null;
     this.showDebugRaycast = DEBUG_RAYCAST;
+    this.flipSound = null;
     
     // Spellbook features
     this.spellRegistry = new SpellRegistry(eventBus);
@@ -81,6 +82,9 @@ export class WeaponView {
     const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
     directionalLight.position.set(0, 1, 2);
     this.weaponScene.add(directionalLight);
+
+    this.flipSound = new Audio('/assets/sounds/page-flip-trimmed.wav');
+    this.flipSound.volume = 0.5;
 
     this.weaponCamera = new THREE.PerspectiveCamera(
       70,
@@ -140,6 +144,8 @@ export class WeaponView {
     const spine = new THREE.Mesh(spineGeometry, spineMaterial);
     spine.position.set(0, 0, 0);
     this.spellbook.add(spine);
+
+
 
     // Create static pages with textures
     const pageGeometry = new THREE.PlaneGeometry(0.4, 0.6);
@@ -523,10 +529,7 @@ export class WeaponView {
     // Use console log for now since audio files may not exist
     console.log('Playing page flip sound');
     
-    // In a real implementation, you would use:
-    // const sound = new Audio('/assets/sounds/page-flip.mp3');
-    // sound.volume = 0.5;
-    // sound.play().catch(e => console.log('Could not play page flip sound', e));
+    this.flipSound.play().catch(e => console.log('Could not play page flip sound', e));
   }
 
   /**

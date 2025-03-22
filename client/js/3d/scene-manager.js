@@ -12,9 +12,11 @@ import { easeOutCubic } from '../utils/math.js';
 export class SceneManager {
   /**
    * @param {EventBus} eventBus - Application event bus
+   * @param {THREE.LoadingManager} loadingManager - Three.js loading manager for tracking asset loading
    */
-  constructor(eventBus) {
+  constructor(eventBus, loadingManager = null) {
     this.eventBus = eventBus;
+    this.loadingManager = loadingManager;
     this.scene = null;
     this.camera = null;
     this.renderer = null;
@@ -73,10 +75,11 @@ export class SceneManager {
     
     // Create environment with event bus and let it get physics manager when ready
     // We're not passing physicsManager directly to avoid initialization order issues
-    this.environment = new Environment(this.scene, null, this.eventBus);
+    // Pass loading manager if available
+    this.environment = new Environment(this.scene, null, this.eventBus, this.loadingManager);
     
-    // Create phone model
-    this.phoneModel = new PhoneModel(this.scene, this.eventBus);
+    // Create phone model with loading manager if available
+    this.phoneModel = new PhoneModel(this.scene, this.eventBus, this.loadingManager);
     
     // Add orbit controls
     this.orbitControls = new OrbitControls(this.camera, this.renderer.domElement);

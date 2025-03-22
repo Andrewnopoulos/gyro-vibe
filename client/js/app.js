@@ -1,4 +1,5 @@
 import { EventBus } from './utils/event-bus.js';
+import { LoadingManager } from './utils/loading-manager.js';
 import { SocketManager } from './communication/socket-manager.js';
 import { WebRTCManager } from './communication/webrtc-manager.js';
 import { QRCodeGenerator } from './ui/qrcode-generator.js';
@@ -24,13 +25,19 @@ class App {
     // Create global event bus for cross-module communication
     this.eventBus = new EventBus();
     
+    // Initialize loading manager first
+    this.loadingManager = new LoadingManager(this.eventBus);
+    
     // Initialize managers
     this.socketManager = new SocketManager(this.eventBus);
     this.webRTCManager = new WebRTCManager(this.eventBus, this.socketManager);
     this.statusDisplay = new StatusDisplay(this.eventBus);
     this.qrCodeGenerator = new QRCodeGenerator(this.eventBus, this.socketManager);
     this.visualizationManager = new VisualizationManager(this.eventBus);
-    this.sceneManager = new SceneManager(this.eventBus);
+    
+    // Create scene manager with the loading manager
+    this.sceneManager = new SceneManager(this.eventBus, this.loadingManager.getThreeLoadingManager());
+    
     this.calibrationManager = new CalibrationManager(this.eventBus);
     this.firstPersonController = new FirstPersonController(this.eventBus, this.sceneManager);
     
@@ -57,8 +64,16 @@ class App {
     // Setup update loop for game components
     this.setupUpdateLoop();
     
-    // Automatically request session creation to ensure QR code is generated
-    this.socketManager.emit('create-session');
+    // Listen for loading complete event
+    this.eventBus.on('loading:complete', () => {
+      console.log('All assets loaded, app ready');
+      
+      // Automatically request session creation to ensure QR code is generated
+      this.socketManager.emit('create-session');
+    });
+    
+    // Mark core initialization as complete
+    this.loadingManager.markAssetsLoaded(1, 'other');
     
     console.log('Application initialized');
   }
