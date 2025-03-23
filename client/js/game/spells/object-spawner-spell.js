@@ -323,6 +323,25 @@ export class ObjectSpawnerSpell extends Spell {
         volume: 0.6 + (finalProgress * 0.4),
         pitch: 1.0 - (finalProgress * 0.3) // Lower pitch for bigger objects
       });
+      
+      // Check if the released object hits any enemies
+      // Larger objects do more damage
+      const damage = Math.floor(2 + finalProgress * 3); // 2-5 damage based on object size
+      
+      // Use a raycaster in the direction of launch to check for enemy hits
+      const camera = this.channelContext?.camera;
+      if (camera && this.channelContext?.scene) {
+        const raycaster = new THREE.Raycaster();
+        raycaster.set(camera.position, cameraDirection);
+        raycaster.camera = camera; // Set camera for proper sprite raycasting
+        
+        // Check for enemy hit - add a timeout to give object time to travel
+        setTimeout(() => {
+          if (this.channelContext && this.channelContext.scene) {
+            this.checkEnemyHit(raycaster, this.channelContext.scene, this.eventBus, damage);
+          }
+        }, 100);
+      }
     }
     
     // Remove visual effects from spellbook

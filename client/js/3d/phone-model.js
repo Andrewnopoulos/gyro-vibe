@@ -31,7 +31,6 @@ export class PhoneModel {
     }
     
     this.createPhoneModel();
-    this.setupEventListeners();
     
     // Mark phone model as loaded
     if (this.eventBus) {

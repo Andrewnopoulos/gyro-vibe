@@ -16,6 +16,7 @@ import { GravityGunController } from './game/gravity-gun-controller.js';
 import { DebugPanel } from './ui/debug-panel.js';
 import { LobbyManager } from './ui/lobby-manager.js';
 import { DEBUG_CONFIG } from './config.js';
+import { EnemyManager, HealthManager } from './game/enemy-system/index.js';
 
 /**
  * Main application class
@@ -50,6 +51,10 @@ class App {
 
     // Initialize physics system with scene and socket manager for network synchronization
     this.physicsManager = new PhysicsManager(this.eventBus, this.sceneManager.getScene(), this.socketManager);
+    
+    // Initialize enemy system
+    this.healthManager = new HealthManager(this.eventBus);
+    this.enemyManager = new EnemyManager(this.eventBus, this.sceneManager.getScene(), this.physicsManager.world);
     
     // Initialize lobby manager for room management UI
     this.lobbyManager = new LobbyManager(this.eventBus, this.gameStateManager);
@@ -164,6 +169,14 @@ class App {
           this.sceneManager.setFirstPersonMode(true);
           this.firstPersonController.toggleFirstPersonMode();
         }
+        // Spawn training dummies when joining a room
+        if (this.enemyManager) {
+          // Remove any existing enemies first
+          this.enemyManager.removeAllEnemies();
+          
+          // Spawn 5 training dummies around the map
+          this.enemyManager.spawnTrainingDummies(20);
+        }
       });
       
       this.eventBus.on('multiplayer:room-created', () => {
@@ -171,6 +184,15 @@ class App {
         if (!this.firstPersonController.isEnabled()) {
           this.sceneManager.setFirstPersonMode(true);
           this.firstPersonController.toggleFirstPersonMode();
+        }
+        
+        // Spawn training dummies when creating a room
+        if (this.enemyManager) {
+          // Remove any existing enemies first
+          this.enemyManager.removeAllEnemies();
+          
+          // Spawn 5 training dummies around the map
+          this.enemyManager.spawnTrainingDummies(20);
         }
       });
     }

@@ -526,9 +526,6 @@ export class WeaponView {
    * Play page flip sound
    */
   playFlipSound() {
-    // Use console log for now since audio files may not exist
-    console.log('Playing page flip sound');
-    
     this.flipSound.play().catch(e => console.log('Could not play page flip sound', e));
   }
 
@@ -537,7 +534,7 @@ export class WeaponView {
    */
   playFlipFailSound() {
     // Use console log for now since audio files may not exist
-    console.log('Playing page flip fail sound');
+    // console.log('Playing page flip fail sound');
     
     // In a real implementation, you would use:
     // const sound = new Audio('/assets/sounds/page-flip-fail.mp3');
@@ -659,7 +656,7 @@ export class WeaponView {
     // Check if we're on the instruction page - no casting allowed
     if (this.currentPage === 0) {
       console.log('Cannot cast on instruction page');
-      this.showCastingError('Cannot cast on instruction page!');
+      // this.showCastingError('Cannot cast on instruction page!');
       return;
     }
     

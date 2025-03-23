@@ -75,7 +75,8 @@ export class BlackHoleSpell extends Spell {
       duration: this.duration,
       strength: this.strength,
       radius: 0.5, // Visual size of black hole
-      effectRadius: this.effectRadius // Range of gravitational effect
+      effectRadius: this.effectRadius, // Range of gravitational effect
+      damagePerSecond: 2 // Damage enemies at a rate of 2 HP per second if caught in the effect
     });
     
     // Store reference to active effect

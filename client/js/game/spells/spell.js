@@ -68,6 +68,50 @@ export class Spell {
     
     return true;
   }
+  
+  /**
+   * Check if a raycast hit an enemy and trigger damage
+   * @param {THREE.Raycaster} raycaster - Raycaster to use for hit detection
+   * @param {THREE.Scene} scene - Scene to check for intersections
+   * @param {EventBus} eventBus - Event bus for emitting hit events
+   * @param {number} [damage=1] - Amount of damage to deal
+   * @returns {boolean} Whether an enemy was hit
+   */
+  checkEnemyHit(raycaster, scene, eventBus, damage = 1) {
+    // Perform raycast
+    const intersects = raycaster.intersectObjects(scene.children, true);
+    
+    // Check for enemy hit
+    for (const intersect of intersects) {
+      // Traverse up the parent hierarchy to find the root model with enemyId
+      let currentObject = intersect.object;
+      let enemyId = null;
+      
+      // Check current object and its parents for enemyId
+      while (currentObject && !enemyId) {
+        if (currentObject.userData && currentObject.userData.enemyId) {
+          enemyId = currentObject.userData.enemyId;
+          break;
+        }
+        currentObject = currentObject.parent;
+      }
+      
+      // If found enemy ID, emit hit event
+      if (enemyId) {
+        // Emit spell hit event
+        eventBus.emit('spell:hit', {
+          targetId: enemyId,
+          spellId: this.id,
+          power: damage,
+          hitPoint: intersect.point
+        });
+        
+        return true;
+      }
+    }
+    
+    return false;
+  }
 
   /**
    * Generate texture for spell page

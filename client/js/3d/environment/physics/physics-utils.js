@@ -320,7 +320,6 @@ export class PhysicsUtils {
     const physicsManager = this.getPhysicsManager();
     
     if (!physicsManager) {
-      console.log("Physics manager not available yet, queuing box operation for later");
       
       // Queue this operation for when physics manager becomes available
       if (this.eventBus) {

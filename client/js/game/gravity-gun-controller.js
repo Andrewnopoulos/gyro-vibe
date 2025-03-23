@@ -245,9 +245,10 @@ export class GravityGunController {
     // Draw a debug line in the main scene to visualize the raycast
     this.drawDebugRaycast(rayData.position, rayData.direction);
     
-    // Set up raycaster with max distance
+    // Set up raycaster with max distance and camera
     this.raycaster.set(rayData.position, rayData.direction);
     this.raycaster.far = this.maxPickupDistance;
+    this.raycaster.camera = this.camera; // Set the camera for proper sprite raycasting
     
     // Raycast to find intersected objects
     const intersects = this.raycaster.intersectObjects(this.scene.children, true);

@@ -544,6 +544,27 @@ export const SpellEffects = {
         'and strength:', strength
       );
       
+      // Deal damage to affected enemies caught in the black hole
+      if (affectedObjects.size > 0 && options.damagePerSecond) {
+        // Calculate damage for this interval (25ms)
+        const intervalDamage = options.damagePerSecond / 40; // 40 times per second
+        
+        // Apply damage to each affected enemy
+        affectedObjects.forEach(objectId => {
+          if (objectId.startsWith('enemy_')) {
+            eventBus.emit('entity:damage', {
+              id: objectId,
+              amount: intervalDamage,
+              damageType: 'gravitational',
+              sourceId: blackHoleId
+            });
+          }
+        });
+        
+        // Clear the set after processing
+        affectedObjects.clear();
+      }
+      
       // Emit an event to apply force to all nearby physics objects
       eventBus.emit('physics:apply-black-hole', {
         id: blackHoleId,
@@ -671,6 +692,66 @@ export const SpellEffects = {
           },
           strength: strength * 3, // Stronger outward force
           radius: effectRadius * 1.5 // Larger radius than attraction
+        });
+        
+        // Apply explosion damage to enemies in range
+        const explosionDamage = 3; // Fixed damage from explosion
+        
+        // Use a raycaster to find enemies in range
+        const raycaster = new THREE.Raycaster();
+        const center = new THREE.Vector3(
+          blackHoleContainer.position.x,
+          blackHoleContainer.position.y,
+          blackHoleContainer.position.z
+        );
+        
+        // Use multiple raycasts in different directions to increase hit probability
+        const directions = [
+          new THREE.Vector3(1, 0, 0),
+          new THREE.Vector3(-1, 0, 0),
+          new THREE.Vector3(0, 1, 0),
+          new THREE.Vector3(0, -1, 0),
+          new THREE.Vector3(0, 0, 1),
+          new THREE.Vector3(0, 0, -1)
+        ];
+        
+        // Get main camera for proper raycasting
+        let mainCamera = null;
+        if (camera) {
+          mainCamera = camera;
+        } else if (context.mainCamera) {
+          mainCamera = context.mainCamera;
+        }
+        
+        directions.forEach(direction => {
+          raycaster.set(center, direction.normalize());
+          // Set the camera for proper sprite raycasting
+          raycaster.camera = mainCamera;
+          
+          // Check for intersections with enemy models
+          const intersects = raycaster.intersectObjects(scene.children, true);
+          
+          // Check each hit for enemy data
+          intersects.forEach(hit => {
+            if (hit.distance <= effectRadius * 1.5) {
+              let obj = hit.object;
+              
+              // Traverse up the parent hierarchy to find the enemy ID
+              while (obj && !obj.userData?.enemyId) {
+                obj = obj.parent;
+              }
+              
+              // If we found an enemy, apply damage
+              if (obj && obj.userData && obj.userData.enemyId) {
+                eventBus.emit('entity:damage', {
+                  id: obj.userData.enemyId,
+                  amount: explosionDamage,
+                  damageType: 'explosion',
+                  sourceId: blackHoleId
+                });
+              }
+            }
+          });
         });
       }
     }
