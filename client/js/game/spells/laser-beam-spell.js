@@ -114,7 +114,7 @@ export class LaserBeamSpell extends Spell {
     
     // Create a more intricate channeling effect
     const ringGroup = new THREE.Group();
-    ringGroup.position.set(0, 0.25, 0.05); // Positioned at the top of the book
+    ringGroup.position.set(0, 0.35, 0.05); // Positioned at the top of the book
     ringGroup.rotation.x = Math.PI / 2; // Rotated 90 degrees
     
     // Main outer ring
@@ -484,7 +484,7 @@ export class LaserBeamSpell extends Spell {
     // Create laser geometry - cylinder pointing in the z direction
     const laserGeometry = new THREE.CylinderGeometry(width, width, laserLength, 16, 1, true);
     laserGeometry.rotateX(Math.PI / 2); // Rotate to point forward
-    laserGeometry.translate(0, 0, laserLength / 2); // Move origin to start of beam
+    laserGeometry.translate(0, 0, laserLength / 2 + 0.7); // Move origin to start of beam
     
     // Create material with glow effect
     const laserMaterial = new THREE.MeshBasicMaterial({
@@ -498,7 +498,7 @@ export class LaserBeamSpell extends Spell {
     // Create glow effect material (larger radius)
     const glowGeometry = new THREE.CylinderGeometry(width * 2, width * 2, laserLength, 16, 1, true);
     glowGeometry.rotateX(Math.PI / 2);
-    glowGeometry.translate(0, 0, laserLength / 2);
+    glowGeometry.translate(0, 0, laserLength / 2 + 0.7);
     
     const glowMaterial = new THREE.MeshBasicMaterial({
       color: color,
