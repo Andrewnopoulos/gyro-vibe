@@ -16,9 +16,9 @@ export class LaserBeamSpell extends Spell {
   constructor(options) {
     super({
       id: 'laserBeam',
-      name: 'Laser Beam',
+      name: 'Zoltraak',
       shape: 'space', // This is triggered by space bar similar to object spawner
-      description: 'Channel a powerful white laser beam that damages all enemies in its path. Hold longer to increase the beam\'s thickness and damage.',
+      description: 'Channel a powerful energy beam that damages all enemies in its path. Hold longer to increase the beam\'s thickness and damage.',
       page: options.page,
       cooldown: options.cooldown || 0, // No cooldown as requested
       visualOptions: {

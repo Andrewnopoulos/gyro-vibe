@@ -203,7 +203,7 @@ export class SpellRegistry {
         '- Use Space to use spells',
         '- Each page contains a different spell',
         '- Try out the object spawner, gravity gun,',
-        '  black hole and laser beam',
+        '  black hole and Zoltraak',
         '',
         'Start your journey on the next page...'
       ];
