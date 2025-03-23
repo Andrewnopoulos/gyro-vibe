@@ -249,30 +249,52 @@ export class LaserBeamSpell extends Spell {
       pitch: 1.2 - (channelProgress * 0.4) // Higher pitch for laser
     });
     
-    // Get camera position and direction for laser origin
-    let cameraPosition, cameraDirection;
+    // Get weapon direction instead of camera direction
+    let weaponOrigin = null;
+    let weaponDirection = null;
+    let hasWeaponData = false;
     
-    this.eventBus.emit('camera:get-position', (position) => {
-      cameraPosition = position;
+    // Get weapon raycast data for direction
+    this.eventBus.emit('weapon:get-raycast-data', (raycastData) => {
+      if (raycastData && raycastData.origin && raycastData.direction) {
+        weaponOrigin = raycastData.origin.clone();
+        weaponDirection = raycastData.direction.clone();
+        hasWeaponData = true;
+      }
     });
     
-    this.eventBus.emit('camera:get-direction', (direction) => {
-      cameraDirection = direction;
-    });
+    // If we couldn't get weapon data, fall back to camera data
+    if (!hasWeaponData) {
+      let cameraPosition, cameraDirection;
+      
+      this.eventBus.emit('camera:get-position', (position) => {
+        cameraPosition = position;
+      });
+      
+      this.eventBus.emit('camera:get-direction', (direction) => {
+        cameraDirection = direction;
+      });
+      
+      if (!cameraPosition || !cameraDirection) {
+        console.error('Missing context for laser beam');
+        this.laserActive = false;
+        this.removeChannelingVisuals();
+        return;
+      }
+      
+      weaponOrigin = cameraPosition.clone();
+      weaponDirection = cameraDirection.clone();
+    }
     
-    if (!cameraPosition || !cameraDirection || !this.channelContext?.scene) {
-      console.error('Missing context for laser beam');
+    if (!this.channelContext?.scene) {
+      console.error('Missing scene for laser beam');
       this.laserActive = false;
       this.removeChannelingVisuals();
       return;
     }
     
-    // Create the laser beam visual
-    const laserOrigin = cameraPosition.clone();
-    const laserDirection = cameraDirection.clone();
-    
     // Create a raycaster to check for enemy hits
-    const raycaster = new THREE.Raycaster(laserOrigin, laserDirection);
+    const raycaster = new THREE.Raycaster(weaponOrigin, weaponDirection);
     raycaster.camera = this.channelContext.camera; // Set camera for proper sprite raycasting
     
     // Create the laser visual effect
@@ -280,8 +302,8 @@ export class LaserBeamSpell extends Spell {
       width: beamWidth,
       color: 0xFFFFFF,
       duration: this.laserDuration,
-      origin: laserOrigin,
-      direction: laserDirection
+      origin: weaponOrigin,
+      direction: weaponDirection
     };
     
     // Check for hits and apply damage to all enemies in the path
@@ -354,8 +376,6 @@ export class LaserBeamSpell extends Spell {
     // Look in the direction of the laser
     const lookTarget = origin.clone().add(direction);
     laserContainer.lookAt(lookTarget);
-    
-    console.log(scene);
 
     // Add to scene
     scene.add(laserContainer);
