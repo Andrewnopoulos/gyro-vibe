@@ -34,7 +34,7 @@ export class LaserBeamSpell extends Spell {
     this.isChanneling = false;
     this.channelStartTime = 0;
     this.channelMaxDuration = 3; // Max channeling duration in seconds
-    this.laserDuration = 0.3; // Laser effect lasts 0.3 seconds as specified
+    this.laserDuration = 0.5; // Increased from 0.3 to 0.5 seconds
     this.laserActive = false;
     
     // Bind the keyup handler to this instance for proper cleanup
@@ -112,17 +112,77 @@ export class LaserBeamSpell extends Spell {
     // Create a glow effect on the book
     const spellbook = context.spellbook;
     
-    // Create a growing pulse ring
-    const geometry = new THREE.RingGeometry(0.05, 0.08, 32);
-    const material = new THREE.MeshBasicMaterial({
+    // Create a more intricate channeling effect
+    const ringGroup = new THREE.Group();
+    ringGroup.position.set(0, 0.25, 0.05); // Positioned at the top of the book
+    ringGroup.rotation.x = Math.PI / 2; // Rotated 90 degrees
+    
+    // Main outer ring
+    const outerGeometry = new THREE.RingGeometry(0.12, 0.14, 36);
+    const outerMaterial = new THREE.MeshBasicMaterial({
       color: 0xFFFFFF, // White color for laser
       transparent: true,
       opacity: 0.7,
       side: THREE.DoubleSide
     });
     
-    this.channelRing = new THREE.Mesh(geometry, material);
-    this.channelRing.position.set(0, 0, 0.05); // Slightly in front of the book
+    const outerRing = new THREE.Mesh(outerGeometry, outerMaterial);
+    ringGroup.add(outerRing);
+    
+    // Inner ring that rotates opposite direction
+    const innerGeometry = new THREE.RingGeometry(0.05, 0.07, 24);
+    const innerMaterial = new THREE.MeshBasicMaterial({
+      color: 0xE0E0FF, // Slight blue tint
+      transparent: true,
+      opacity: 0.6,
+      side: THREE.DoubleSide
+    });
+    
+    const innerRing = new THREE.Mesh(innerGeometry, innerMaterial);
+    ringGroup.add(innerRing);
+    
+    // Decorative spokes connecting the rings
+    for (let i = 0; i < 6; i++) {
+      const angle = (i / 6) * Math.PI * 2;
+      const spokeGeometry = new THREE.PlaneGeometry(0.01, 0.07);
+      const spokeMaterial = new THREE.MeshBasicMaterial({
+        color: 0xFFFFFF,
+        transparent: true,
+        opacity: 0.5,
+        side: THREE.DoubleSide
+      });
+      
+      const spoke = new THREE.Mesh(spokeGeometry, spokeMaterial);
+      spoke.position.set(
+        0.09 * Math.cos(angle),
+        0.09 * Math.sin(angle),
+        0
+      );
+      spoke.rotation.z = angle;
+      ringGroup.add(spoke);
+    }
+    
+    // Tiny particles around the ring
+    for (let i = 0; i < 12; i++) {
+      const angle = (i / 12) * Math.PI * 2;
+      const distance = 0.16 + Math.random() * 0.02;
+      const particleGeometry = new THREE.SphereGeometry(0.003 + Math.random() * 0.004);
+      const particleMaterial = new THREE.MeshBasicMaterial({
+        color: 0xFFFFFF,
+        transparent: true,
+        opacity: 0.7,
+      });
+      
+      const particle = new THREE.Mesh(particleGeometry, particleMaterial);
+      particle.position.set(
+        distance * Math.cos(angle),
+        distance * Math.sin(angle),
+        0
+      );
+      ringGroup.add(particle);
+    }
+    
+    this.channelRing = ringGroup;
     this.channelRing.userData.isChannelingEffect = true;
     spellbook.add(this.channelRing);
     
@@ -173,37 +233,109 @@ export class LaserBeamSpell extends Spell {
       this.channelBar.position.x = -0.2 + (width / 2);
     }
     
-    // Update ring size based on progress
-    if (this.channelRing.geometry) {
-      this.channelRing.geometry.dispose();
-      // Inner radius grows from 0.05 to 0.15
-      const innerRadius = 0.05 + (channelProgress * 0.1);
-      // Outer radius grows from 0.08 to 0.25
-      const outerRadius = innerRadius + 0.03 + (channelProgress * 0.1);
-      this.channelRing.geometry = new THREE.RingGeometry(innerRadius, outerRadius, 32);
-    }
-    
-    // Pulse the ring
-    if (this.channelRing.material) {
-      // Color becomes more intense as progress increases
-      const intensity = 0.7 + (channelProgress * 0.3);
-      this.channelRing.material.color.setRGB(intensity, intensity, intensity);
+    // Animate the intricate channeling effect components
+    if (this.channelRing && this.channelRing.children) {
+      // Get references to different parts of the effect
+      const outerRing = this.channelRing.children[0];
+      const innerRing = this.channelRing.children[1];
       
-      // Pulsing opacity
-      const pulseFactor = 0.7 + Math.sin(elapsed * 5) * 0.3;
-      this.channelRing.material.opacity = pulseFactor * 0.8;
+      // Rotate the rings in opposite directions
+      outerRing.rotation.z += 0.01 + (channelProgress * 0.01); // Spin faster as it charges
+      innerRing.rotation.z -= 0.015 + (channelProgress * 0.01);
+      
+      // Scale the entire effect based on charge progress
+      const baseScale = 1 + (channelProgress * 0.4); // Grow up to 40% larger
+      
+      // Add a pulsing effect
+      const pulseFactor = 1 + Math.sin(elapsed * 6) * 0.06;
+      const finalScale = baseScale * pulseFactor;
+      
+      // Apply the scale to the entire ring group
+      this.channelRing.scale.set(finalScale, finalScale, 1);
+      
+      // Make the rings glow more intensely as charging progresses
+      if (outerRing.material) {
+        // Get brighter and slightly more blue as it charges
+        const intensity = 0.7 + (channelProgress * 0.3);
+        const blueIntensity = 0.8 + (channelProgress * 0.4);
+        outerRing.material.color.setRGB(intensity, intensity, blueIntensity);
+        
+        // Pulsing opacity
+        const opacityPulse = 0.6 + Math.sin(elapsed * 5) * 0.2 + (channelProgress * 0.2);
+        outerRing.material.opacity = opacityPulse;
+      }
+      
+      if (innerRing.material) {
+        // Inner ring gets more blue as it charges
+        const r = 0.8 + (channelProgress * 0.2);
+        const g = 0.8 + (channelProgress * 0.1);
+        const b = 1.0;
+        innerRing.material.color.setRGB(r, g, b);
+        
+        // Inner ring pulses more rapidly
+        const innerOpacityPulse = 0.5 + Math.sin(elapsed * 8) * 0.3 + (channelProgress * 0.3);
+        innerRing.material.opacity = innerOpacityPulse;
+      }
+      
+      // Animate the spokes (children 2-7)
+      for (let i = 2; i < 8; i++) {
+        if (this.channelRing.children[i]) {
+          const spoke = this.channelRing.children[i];
+          
+          // Make spokes pulse in brightness
+          if (spoke.material) {
+            const spokePhase = i * 0.5; // Different phase for each spoke
+            const spokePulse = 0.4 + Math.sin(elapsed * 10 + spokePhase) * 0.3 + (channelProgress * 0.3);
+            spoke.material.opacity = spokePulse;
+          }
+          
+          // Subtle scale animation
+          const spokeScale = 1 + Math.sin(elapsed * 8 + i) * 0.1;
+          spoke.scale.y = spokeScale;
+        }
+      }
+      
+      // Animate the particles (children 8+)
+      for (let i = 8; i < this.channelRing.children.length; i++) {
+        const particle = this.channelRing.children[i];
+        
+        // Orbit particles around center
+        if (particle.position) {
+          const particleAngle = (elapsed * (1 + (i % 4) * 0.2)) + (i * 0.5);
+          const orbitRadius = 0.16 + (Math.sin(elapsed * 2 + i) * 0.01) + (channelProgress * 0.03);
+          
+          particle.position.x = orbitRadius * Math.cos(particleAngle);
+          particle.position.y = orbitRadius * Math.sin(particleAngle);
+          
+          // Particles get brighter as charging progresses
+          if (particle.material) {
+            const particleOpacity = 0.4 + Math.sin(elapsed * 12 + i) * 0.2 + (channelProgress * 0.4);
+            particle.material.opacity = particleOpacity;
+            
+            // Color shift toward blue/white
+            const particleColor = new THREE.Color(
+              1.0,
+              0.9 + (Math.sin(elapsed * 5 + i) * 0.1),
+              0.9 + (channelProgress * 0.2) + (Math.sin(elapsed * 7 + i) * 0.1)
+            );
+            particle.material.color = particleColor;
+          }
+        }
+      }
     }
     
     // Change brightness of the progress bar based on progress
     if (this.channelBar.material) {
-      // Color becomes more intense
-      const intensity = 0.7 + (channelProgress * 0.3);
-      this.channelBar.material.color.setRGB(intensity, intensity, intensity);
+      // Color becomes more intense and shifts to blue-white as it charges
+      const r = 0.7 + (channelProgress * 0.3);
+      const g = 0.7 + (channelProgress * 0.2);
+      const b = 0.8 + (channelProgress * 0.2);
+      this.channelBar.material.color.setRGB(r, g, b);
+      
+      // Add pulsing effect to progress bar
+      const barPulse = 0.7 + Math.sin(elapsed * 10) * 0.2;
+      this.channelBar.material.opacity = barPulse;
     }
-    
-    // Scale the ring slightly for a pulsing effect
-    const ringPulse = 1 + Math.sin(elapsed * 8) * 0.05;
-    this.channelRing.scale.set(ringPulse, ringPulse, 1);
   }
   
   /**
