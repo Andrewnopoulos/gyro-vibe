@@ -2,6 +2,7 @@ import { Spell } from './spell.js';
 import { ObjectSpawnerSpell } from './object-spawner-spell.js';
 import { GravityGunSpell } from './gravity-gun-spell.js';
 import { BlackHoleSpell } from './black-hole-spell.js';
+import { LaserBeamSpell } from './laser-beam-spell.js';
 
 /**
  * Registry for all available spells
@@ -145,6 +146,14 @@ export class SpellRegistry {
       strength: 12  // Gravitational strength
     });
     this.registerSpell(blackHoleSpell);
+    
+    // Laser Beam Spell
+    const laserBeamSpell = new LaserBeamSpell({
+      eventBus: this.eventBus,
+      page: 4,
+      cooldown: 0 // No cooldown as specified
+    });
+    this.registerSpell(laserBeamSpell);
   }
 
   /**
@@ -193,7 +202,8 @@ export class SpellRegistry {
         '- Use Q/E keys to turn pages',
         '- Use Space to use spells',
         '- Each page contains a different spell',
-        '- Try out the object spawner, gravity gun and black hole',
+        '- Try out the object spawner, gravity gun,',
+        '  black hole and laser beam',
         '',
         'Start your journey on the next page...'
       ];
@@ -254,8 +264,9 @@ export class SpellRegistry {
         '1. Object Spawner: Creates random objects',
         '2. Gravity Gun: Pick up and throw objects',
         '3. Black Hole: Creates a gravity well',
-        '4. Use Space to activate the current spell',
-        '5. Objects interact with physics',
+        '4. Laser Beam: Damages enemies in its path',
+        '5. Use Space to activate the current spell',
+        '6. Objects interact with physics',
         '',
         'Cast on the correct page:',
         'Each spell requires its specific page',
