@@ -693,13 +693,20 @@ export class WeaponView {
       mainScene = scene;
     });
     
+    // Get gravity gun controller if available
+    let gravityGunController = null;
+    this.eventBus.emit('get:gravity-gun-controller', (controller) => {
+      gravityGunController = controller;
+    });
+    
     spell.cast({
       camera: this.weaponCamera,
       scene: mainScene || this.weaponScene, // Use main scene if available, otherwise fall back to weapon scene
       weaponScene: this.weaponScene, // Also pass weaponScene in case spell needs to add visual effects to the weapon
       spellbook: this.spellbook,
       mainCamera: null, // Will be populated by the event bus below if available
-      eventBus: this.eventBus // Make sure we're passing the event bus to the spell
+      eventBus: this.eventBus, // Make sure we're passing the event bus to the spell
+      gravityGunController: gravityGunController // Pass gravity gun controller for raycast data
     });
     
     // Also try to get the main camera for positioning
@@ -1208,13 +1215,20 @@ export class WeaponView {
       mainScene = scene;
     });
     
+    // Get gravity gun controller if available
+    let gravityGunController = null;
+    this.eventBus.emit('get:gravity-gun-controller', (controller) => {
+      gravityGunController = controller;
+    });
+    
     spell.cast({
       camera: this.weaponCamera,
       scene: mainScene || this.weaponScene, // Use main scene if available, otherwise fall back to weapon scene
       weaponScene: this.weaponScene, // Also pass weaponScene in case spell needs to add visual effects to the weapon
       spellbook: this.spellbook,
       mainCamera: null, // Will be populated by the event bus below if available
-      eventBus: this.eventBus // Make sure we're passing the event bus to the spell
+      eventBus: this.eventBus, // Make sure we're passing the event bus to the spell
+      gravityGunController: gravityGunController // Pass gravity gun controller for raycast data
     });
     
     // Also try to get the main camera for positioning

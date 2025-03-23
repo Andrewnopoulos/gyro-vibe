@@ -62,6 +62,13 @@ class App {
     // Initialize gravity gun controller
     this.gravityGunController = new GravityGunController(this.eventBus, this.sceneManager, this.weaponView);
     
+    // Register event listener for getting the gravity gun controller
+    this.eventBus.on('get:gravity-gun-controller', (callback) => {
+      if (typeof callback === 'function') {
+        callback(this.gravityGunController);
+      }
+    });
+    
     // Initialize debug panel if debug mode is enabled or for physics debugging
     // (Only used for testing, the lobby manager is the primary multiplayer UI)
     this.debugPanel = new DebugPanel(this.eventBus, this.gameStateManager, this.physicsManager);

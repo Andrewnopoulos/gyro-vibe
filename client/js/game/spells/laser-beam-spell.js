@@ -82,6 +82,9 @@ export class LaserBeamSpell extends Spell {
     this.channelStartTime = Date.now();
     this.channelContext = context;
     
+    console.log('Laser beam starting channeling with context:', 
+      context.gravityGunController ? 'GravityGunController available' : 'No GravityGunController');
+    
     // Play start channeling sound
     this.eventBus.emit('audio:play', { 
       sound: 'spawnObject', // Reuse existing sound as placeholder
@@ -254,16 +257,28 @@ export class LaserBeamSpell extends Spell {
     let weaponDirection = null;
     let hasWeaponData = false;
     
-    // Get weapon raycast data for direction
-    this.eventBus.emit('weapon:get-raycast-data', (raycastData) => {
-      if (raycastData && raycastData.origin && raycastData.direction) {
-        weaponOrigin = raycastData.origin.clone();
-        weaponDirection = raycastData.direction.clone();
+    // Try to get data from gravity gun controller from context
+    if (this.channelContext && this.channelContext.gravityGunController) {
+      const raycastData = this.channelContext.gravityGunController.getWeaponRaycastData();
+      if (raycastData && raycastData.valid) {
+        weaponOrigin = raycastData.position.clone();
+        weaponDirection = raycastData.direction.clone().normalize();
         hasWeaponData = true;
       }
-    });
+    }
     
-    // If we couldn't get weapon data, fall back to camera data
+    // Try weapon raycast data as fallback
+    if (!hasWeaponData) {
+      this.eventBus.emit('weapon:get-raycast-data', (raycastData) => {
+        if (raycastData && raycastData.origin && raycastData.direction) {
+          weaponOrigin = raycastData.origin.clone();
+          weaponDirection = raycastData.direction.clone();
+          hasWeaponData = true;
+        }
+      });
+    }
+    
+    // If we still couldn't get weapon data, fall back to camera data
     if (!hasWeaponData) {
       let cameraPosition, cameraDirection;
       
