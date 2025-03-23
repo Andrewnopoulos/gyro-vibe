@@ -38,24 +38,6 @@ export class PhoneModel {
       this.eventBus.emit('asset:load-complete', { type: 'model', count: 1 });
     }
   }
-  
-  /**
-   * Set up event listeners
-   */
-  setupEventListeners() {
-    // Listen for rune mode toggle events
-    if (this.eventBus) {
-      this.eventBus.on('runeMode:toggled', this.handleRuneModeToggled.bind(this));
-    }
-  }
-  
-  /**
-   * Handle rune mode toggled event
-   * @param {Object} data - Event data
-   */
-  handleRuneModeToggled(data) {
-    this.setRuneMode(data.active);
-  }
 
   /**
    * Create the 3D phone model
@@ -145,131 +127,9 @@ export class PhoneModel {
     this.phone.add(zAxis);
     
     // Create rune mode indicator
-    this.createRuneModeIndicator(width, height, depth);
+    // this.createRuneModeIndicator(width, height, depth);
     
     console.log('Phone model created successfully');
-  }
-  
-  /**
-   * Create rune mode visual indicator
-   * @param {number} width - Phone width
-   * @param {number} height - Phone height
-   * @param {number} depth - Phone depth
-   */
-  createRuneModeIndicator(width, height, depth) {
-    // Create a rune symbol indicator that will be visible in rune mode
-    const runeSize = 0.4;
-    
-    // Create a group for the rune indicator
-    this.runeModeIndicator = new THREE.Group();
-    
-    // Rune circle border
-    const runeBorderGeometry = new THREE.RingGeometry(runeSize * 0.8, runeSize, 32);
-    const runeBorderMaterial = new THREE.MeshBasicMaterial({ 
-      color: 0x9932CC, // Purple color for rune
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.9
-    });
-    const runeBorder = new THREE.Mesh(runeBorderGeometry, runeBorderMaterial);
-    runeBorder.position.z = depth / 2 + 0.03;
-    this.runeModeIndicator.add(runeBorder);
-    
-    // Create triangular rune symbol inside the circle
-    const triangleShape = new THREE.Shape();
-    triangleShape.moveTo(0, runeSize * 0.6);
-    triangleShape.lineTo(-runeSize * 0.5, -runeSize * 0.3);
-    triangleShape.lineTo(runeSize * 0.5, -runeSize * 0.3);
-    triangleShape.lineTo(0, runeSize * 0.6);
-    
-    const triangleGeometry = new THREE.ShapeGeometry(triangleShape);
-    const triangleMaterial = new THREE.MeshBasicMaterial({ 
-      color: 0x7B68EE, // Medium slate blue
-      side: THREE.DoubleSide
-    });
-    const triangle = new THREE.Mesh(triangleGeometry, triangleMaterial);
-    triangle.position.z = depth / 2 + 0.04;
-    this.runeModeIndicator.add(triangle);
-    
-    // Create a pulsing light effect for the rune
-    const runeLight = new THREE.PointLight(0x9370DB, 1, 3);
-    runeLight.position.set(0, 0, depth / 2 + 0.2);
-    this.runeModeIndicator.add(runeLight);
-    
-    // Store references for animation
-    this.runeLight = runeLight;
-    this.runeBorder = runeBorder;
-    this.runeSymbol = triangle;
-    
-    // Add to phone and initially hide it
-    this.phone.add(this.runeModeIndicator);
-    this.runeModeIndicator.visible = false;
-    
-    // Start animation loop for the rune indicator
-    this.animateRuneIndicator();
-  }
-  
-  /**
-   * Animate the rune indicator with pulsing effects
-   */
-  animateRuneIndicator() {
-    if (!this.runeModeIndicator) return;
-    
-    const animate = () => {
-      if (!this.runeModeIndicator) return;
-      
-      // Only update if rune mode is active
-      if (this.runeMode) {
-        // Pulsing light intensity
-        const time = Date.now() * 0.001;
-        if (this.runeLight) {
-          this.runeLight.intensity = 0.5 + Math.sin(time * 2) * 0.3;
-        }
-        
-        // Rotating rune symbol
-        if (this.runeSymbol) {
-          this.runeSymbol.rotation.z = time * 0.5;
-        }
-        
-        // Pulsing border
-        if (this.runeBorder && this.runeBorder.material) {
-          this.runeBorder.material.opacity = 0.6 + Math.sin(time * 3) * 0.3;
-        }
-      }
-      
-      // Continue animation loop
-      requestAnimationFrame(animate);
-    };
-    
-    // Start animation loop
-    animate();
-  }
-  
-  /**
-   * Set rune mode active state
-   * @param {boolean} active - Whether rune mode is active
-   */
-  setRuneMode(active) {
-    this.runeMode = active;
-    
-    // Show/hide rune indicator
-    if (this.runeModeIndicator) {
-      this.runeModeIndicator.visible = active;
-    }
-    
-    // Change screen color in rune mode
-    if (this.phoneScreen && this.phoneScreen.material) {
-      if (active) {
-        // Change to purple in rune mode
-        this.phoneScreen.material.color.setHex(0x800080);
-      } else {
-        // Reset to default blue screen
-        this.phoneScreen.material.color.setHex(0x3355ff);
-      }
-    }
-    
-    // Log the state change
-    console.log(`Phone model: Rune mode ${active ? 'activated' : 'deactivated'}`);
   }
 
   /**

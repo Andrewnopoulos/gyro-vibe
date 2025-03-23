@@ -99,7 +99,6 @@ this.registerSpell(mySpell);
 The spellbook is part of the first-person weapon view system. Players can:
 
 - Turn pages with Q/E keys
-- Enter rune mode with Shift key
 - Draw shapes on their mobile device to cast spells
 - See visual feedback when spells are cast correctly or incorrectly
 

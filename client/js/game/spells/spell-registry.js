@@ -1,6 +1,4 @@
 import { Spell } from './spell.js';
-import { CircleSpell } from './circle-spell.js';
-import { TriangleSpell } from './triangle-spell.js';
 import { ObjectSpawnerSpell } from './object-spawner-spell.js';
 import { GravityGunSpell } from './gravity-gun-spell.js';
 import { BlackHoleSpell } from './black-hole-spell.js';
@@ -122,28 +120,10 @@ export class SpellRegistry {
    * Register default spells
    */
   registerDefaultSpells() {
-    // Shield Spell
-    const shieldSpell = new CircleSpell({
-      eventBus: this.eventBus,
-      page: 1,
-      duration: 8,
-      cooldown: 10
-    });
-    this.registerSpell(shieldSpell);
-
-    // Fireball Spell
-    const fireballSpell = new TriangleSpell({
-      eventBus: this.eventBus,
-      page: 2,
-      power: 5,
-      cooldown: 5
-    });
-    this.registerSpell(fireballSpell);
-    
     // Object Spawner Spell
     const objectSpawnerSpell = new ObjectSpawnerSpell({
       eventBus: this.eventBus,
-      page: 3,
+      page: 1,
       cooldown: 2
     });
     this.registerSpell(objectSpawnerSpell);
@@ -151,7 +131,7 @@ export class SpellRegistry {
     // Gravity Gun Spell
     const gravityGunSpell = new GravityGunSpell({
       eventBus: this.eventBus,
-      page: 4,
+      page: 2,
       cooldown: 0.5
     });
     this.registerSpell(gravityGunSpell);
@@ -159,7 +139,7 @@ export class SpellRegistry {
     // Black Hole Spell
     const blackHoleSpell = new BlackHoleSpell({
       eventBus: this.eventBus,
-      page: 5,
+      page: 3,
       cooldown: 10, // Longer cooldown for this powerful spell
       duration: 10,  // How long the black hole lasts
       strength: 12  // Gravitational strength
@@ -208,12 +188,12 @@ export class SpellRegistry {
       context.fillStyle = '#000000';
       
       const instructions = [
-        'Welcome, apprentice mage!',
+        'Welcome, wizard!',
         '',
         '- Use Q/E keys to turn pages',
-        '- Draw shapes on mobile device',
-        '- Match the spell\'s shape to cast',
+        '- Use Space to use spells',
         '- Each page contains a different spell',
+        '- Try out the object spawner, gravity gun and black hole',
         '',
         'Start your journey on the next page...'
       ];
@@ -224,26 +204,28 @@ export class SpellRegistry {
         y += 30;
       }
       
-      // Draw small circle and triangle as examples at the bottom
+      // Draw a simple illustration of available spells at the bottom
       context.strokeStyle = '#8B4513';
       context.lineWidth = 3;
       
-      // Circle example
+      // Object spawner illustration
       context.beginPath();
-      context.arc(width / 3, height - 120, 40, 0, Math.PI * 2);
+      context.rect(width / 2 - 60, height - 120, 40, 40);
       context.stroke();
       context.font = '22px serif';
-      context.fillText('Circle', width / 3, height - 60);
+      context.textAlign = 'center';
+      context.fillText('Object', width / 2 - 40, height - 60);
       
-      // Triangle example
-      const triangleY = height - 120;
+      // Gravity Gun illustration
       context.beginPath();
-      context.moveTo(width * 2/3, triangleY - 40);
-      context.lineTo(width * 2/3 - 40, triangleY + 30);
-      context.lineTo(width * 2/3 + 40, triangleY + 30);
+      context.moveTo(width / 2 + 20, height - 120);
+      context.lineTo(width / 2 + 60, height - 120);
+      context.lineTo(width / 2 + 60, height - 90);
+      context.lineTo(width / 2 + 40, height - 80);
+      context.lineTo(width / 2 + 20, height - 90);
       context.closePath();
       context.stroke();
-      context.fillText('Triangle', width * 2/3, height - 60);
+      context.fillText('Gravity', width / 2 + 40, height - 60);
       
     } else {
       // Right page - image or additional instructions
@@ -253,7 +235,7 @@ export class SpellRegistry {
       context.textAlign = 'center';
       context.textBaseline = 'top';
       context.fillStyle = '#8B4513';
-      context.fillText('Shape Recognition Tips', width / 2, margin);
+      context.fillText('Spell Usage Tips', width / 2, margin);
       
       // Draw decorative line
       context.strokeStyle = '#8B4513';
@@ -269,11 +251,11 @@ export class SpellRegistry {
       context.fillStyle = '#000000';
       
       const tips = [
-        '1. Draw shapes clearly and deliberately',
-        '2. Make sure to close your shapes',
-        '3. Try to maintain consistent size',
-        '4. Draw in the center of the screen',
-        '5. Practice makes perfect!',
+        '1. Object Spawner: Creates random objects',
+        '2. Gravity Gun: Pick up and throw objects',
+        '3. Black Hole: Creates a gravity well',
+        '4. Use Space to activate the current spell',
+        '5. Objects interact with physics',
         '',
         'Cast on the correct page:',
         'Each spell requires its specific page',

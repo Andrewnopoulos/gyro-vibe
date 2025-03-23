@@ -32,8 +32,7 @@ export class MobileGameManager {
       score: 0,
       health: 100,
       powerups: [],
-      objectives: [],
-      runeMode: false
+      objectives: []
     };
     
     // Game objects (simplified without projectiles)
@@ -71,9 +70,7 @@ export class MobileGameManager {
     this.eventBus.on('game:start-match', this.handleStartMatch.bind(this));
     this.eventBus.on('game:end-match', this.handleEndMatch.bind(this));
     
-    // Rune mode events
-    this.eventBus.on('game:toggle-rune-mode', this.handleToggleRuneMode.bind(this));
-    this.eventBus.on('game:rune-recognized', this.handleRuneRecognized.bind(this));
+    // Removed Rune mode events
   }
   
   /**
@@ -1183,184 +1180,7 @@ export class MobileGameManager {
     this.remotePlayers.delete(playerId);
   }
   
-  /**
-   * Handle toggle rune mode event
-   * @param {Object} data - Rune mode data, including enabled state
-   */
-  handleToggleRuneMode(data) {
-    console.log('MobileGameManager.handleToggleRuneMode called with data:', JSON.stringify(data));
-    
-    // Update game state
-    this.gameState.runeMode = data.enabled;
-    
-    // Pass rune mode state to touch controller
-    if (this.touchController) {
-      console.log('Calling touchController.setRuneMode with:', this.gameState.runeMode);
-      this.touchController.setRuneMode(this.gameState.runeMode);
-    } else {
-      console.error('touchController not available when trying to set rune mode');
-    }
-    
-    // Show notification
-    this.showNotification(
-      this.gameState.runeMode ? 
-      'Rune Mode Activated - Draw shapes with your finger' : 
-      'Rune Mode Deactivated', 
-      this.gameState.runeMode ? 'success' : 'info'
-    );
-    
-    console.log('Rune mode ' + (this.gameState.runeMode ? 'activated' : 'deactivated'));
-  }
-  
-  /**
-   * Handle rune recognized event
-   * @param {Object} data - Recognized rune data
-   */
-  handleRuneRecognized(data) {
-    console.log('MobileGameManager.handleRuneRecognized called with data:', JSON.stringify(data));
-    
-    // data contains shape, confidence, and any additional properties
-    
-    // Show notification with recognized shape
-    this.showNotification(
-      `Rune recognized: ${data.shape} (${Math.round(data.confidence * 100)}%)`, 
-      'success'
-    );
-    
-    // Create properly formatted message for WebRTC with the correct event type
-    const message = {
-      type: 'mobile:rune-cast',  // This must match the type the WebRTCManager is handling
-      shape: data.shape,
-      confidence: data.confidence,
-      playerId: this.gameStateManager.getLocalPlayerId()
-    };
-    
-    console.log('Sending rune cast message via WebRTC:', JSON.stringify(message));
-    
-    // Send via WebRTC directly if possible
-    if (window.webrtcManager && 
-        window.webrtcManager.dataChannel && 
-        window.webrtcManager.dataChannel.readyState === 'open') {
-      
-      window.webrtcManager.dataChannel.send(JSON.stringify(message));
-      console.log('Sent rune cast via WebRTC data channel');
-    } else {
-      // Otherwise emit to event bus - this should match what FirstPersonController listens for
-      console.log('Emitting mobile:rune-cast event via EventBus');
-      this.eventBus.emit('mobile:rune-cast', {
-        shape: data.shape,
-        confidence: data.confidence,
-        playerId: this.gameStateManager.getLocalPlayerId()
-      });
-    }
-    
-    // Add visual effect for rune casting
-    this.createRuneCastEffect(data.shape);
-    
-    console.log('Rune recognized:', data);
-  }
-  
-  /**
-   * Create visual effect for rune casting
-   * @param {string} shape - The recognized shape
-   */
-  createRuneCastEffect(shape) {
-    if (!this.scene || !this.mobilePlayer) return;
-    
-    try {
-      // Create effect container
-      const effectGroup = new THREE.Group();
-      
-      // Different effects based on shape
-      switch (shape.toLowerCase()) {
-        case 'circle':
-          // Create glowing ring effect
-          const ringGeometry = new THREE.RingGeometry(1, 1.2, 32);
-          const ringMaterial = new THREE.MeshBasicMaterial({
-            color: 0x00FFFF,
-            side: THREE.DoubleSide,
-            transparent: true,
-            opacity: 0.8
-          });
-          
-          const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-          ring.rotation.x = Math.PI / 2; // Make it horizontal
-          effectGroup.add(ring);
-          break;
-          
-        case 'triangle':
-          // Create glowing triangle effect
-          const triangleShape = new THREE.Shape();
-          triangleShape.moveTo(0, 1);
-          triangleShape.lineTo(-0.866, -0.5);
-          triangleShape.lineTo(0.866, -0.5);
-          triangleShape.lineTo(0, 1);
-          
-          const triangleGeometry = new THREE.ShapeGeometry(triangleShape);
-          const triangleMaterial = new THREE.MeshBasicMaterial({
-            color: 0xFF6600,
-            side: THREE.DoubleSide,
-            transparent: true,
-            opacity: 0.8
-          });
-          
-          const triangle = new THREE.Mesh(triangleGeometry, triangleMaterial);
-          triangle.scale.set(1.5, 1.5, 1.5);
-          triangle.rotation.x = Math.PI / 2; // Make it horizontal
-          effectGroup.add(triangle);
-          break;
-          
-        default:
-          // Generic effect for other shapes
-          const particleGeometry = new THREE.SphereGeometry(0.1, 8, 8);
-          const particleMaterial = new THREE.MeshBasicMaterial({
-            color: 0xFFFFFF,
-            transparent: true,
-            opacity: 0.8
-          });
-          
-          // Create several particles in a pattern
-          for (let i = 0; i < 12; i++) {
-            const particle = new THREE.Mesh(particleGeometry, particleMaterial);
-            const angle = (i / 12) * Math.PI * 2;
-            const radius = 1;
-            
-            particle.position.set(
-              Math.cos(angle) * radius,
-              0,
-              Math.sin(angle) * radius
-            );
-            
-            effectGroup.add(particle);
-          }
-      }
-      
-      // Position effect in front of player
-      const playerPosition = this.mobilePlayer.position.clone();
-      const playerDirection = new THREE.Vector3(0, 0, -1);
-      playerDirection.applyQuaternion(this.mobilePlayer.quaternion);
-      
-      const effectPosition = playerPosition.clone().add(
-        playerDirection.multiplyScalar(3) // 3 units in front of player
-      );
-      
-      effectGroup.position.copy(effectPosition);
-      effectGroup.position.y = 1; // Slightly above ground
-      
-      // Add to scene
-      this.scene.add(effectGroup);
-      
-      // Add to effects list with timeout for cleanup
-      this.gameObjects.effects.push({
-        model: effectGroup,
-        type: 'runeCast',
-        lifetime: 2.0, // 2 seconds
-        initialLifetime: 2.0
-      });
-    } catch (error) {
-      console.error('Error creating rune cast effect:', error);
-    }
-  }
+  // Removed Rune Mode handlers
   
   /**
    * Clean up resources
