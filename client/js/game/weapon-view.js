@@ -641,103 +641,6 @@ export class WeaponView {
   }
 
   /**
-   * Apply rune effect to the weapon based on the current page
-   * @param {string} shape - The recognized shape
-   * @param {number} confidence - Recognition confidence (0-1)
-   */
-  applyRuneEffect(shape, confidence) {
-    if (!this.spellbook) return;
-
-    console.log(`Applying rune effect to spellbook: ${shape} (${Math.round(confidence * 100)}% confidence)`);
-
-    // Clear any existing effects
-    this.clearRuneEffects();
-    
-    // Check if we're on the instruction page - no casting allowed
-    if (this.currentPage === 0) {
-      console.log('Cannot cast on instruction page');
-      // this.showCastingError('Cannot cast on instruction page!');
-      return;
-    }
-    
-    // Get the spell for the current page
-    const spell = this.spellRegistry.getSpellByPage(this.currentPage);
-    
-    if (!spell) {
-      console.log('No spell on current page');
-      this.showCastingError('No spell on this page!');
-      return;
-    }
-    
-    // Check if the shape matches the spell
-    if (spell.shape.toLowerCase() !== shape.toLowerCase()) {
-      console.log(`Wrong shape! Expected ${spell.shape}, got ${shape}`);
-      this.showCastingError(`Wrong shape! Draw a ${spell.shape}!`);
-      return;
-    }
-    
-    // Check if the spell is on cooldown - show visual feedback instead of error
-    if (!spell.isReady()) {
-      console.log('Spell on cooldown');
-      this.flashCooldownIndicator();
-      return;
-    }
-    
-    // All checks passed, cast the spell!
-    console.log(`Casting ${spell.name}`);
-    
-    // For spells that need to affect the main world, we need to get access to the main scene
-    // Request the main scene from the event bus
-    let mainScene = null;
-    this.eventBus.emit('scene:get-scene', (scene) => {
-      mainScene = scene;
-    });
-    
-    // Get gravity gun controller if available
-    let gravityGunController = null;
-    this.eventBus.emit('get:gravity-gun-controller', (controller) => {
-      gravityGunController = controller;
-    });
-    
-    spell.cast({
-      camera: this.weaponCamera,
-      scene: mainScene || this.weaponScene, // Use main scene if available, otherwise fall back to weapon scene
-      weaponScene: this.weaponScene, // Also pass weaponScene in case spell needs to add visual effects to the weapon
-      spellbook: this.spellbook,
-      mainCamera: null, // Will be populated by the event bus below if available
-      eventBus: this.eventBus, // Make sure we're passing the event bus to the spell
-      gravityGunController: gravityGunController // Pass gravity gun controller for raycast data
-    });
-    
-    // Also try to get the main camera for positioning
-    this.eventBus.emit('scene:get-camera', (camera) => {
-      if (camera && spell.updateMainCamera) {
-        spell.updateMainCamera(camera);
-      }
-    });
-    
-    // Apply the visual effect based on the spell shape
-    switch (shape.toLowerCase()) {
-      case 'circle':
-        this.applyCircleRuneEffect(confidence);
-        break;
-      case 'triangle':
-        this.applyTriangleRuneEffect(confidence);
-        break;
-      default:
-        this.applyGenericRuneEffect(confidence);
-    }
-    
-    // Create cooldown indicator if this spell has a cooldown
-    if (spell.cooldown > 0) {
-      // Short delay before showing cooldown
-      setTimeout(() => {
-        this.createCooldownIndicator(spell);
-      }, 100);
-    }
-  }
-
-  /**
    * Show casting error message
    * @param {string} message - Error message to display
    */
@@ -987,6 +890,13 @@ export class WeaponView {
         }
       }
     });
+
+    document.addEventListener('keyup', (event) => {
+      if (event.code === 'Space') {
+        // Cast space bar spell on current page
+        this.releaseSpaceBarSpell();
+      }
+    })
     
     window.addEventListener('resize', this.onWindowResize.bind(this), false);
   }
@@ -1221,7 +1131,7 @@ export class WeaponView {
       gravityGunController = controller;
     });
     
-    spell.cast({
+    spell.castDown({
       camera: this.weaponCamera,
       scene: mainScene || this.weaponScene, // Use main scene if available, otherwise fall back to weapon scene
       weaponScene: this.weaponScene, // Also pass weaponScene in case spell needs to add visual effects to the weapon
@@ -1241,6 +1151,51 @@ export class WeaponView {
     // Flash the pages as visual feedback for spell casting
     this.flashPagesOnCast();
   }
+
+    /**
+   * Cast a space bar activated spell on the current page
+   */
+    releaseSpaceBarSpell() {
+      // Check if we're on the instruction page - no casting allowed
+      if (this.currentPage === 0) {
+        return;
+      }
+      
+      // Get the spell for the current page
+      const spell = this.spellRegistry.getSpellByPage(this.currentPage);
+      
+      if (!spell) {
+        return;
+      }
+      
+      // Only cast if this is a space bar spell
+      if (spell.shape.toLowerCase() !== 'space') {
+        return;
+      }
+      
+      // For spells that need to affect the main world, we need to get access to the main scene
+      // Request the main scene from the event bus
+      let mainScene = null;
+      this.eventBus.emit('scene:get-scene', (scene) => {
+        mainScene = scene;
+      });
+      
+      // Get gravity gun controller if available
+      let gravityGunController = null;
+      this.eventBus.emit('get:gravity-gun-controller', (controller) => {
+        gravityGunController = controller;
+      });
+      
+      spell.castUp({
+        camera: this.weaponCamera,
+        scene: mainScene || this.weaponScene, // Use main scene if available, otherwise fall back to weapon scene
+        weaponScene: this.weaponScene, // Also pass weaponScene in case spell needs to add visual effects to the weapon
+        spellbook: this.spellbook,
+        mainCamera: null, // Will be populated by the event bus below if available
+        eventBus: this.eventBus, // Make sure we're passing the event bus to the spell
+        gravityGunController: gravityGunController // Pass gravity gun controller for raycast data
+      });
+    }
   
   /**
    * Create cooldown indicator when casting a space bar spell

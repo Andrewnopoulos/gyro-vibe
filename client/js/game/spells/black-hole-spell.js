@@ -26,7 +26,7 @@ export class BlackHoleSpell extends Spell {
         strokeColor: '#6600CC',
         lineWidth: 3
       },
-      effect: (context) => this.castBlackHole(context)
+      effectKeyDown: (context) => this.castBlackHole(context)
     });
 
     this.eventBus = options.eventBus;

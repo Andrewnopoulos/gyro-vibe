@@ -183,9 +183,7 @@ export class GameStateManager {
       targetPosition, 
       targetId,
       cameraPosition,
-      targetDirection,
-      channelData, // Channel data for spells like Zoltraak
-      initialCast // Whether this is the initial cast event
+      targetDirection
     } = data;
     
     if (playerId === this.localPlayerId) {
@@ -199,9 +197,7 @@ export class GameStateManager {
       targetPosition,
       targetId,
       cameraPosition,
-      targetDirection,
-      channelData,
-      initialCast
+      targetDirection
     });
   }
   
@@ -241,7 +237,7 @@ export class GameStateManager {
   
   handleLocalSpellCast(data) {
     if (this.localPlayerId && this.currentRoom) {
-      const { spellId, targetPosition, targetId, cameraPosition, targetDirection, channelData } = data;
+      const { spellId, targetPosition, targetId, cameraPosition, targetDirection } = data;
       
       this.socketManager.emit('spell-cast', {
         spellId,
@@ -249,9 +245,7 @@ export class GameStateManager {
         targetId,
         cameraPosition,
         targetDirection,
-        channelData
       });
-      
     }
   }
   

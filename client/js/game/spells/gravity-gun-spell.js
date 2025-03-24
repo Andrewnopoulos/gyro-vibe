@@ -22,7 +22,7 @@ export class GravityGunSpell extends Spell {
         strokeColor: '#8B4513',
         lineWidth: 3
       },
-      effect: (context) => this.toggleGravityGun(context)
+      effectKeyDown: (context) => this.toggleGravityGun(context)
     });
 
     this.eventBus = options.eventBus;

@@ -7,7 +7,8 @@ export class Spell {
     this.shape = options.shape;
     this.description = options.description;
     this.page = options.page;
-    this.effect = options.effect || (() => console.log(`Spell ${this.name} cast but no effect implemented`));
+    this.effectKeyDown = options.effectKeyDown || (() => console.log(`Spell ${this.name} keydown but no effect implemented`));
+    this.effectKeyUp = options.effectKeyUp || (() => console.log(`Spell ${this.name} keyup but no effect implemented`));
     this.visualOptions = options.visualOptions || {};
     this.icon = options.icon;
     this.cooldown = options.cooldown || 0;
@@ -30,7 +31,7 @@ export class Spell {
     return Math.min(1, elapsed / this.cooldown);
   }
 
-  cast(context, isRemote = false) {
+  castDown(context, isRemote = false) {
     if (!isRemote && !this.isReady()) {
       return false;
     }
@@ -39,7 +40,10 @@ export class Spell {
       this.lastCastTime = Date.now();
     }
     
-    this.effect(context);
+    const cast_data = this.effectKeyDown(context);
+
+    console.log("cast data")
+    console.log(cast_data)
     
     if (!isRemote && context.eventBus) {
       let cameraPosition = null;
@@ -65,14 +69,73 @@ export class Spell {
       const targetPosition = context.targetPosition || cameraPosition;
       
       const targetId = context.targetId || null;
+
+      if (cast_data) {
+        console.log("emitting generated cast data");
+        context.eventBus.emit('spell:cast', cast_data);
+      } else {
+        console.log("don't emit generic cast data");
+        // context.eventBus.emit('spell:cast', {
+        //   spellId: this.id,
+        //   targetPosition,
+        //   targetId,
+        //   cameraPosition, // Include camera position
+        //   targetDirection: cameraDirection // Include camera direction for orientation
+        // });
+      }
+    }
+    
+    return true;
+  }
+
+  castUp(context, isRemote = false) {
+    if (!isRemote && !this.isReady()) {
+      return false;
+    }
+    
+    const cast_data = this.effectKeyUp(context);
+
+    console.log("cast data")
+    console.log(cast_data)
+    
+    if (!isRemote && context.eventBus) {
+      let cameraPosition = null;
+      if (context.camera) {
+        cameraPosition = {
+          x: context.camera.position.x,
+          y: context.camera.position.y,
+          z: context.camera.position.z
+        };
+      }
       
-      context.eventBus.emit('spell:cast', {
-        spellId: this.id,
-        targetPosition,
-        targetId,
-        cameraPosition, // Include camera position
-        targetDirection: cameraDirection // Include camera direction for orientation
-      });
+      let cameraDirection = null;
+      if (context.camera && context.camera.getWorldDirection) {
+        const dir = new THREE.Vector3();
+        context.camera.getWorldDirection(dir);
+        cameraDirection = {
+          x: dir.x,
+          y: dir.y,
+          z: dir.z
+        };
+      }
+      
+      const targetPosition = context.targetPosition || cameraPosition;
+      
+      const targetId = context.targetId || null;
+
+      if (cast_data) {
+        console.log("emitting generated cast data");
+        context.eventBus.emit('spell:cast', cast_data);
+      } else {
+        console.log("don't emit generic cast data");
+        // context.eventBus.emit('spell:cast', {
+        //   spellId: this.id,
+        //   targetPosition,
+        //   targetId,
+        //   cameraPosition, // Include camera position
+        //   targetDirection: cameraDirection // Include camera direction for orientation
+        // });
+      }
     }
     
     return true;
@@ -93,42 +156,21 @@ export class Spell {
       remotePlayerId: data.playerId, // Explicit property for clarity
       targetPosition: data.targetPosition,
       targetId: data.targetId,
-      // Add camera position and direction from the remote player
-      // for accurate positioning of complex effects
       cameraPosition: data.cameraPosition,
-      targetDirection: data.targetDirection,
-      // Pass channel data if present
-      channelData: data.channelData,
-      // Pass whether this is an initial cast
-      initialCast: data.initialCast
+      targetDirection: data.targetDirection
     };
     
-    // Enhanced debug logging for remote casts, especially on initial cast which is crucial for positioning
-    if (data.initialCast) {
-      console.log(`Initial remote cast of ${this.name} from player ${data.playerId}`, {
-        targetPosition: data.targetPosition ? 
-          `(${data.targetPosition.x.toFixed(2)}, ${data.targetPosition.y.toFixed(2)}, ${data.targetPosition.z.toFixed(2)})` : 
-          'none',
-        cameraPosition: data.cameraPosition ?
-          `(${data.cameraPosition.x.toFixed(2)}, ${data.cameraPosition.y.toFixed(2)}, ${data.cameraPosition.z.toFixed(2)})` :
-          'none',
-        targetDirection: data.targetDirection ?
-          `(${data.targetDirection.x.toFixed(2)}, ${data.targetDirection.y.toFixed(2)}, ${data.targetDirection.z.toFixed(2)})` :
-          'none'
-      });
-    } else {
-      console.log(`Remote cast of ${this.name} from player ${data.playerId}`, {
-        targetPosition: data.targetPosition ? 
-          `(${data.targetPosition.x.toFixed(2)}, ${data.targetPosition.y.toFixed(2)}, ${data.targetPosition.z.toFixed(2)})` : 
-          'none',
-        cameraPosition: data.cameraPosition ?
-          `(${data.cameraPosition.x.toFixed(2)}, ${data.cameraPosition.y.toFixed(2)}, ${data.cameraPosition.z.toFixed(2)})` :
-          'none',
-        hasChannelData: !!data.channelData,
-        channelProgress: data.channelData?.channelProgress
-      });
-    }
-    
+    console.log(`Initial remote cast of ${this.name} from player ${data.playerId}`, {
+      targetPosition: data.targetPosition ? 
+        `(${data.targetPosition.x.toFixed(2)}, ${data.targetPosition.y.toFixed(2)}, ${data.targetPosition.z.toFixed(2)})` : 
+        'none',
+      cameraPosition: data.cameraPosition ?
+        `(${data.cameraPosition.x.toFixed(2)}, ${data.cameraPosition.y.toFixed(2)}, ${data.cameraPosition.z.toFixed(2)})` :
+        'none',
+      targetDirection: data.targetDirection ?
+        `(${data.targetDirection.x.toFixed(2)}, ${data.targetDirection.y.toFixed(2)}, ${data.targetDirection.z.toFixed(2)})` :
+        'none'
+    });
     // Call the normal cast method but with remote flag
     return this.cast(remoteContext, true);
   }

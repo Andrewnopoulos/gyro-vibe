@@ -14,7 +14,8 @@ export class LaserBeamSpell extends Spell {
         strokeColor: '#FFFFFF',
         lineWidth: 3
       },
-      effect: (context) => this.startChanneling(context)
+      effectKeyDown: (context) => this.startChanneling(context),
+      effectKeyUp: (context) => this.fireLaser()
     });
 
     this.eventBus = options.eventBus;
@@ -47,7 +48,7 @@ export class LaserBeamSpell extends Spell {
   }
   
   startChanneling(context) {
-    if (this.isChanneling || this.laserActive) {
+    if (this.isChanneling) {
       return; // Already channeling or laser is active
     }
     
@@ -80,16 +81,6 @@ export class LaserBeamSpell extends Spell {
             z: direction.z
           };
         }
-      });
-      
-      
-      this.eventBus.emit('spell:cast', {
-        spellId: this.id,
-        targetPosition: context.targetPosition || null,
-        targetId: context.targetId || null,
-        cameraPosition,
-        targetDirection: cameraDirection,
-        initialCast: true
       });
       
       this.eventBus.emit('audio:play', { 
@@ -476,55 +467,6 @@ export class LaserBeamSpell extends Spell {
     // Create laser beam visual effect
     this.createLaserVisual(laserOptions);
     
-    // Emit event for multiplayer synchronization with channel progress
-    if (this.channelContext.eventBus) {
-      // Get accurate camera position using the event bus
-      let cameraPosition = null;
-      this.eventBus.emit('camera:get-position', (position) => {
-        if (position) {
-          cameraPosition = {
-            x: position.x,
-            y: position.y,
-            z: position.z
-          };
-        }
-      });
-      
-      // Get accurate camera direction using the event bus
-      let cameraDirection = null;
-      this.eventBus.emit('camera:get-direction', (direction) => {
-        if (direction) {
-          cameraDirection = {
-            x: direction.x,
-            y: direction.y,
-            z: direction.z
-          };
-        }
-      });
-      
-      // Log for debugging
-      console.log("Sending spell cast with position data:", 
-        cameraPosition ? `Camera: (${cameraPosition.x.toFixed(2)}, ${cameraPosition.y.toFixed(2)}, ${cameraPosition.z.toFixed(2)})` : "No camera position",
-        cameraDirection ? `Direction: (${cameraDirection.x.toFixed(2)}, ${cameraDirection.y.toFixed(2)}, ${cameraDirection.z.toFixed(2)})` : "No direction"
-      );
-      
-      // Include channeling progress data for Zoltraak spell
-      this.channelContext.eventBus.emit('spell:cast', {
-        spellId: this.id,
-        targetPosition: this.channelContext.targetPosition || null,
-        targetId: this.channelContext.targetId || null,
-        cameraPosition,
-        targetDirection: cameraDirection,
-        // Add channeling data for remote players
-        channelData: {
-          type: 'zoltraak',
-          channelProgress: channelProgress,
-          damage: damage,
-          beamWidth: beamWidth
-        }
-      });
-    }
-    
     // Remove channeling visuals
     this.removeChannelingVisuals();
     
@@ -532,6 +474,14 @@ export class LaserBeamSpell extends Spell {
     setTimeout(() => {
       this.laserActive = false;
     }, this.laserDuration * 1000);
+
+    return {
+      spellId: this.id,
+      targetPosition: weaponOrigin,
+      targetId: this.channelContext.targetId || null,
+      cameraPosition: weaponOrigin,
+      targetDirection: weaponDirection,
+    }
   }
   
   /**

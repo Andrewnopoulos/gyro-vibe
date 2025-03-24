@@ -486,52 +486,6 @@ io.on('connection', (socket) => {
     io.to(targetId).emit('request-calibration');
   });
   
-  // Handle rune mode toggle
-  socket.on('game-toggle-rune-mode', (data) => {
-    const { targetId, enabled } = data;
-    console.log(`Rune mode ${enabled ? 'enabled' : 'disabled'} for ${targetId} by ${socket.id}`);
-    io.to(targetId).emit('game-toggle-rune-mode', {
-      sourceId: socket.id,
-      enabled: enabled
-    });
-  });
-  
-  // Handle rune recognition
-  socket.on('game-rune-recognized', (data) => {
-    const { targetId, shape, confidence } = data;
-    console.log(`Rune recognized: ${shape} (${confidence}) for ${targetId} by ${socket.id}`);
-    io.to(targetId).emit('game-rune-recognized', {
-      sourceId: socket.id,
-      shape: shape,
-      confidence: confidence,
-      playerId: socket.id
-    });
-  });
-  
-  // Handle rune cast
-  socket.on('mobile-rune-cast', (data) => {
-    const { targetId, shape, confidence } = data;
-    console.log(`Rune cast: ${shape} (${confidence}) by ${socket.id}`);
-    
-    // If in a game room, broadcast to all players in the room
-    if (currentRoomId) {
-      io.to(currentRoomId).emit('mobile-rune-cast', {
-        sourceId: socket.id,
-        shape: shape,
-        confidence: confidence,
-        playerId: socket.id
-      });
-    } 
-    // If targeting a specific player (usually the paired desktop)
-    else if (targetId) {
-      io.to(targetId).emit('mobile-rune-cast', {
-        sourceId: socket.id,
-        shape: shape,
-        confidence: confidence,
-        playerId: socket.id
-      });
-    }
-  });
   
   // ==================== MULTIPLAYER ROOM MANAGEMENT ====================
   
@@ -675,23 +629,10 @@ io.on('connection', (socket) => {
     const room = gameRooms.get(currentRoomId);
     if (!room) return;
     
-    const { spellId, targetPosition, targetId, cameraPosition, targetDirection, channelData, initialCast } = data;
+    const { spellId, targetPosition, targetId, cameraPosition, targetDirection } = data;
     
     // Basic validation
     if (!spellId) return;
-    
-    // Enhance logging to help troubleshoot positioning issues
-    const posInfo = cameraPosition ? 
-      `[${cameraPosition.x.toFixed(2)}, ${cameraPosition.y.toFixed(2)}, ${cameraPosition.z.toFixed(2)}]` : 'no position';
-      
-    if (initialCast) {
-      console.log(`Initial spell cast: ${spellId} by Player ${socket.id} at ${posInfo}`);
-    } else if (channelData) {
-      console.log(`Channeled spell cast: ${spellId} by Player ${socket.id} with progress ${channelData.channelProgress?.toFixed(2)}`);
-    }
-    
-    // Get player's data for reliable position information
-    const player = room.players.get(socket.id);
     
     // Broadcast the spell cast to all players in the room
     socket.to(currentRoomId).emit('remote-spell-cast', {
@@ -699,14 +640,8 @@ io.on('connection', (socket) => {
       spellId,
       targetPosition,
       targetId,
-      // Include camera position and direction for accurate spawning
-      // If not provided explicitly, use player position from server state
-      cameraPosition: cameraPosition || (player ? player.position : null),
-      targetDirection,
-      // Include channel data for spells like Zoltraak that need channel progress
-      channelData,
-      // Pass along whether this is the initial cast
-      initialCast: initialCast === true // Ensure this is a boolean
+      cameraPosition: cameraPosition,
+      targetDirection
     });
     
     console.log(`Player ${socket.id} cast spell ${spellId} in room ${currentRoomId}`);

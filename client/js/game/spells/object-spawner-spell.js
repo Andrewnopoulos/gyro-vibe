@@ -24,7 +24,8 @@ export class ObjectSpawnerSpell extends Spell {
         strokeColor: '#8B4513',
         lineWidth: 3
       },
-      effect: (context) => this.startChanneling(context)
+      effectKeyDown: (context) => this.startChanneling(context),
+      effectKeyUp: () => this.finishChanneling(),
     });
 
     this.eventBus = options.eventBus;
@@ -64,7 +65,7 @@ export class ObjectSpawnerSpell extends Spell {
    */
   handleKeyUp(event) {
     if (event.code === 'Space' && this.isChanneling) {
-      this.finishChanneling();
+      ;
     }
   }
   
@@ -155,15 +156,15 @@ export class ObjectSpawnerSpell extends Spell {
         cameraDirection ? `Direction: (${cameraDirection.x.toFixed(2)}, ${cameraDirection.y.toFixed(2)}, ${cameraDirection.z.toFixed(2)})` : "No direction"
       );
       
-      this.eventBus.emit('spell:cast', {
-        spellId: this.id,
-        targetPosition: context.targetPosition || null,
-        targetId: context.targetId || null,
-        cameraPosition,
-        targetDirection: cameraDirection,
-        // Initial cast has no channel data yet
-        initialCast: true
-      });
+      // this.eventBus.emit('spell:cast', {
+      //   spellId: this.id,
+      //   targetPosition: context.targetPosition || null,
+      //   targetId: context.targetId || null,
+      //   cameraPosition,
+      //   targetDirection: cameraDirection,
+      //   // Initial cast has no channel data yet
+      //   initialCast: true
+      // });
     }
     
     // Spawn the initial small object
@@ -464,13 +465,6 @@ export class ObjectSpawnerSpell extends Spell {
             targetId: this.channelContext.targetId || null,
             cameraPosition,
             targetDirection: cameraDirection,
-            // Add channeling data for remote players
-            channelData: {
-              type: 'objectSpawner',
-              channelProgress: finalProgress,
-              objectId: this.channelObjectId,
-              velocity: velocity
-            }
           });
         }
       }

@@ -193,7 +193,7 @@ export class SpellRegistry {
    * @param {Object} data - Remote spell cast data
    */
   handleRemoteSpellCast(data) {
-    const { playerId, spellId, targetPosition, targetId, cameraPosition, targetDirection, channelData, initialCast } = data;
+    const { playerId, spellId, targetPosition, targetId, cameraPosition, targetDirection } = data;
     
     // Get the spell by ID
     const spell = this.getSpellById(spellId);
@@ -255,34 +255,10 @@ export class SpellRegistry {
       // Add camera position and direction from remote player for accurate positioning
       // Prioritize network-provided data, then fall back to GameStateManager data
       cameraPosition: accuratePosition,
-      targetDirection: accurateDirection,
-      // Flag whether this is an initial cast or update
-      initialCast: initialCast,
+      targetDirection: accurateDirection
       // Other context properties will be added by the specific spell implementation
     };
     
-    // Add channel data for spells that need it
-    if (channelData) {
-      if (spellId === 'laserBeam' && channelData.type === 'zoltraak') {
-        // For Zoltraak, add channeling progress data
-        context.channelProgressData = {
-          channelProgress: channelData.channelProgress || 0,
-          damage: channelData.damage || 1,
-          beamWidth: channelData.beamWidth || 0.05
-        };
-      } else if (spellId === 'objectSpawner' && channelData.type === 'objectSpawner') {
-        // For object spawner, add channeling progress data
-        context.channelProgressData = {
-          channelProgress: channelData.channelProgress || 0,
-          objectId: channelData.objectId,
-          velocity: channelData.velocity || { x: 0, y: 0, z: 0 }
-        };
-      }
-    }
-    
-    // Trigger the remote spell cast
-    console.log(`Remote spell cast: ${spell.name} by player ${playerId}`, 
-      initialCast ? '(initial cast)' : (channelData ? `with channel data: ${JSON.stringify(channelData)}` : ''));
     spell.remotecast(data, context);
     
     // Emit an event for UI feedback
