@@ -40,13 +40,8 @@ export class Environment {
     this.loadingManager = loadingManager;
     this.objects = new Map(); // Store references to environment objects
     this.spawnPoints = []; // Player spawn locations
-    
-    // Notify about environment assets loading if we have event bus
-    if (this.eventBus) {
-      // Estimate total number of environment assets
-      this.eventBus.emit('asset:load-start', { type: 'texture', count: 5 }); // Estimate for textures
-      this.eventBus.emit('asset:load-start', { type: 'model', count: 1 });  // Estimate for models
-    }
+    this.villageLoaded = false;
+    this.decorationsLoaded = false;
     
     // Define material properties for different surface types
     this.materials = createMaterials();
@@ -54,10 +49,9 @@ export class Environment {
     // Create physics utilities with event bus for lazy loading
     this.physicsUtils = new PhysicsUtils(physicsManager, this.materials, this.eventBus);
     
-    // Initialize environment
+    // Initialize essential parts immediately
     this.createSkybox();
     this.createTerrain();
-    this.createVillage();
     
     // Add atmospheric fog
     this.scene.fog = new THREE.FogExp2(0xd6cca1, 0.02);
@@ -65,11 +59,11 @@ export class Environment {
     // Set up event handlers
     this.setupEventListeners();
     
-    // Mark environment assets as loaded
-    if (this.eventBus) {
-      this.eventBus.emit('asset:load-complete', { type: 'texture', count: 5 });
-      this.eventBus.emit('asset:load-complete', { type: 'model', count: 1 });
-    }
+    // Define default spawn points until the real ones are loaded
+    this.defineDefaultSpawnPoints();
+    
+    // Lazy load the village after a short delay
+    setTimeout(() => this.lazyLoadVillage(), 500);
   }
   
   /**
@@ -101,32 +95,14 @@ export class Environment {
       this.physicsUtils.updateDebugWireframes();
     }
   }
-
+  
   /**
-   * Create skybox for the environment
+   * Lazy load the village buildings and walls
    */
-  createSkybox() {
-    const skybox = createSkybox(this.scene);
-    this.objects.set('skybox', skybox);
-  }
-
-  /**
-   * Create terrain with proper physics
-   */
-  createTerrain() {
-    const terrainBuilder = new TerrainBuilder(
-      this.scene, 
-      this.materials, 
-      this.physicsUtils,
-      this.objects
-    );
-    terrainBuilder.createTerrain();
-  }
-
-  /**
-   * Create the full medieval village
-   */
-  createVillage() {
+  lazyLoadVillage() {
+    if (this.villageLoaded) return;
+    console.log('Lazy loading village buildings...');
+    
     // Create central village square
     const villageSquare = new VillageSquare(
       this.scene, 
@@ -185,17 +161,22 @@ export class Environment {
     towers.create({ x: -wallOffset, z: wallOffset }, wallHeight + 2);
     towers.create({ x: wallOffset, z: wallOffset }, wallHeight + 2);
     
-    // Create decorative elements
-    this.createDecorations();
+    this.villageLoaded = true;
     
-    // Define spawn points for multiplayer
+    // Update spawn points now that the village is loaded
     this.defineSpawnPoints();
+    
+    // Schedule decorations to load after another delay
+    setTimeout(() => this.lazyLoadDecorations(), 500);
   }
-
+  
   /**
-   * Create decorative elements for the village
+   * Lazy load the decorative elements
    */
-  createDecorations() {
+  lazyLoadDecorations() {
+    if (this.decorationsLoaded) return;
+    console.log('Lazy loading decorative elements...');
+    
     // Create well
     const well = new Well(
       this.scene, 
@@ -240,10 +221,51 @@ export class Environment {
     marketStalls.createMarketStall({ x: 5, z: -5 });
     marketStalls.createMarketStall({ x: -5, z: -7 });
     marketStalls.createMarketStall({ x: 7, z: 2 });
+    
+    this.decorationsLoaded = true;
+    console.log('Environment fully loaded');
   }
 
   /**
-   * Define spawn points for multiplayer
+   * Create skybox for the environment
+   */
+  createSkybox() {
+    const skybox = createSkybox(this.scene);
+    this.objects.set('skybox', skybox);
+  }
+
+  /**
+   * Create terrain with proper physics
+   */
+  createTerrain() {
+    const terrainBuilder = new TerrainBuilder(
+      this.scene, 
+      this.materials, 
+      this.physicsUtils,
+      this.objects
+    );
+    terrainBuilder.createTerrain();
+  }
+
+  // The createVillage() and createDecorations() methods have been replaced by
+  // lazyLoadVillage() and lazyLoadDecorations() for progressive loading
+
+  /**
+   * Define default spawn points for multiplayer (before village is loaded)
+   */
+  defineDefaultSpawnPoints() {
+    // Clear any existing spawn points
+    this.spawnPoints = [];
+    
+    // Add simple spawn points in the center
+    this.spawnPoints.push({ x: 0, y: 0, z: 0, rotation: 0 });
+    this.spawnPoints.push({ x: 2, y: 0, z: 2, rotation: Math.PI / 4 });
+    this.spawnPoints.push({ x: -2, y: 0, z: 2, rotation: -Math.PI / 4 });
+    this.spawnPoints.push({ x: 0, y: 0, z: -2, rotation: Math.PI });
+  }
+  
+  /**
+   * Define full spawn points for multiplayer (after village is loaded)
    */
   defineSpawnPoints() {
     // Clear any existing spawn points
