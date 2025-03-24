@@ -15,7 +15,7 @@ export class LaserBeamSpell extends Spell {
         lineWidth: 3
       },
       effectKeyDown: (context) => this.startChanneling(context),
-      effectKeyUp: (context) => this.fireLaser()
+      effectKeyUp: (context) => this.fireLaser(context)
     });
 
     this.eventBus = options.eventBus;
@@ -26,13 +26,13 @@ export class LaserBeamSpell extends Spell {
     this.laserDuration = 0.5;
     this.laserActive = false;
     
-    this.keyUpHandler = this.handleKeyUp.bind(this);
+    // this.keyUpHandler = this.handleKeyUp.bind(this);
     
     this.setupEventListeners();
   }
 
   setupEventListeners() {
-    document.addEventListener('keyup', this.keyUpHandler);
+    // document.addEventListener('keyup', this.keyUpHandler);
     
     this.updateInterval = setInterval(() => {
       if (this.isChanneling) {
@@ -40,13 +40,7 @@ export class LaserBeamSpell extends Spell {
       }
     }, 50);
   }
-  
-  handleKeyUp(event) {
-    if (event.code === 'Space' && this.isChanneling) {
-      this.fireLaser();
-    }
-  }
-  
+
   startChanneling(context) {
     if (this.isChanneling) {
       return; // Already channeling or laser is active
@@ -97,17 +91,17 @@ export class LaserBeamSpell extends Spell {
       }
     }, this.channelMaxDuration * 1000);
     
-    // If this is a remote cast and it has channelProgressData, use that
-    if (isRemote && context.channelProgressData) {
-      // Short delay to ensure context is properly set up
-      setTimeout(() => {
-        // Use the provided channel progress data from the remote player
-        const { channelProgress } = context.channelProgressData;
-        this.isChanneling = false; // Stop channeling
-        this.laserActive = true;
-        this.fireRemoteLaser(channelProgress);
-      }, 50);
-    }
+    // // If this is a remote cast and it has channelProgressData, use that
+    // if (isRemote && context.channelProgressData) {
+    //   // Short delay to ensure context is properly set up
+    //   setTimeout(() => {
+    //     // Use the provided channel progress data from the remote player
+    //     const { channelProgress } = context.channelProgressData;
+    //     this.isChanneling = false; // Stop channeling
+    //     this.laserActive = true;
+    //     this.fireRemoteLaser(channelProgress);
+    //   }, 50);
+    // }
   }
   
   /**
@@ -370,8 +364,47 @@ export class LaserBeamSpell extends Spell {
   /**
    * Fire the laser beam after channeling
    */
-  fireLaser() {
-    if (!this.isChanneling) return;
+  fireLaser(context) {
+    
+    if (context.isRemote)
+    {
+      console.log("REMOTE LASER FIRE");
+
+      console.log(context);
+
+      const remoteOrigin = new THREE.Vector3(
+        context.targetPosition.x,
+        context.targetPosition.y,
+        context.targetPosition.z
+      );
+      
+      const remoteDirection = new THREE.Vector3(
+        context.targetDirection.x,
+        context.targetDirection.y,
+        context.targetDirection.z
+      ).normalize();
+      
+      // Create the laser visual effect
+      const laserOptions = {
+        scene: context.scene,
+        width: context.spellData.beamWidth,
+        color: 0xFFFFFF,
+        duration: this.laserDuration,
+        origin: remoteOrigin,
+        direction: remoteDirection
+      };
+      
+      // Create laser beam visual effect
+      this.createLaserVisual(laserOptions);
+
+      return null;
+    }
+
+    // If not channeling, return an empty cast data object
+    if (!this.isChanneling) {
+      console.log('fireLaser called but not channeling - returning empty data');
+      return null;
+    }
     
     this.isChanneling = false;
     this.laserActive = true;
@@ -434,7 +467,9 @@ export class LaserBeamSpell extends Spell {
         console.error('Missing context for laser beam');
         this.laserActive = false;
         this.removeChannelingVisuals();
-        return;
+        
+        // Return minimal cast data
+        return null;
       }
       
       weaponOrigin = cameraPosition.clone();
@@ -445,7 +480,9 @@ export class LaserBeamSpell extends Spell {
       console.error('Missing scene for laser beam');
       this.laserActive = false;
       this.removeChannelingVisuals();
-      return;
+      
+      // Return minimal cast data
+      return null;
     }
     
     // Create a raycaster to check for enemy hits
@@ -454,6 +491,7 @@ export class LaserBeamSpell extends Spell {
     
     // Create the laser visual effect
     const laserOptions = {
+      scene: this.channelContext?.scene,
       width: beamWidth,
       color: 0xFFFFFF,
       duration: this.laserDuration,
@@ -475,12 +513,21 @@ export class LaserBeamSpell extends Spell {
       this.laserActive = false;
     }, this.laserDuration * 1000);
 
+    // Return cast data with channel progress information
     return {
       spellId: this.id,
       targetPosition: weaponOrigin,
       targetId: this.channelContext.targetId || null,
       cameraPosition: weaponOrigin,
       targetDirection: weaponDirection,
+      spellData: {
+        isActive: true,
+        channelProgress: channelProgress,
+        beamWidth: beamWidth,
+        damage: damage,
+        isKeyDown: false,
+        isKeyUp: true
+      }
     }
   }
   
@@ -489,8 +536,7 @@ export class LaserBeamSpell extends Spell {
    * @param {Object} options - Options for the laser beam
    */
   createLaserVisual(options) {
-    const { width, color, duration, origin, direction } = options;
-    const scene = this.channelContext?.scene;
+    const { scene, width, color, duration, origin, direction } = options;
     
     if (!scene) return;
     
@@ -546,6 +592,8 @@ export class LaserBeamSpell extends Spell {
     // Start animation for fading out
     const startTime = Date.now();
     let animationFrameId = null;
+
+    console.log("animating laser beam");
     
     const animate = () => {
       const elapsedTime = (Date.now() - startTime) / 1000;
@@ -1106,6 +1154,7 @@ export class LaserBeamSpell extends Spell {
     
     // Create the laser visual effect
     const laserOptions = {
+      scene: this.channelContext?.scene,
       width: beamWidth,
       color: 0xFFFFFF,
       duration: this.laserDuration,

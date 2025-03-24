@@ -464,7 +464,7 @@ export class ObjectSpawnerSpell extends Spell {
             targetPosition: this.channelContext.targetPosition || null,
             targetId: this.channelContext.targetId || null,
             cameraPosition,
-            targetDirection: cameraDirection,
+            targetDirection: cameraDirection
           });
         }
       }

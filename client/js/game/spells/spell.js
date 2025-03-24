@@ -69,9 +69,19 @@ export class Spell {
       const targetPosition = context.targetPosition || cameraPosition;
       
       const targetId = context.targetId || null;
+      
+      // Add spellData information about this being a keydown event
+      const spellData = {
+        isKeyDown: true,
+        isKeyUp: false
+      };
 
       if (cast_data) {
         console.log("emitting generated cast data");
+        // Add spellData to cast_data if it doesn't already have it
+        if (!cast_data.spellData) {
+          cast_data.spellData = spellData;
+        }
         context.eventBus.emit('spell:cast', cast_data);
       } else {
         console.log("don't emit generic cast data");
@@ -80,7 +90,8 @@ export class Spell {
         //   targetPosition,
         //   targetId,
         //   cameraPosition, // Include camera position
-        //   targetDirection: cameraDirection // Include camera direction for orientation
+        //   targetDirection: cameraDirection, // Include camera direction for orientation
+        //   spellData // Include information about the cast type
         // });
       }
     }
@@ -95,7 +106,7 @@ export class Spell {
     
     const cast_data = this.effectKeyUp(context);
 
-    console.log("cast data")
+    console.log("cast up data")
     console.log(cast_data)
     
     if (!isRemote && context.eventBus) {
@@ -122,9 +133,19 @@ export class Spell {
       const targetPosition = context.targetPosition || cameraPosition;
       
       const targetId = context.targetId || null;
+      
+      // Add spellData information about this being a keyup event
+      const spellData = {
+        isKeyDown: false,
+        isKeyUp: true
+      };
 
       if (cast_data) {
         console.log("emitting generated cast data");
+        // Add spellData to cast_data if it doesn't already have it
+        if (!cast_data.spellData) {
+          cast_data.spellData = spellData;
+        }
         context.eventBus.emit('spell:cast', cast_data);
       } else {
         console.log("don't emit generic cast data");
@@ -133,7 +154,8 @@ export class Spell {
         //   targetPosition,
         //   targetId,
         //   cameraPosition, // Include camera position
-        //   targetDirection: cameraDirection // Include camera direction for orientation
+        //   targetDirection: cameraDirection, // Include camera direction for orientation
+        //   spellData // Include information about the cast type
         // });
       }
     }
@@ -157,7 +179,8 @@ export class Spell {
       targetPosition: data.targetPosition,
       targetId: data.targetId,
       cameraPosition: data.cameraPosition,
-      targetDirection: data.targetDirection
+      targetDirection: data.targetDirection,
+      spellData: data.spellData || {}
     };
     
     console.log(`Initial remote cast of ${this.name} from player ${data.playerId}`, {
@@ -169,10 +192,16 @@ export class Spell {
         'none',
       targetDirection: data.targetDirection ?
         `(${data.targetDirection.x.toFixed(2)}, ${data.targetDirection.y.toFixed(2)}, ${data.targetDirection.z.toFixed(2)})` :
-        'none'
+        'none',
+      spellData: data.spellData
     });
-    // Call the normal cast method but with remote flag
-    return this.cast(remoteContext, true);
+    
+    // Determine if this is a keydown or keyup event
+    if (data.spellData && data.spellData.isKeyUp) {
+      return this.castUp(remoteContext, true);
+    } else {
+      return this.castDown(remoteContext, true);
+    }
   }
   
   /**

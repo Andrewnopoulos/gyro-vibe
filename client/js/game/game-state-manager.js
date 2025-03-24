@@ -183,7 +183,8 @@ export class GameStateManager {
       targetPosition, 
       targetId,
       cameraPosition,
-      targetDirection
+      targetDirection,
+      spellData
     } = data;
     
     if (playerId === this.localPlayerId) {
@@ -197,7 +198,8 @@ export class GameStateManager {
       targetPosition,
       targetId,
       cameraPosition,
-      targetDirection
+      targetDirection,
+      spellData
     });
   }
   
@@ -237,7 +239,7 @@ export class GameStateManager {
   
   handleLocalSpellCast(data) {
     if (this.localPlayerId && this.currentRoom) {
-      const { spellId, targetPosition, targetId, cameraPosition, targetDirection } = data;
+      const { spellId, targetPosition, targetId, cameraPosition, targetDirection, spellData } = data;
       
       this.socketManager.emit('spell-cast', {
         spellId,
@@ -245,6 +247,7 @@ export class GameStateManager {
         targetId,
         cameraPosition,
         targetDirection,
+        spellData
       });
     }
   }

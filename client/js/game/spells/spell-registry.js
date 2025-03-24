@@ -193,7 +193,7 @@ export class SpellRegistry {
    * @param {Object} data - Remote spell cast data
    */
   handleRemoteSpellCast(data) {
-    const { playerId, spellId, targetPosition, targetId, cameraPosition, targetDirection } = data;
+    const { playerId, spellId, targetPosition, targetId, cameraPosition, targetDirection, spellData } = data;
     
     // Get the spell by ID
     const spell = this.getSpellById(spellId);
@@ -255,7 +255,9 @@ export class SpellRegistry {
       // Add camera position and direction from remote player for accurate positioning
       // Prioritize network-provided data, then fall back to GameStateManager data
       cameraPosition: accuratePosition,
-      targetDirection: accurateDirection
+      targetDirection: accurateDirection,
+      // Add spell data which includes information about the cast type (keydown/keyup)
+      spellData: spellData || {}
       // Other context properties will be added by the specific spell implementation
     };
     
@@ -265,7 +267,8 @@ export class SpellRegistry {
     this.eventBus.emit('ui:remote-spell-cast', {
       playerId,
       spellId,
-      spellName: spell.name
+      spellName: spell.name,
+      spellData: spellData || {}
     });
   }
   

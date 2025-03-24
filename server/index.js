@@ -629,7 +629,7 @@ io.on('connection', (socket) => {
     const room = gameRooms.get(currentRoomId);
     if (!room) return;
     
-    const { spellId, targetPosition, targetId, cameraPosition, targetDirection } = data;
+    const { spellId, targetPosition, targetId, cameraPosition, targetDirection, spellData } = data;
     
     // Basic validation
     if (!spellId) return;
@@ -641,7 +641,8 @@ io.on('connection', (socket) => {
       targetPosition,
       targetId,
       cameraPosition: cameraPosition,
-      targetDirection
+      targetDirection,
+      spellData
     });
     
     console.log(`Player ${socket.id} cast spell ${spellId} in room ${currentRoomId}`);
