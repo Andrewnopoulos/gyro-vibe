@@ -350,6 +350,68 @@ export class Enemy {
   }
   
   /**
+   * Set the enemy's position (for networked updates)
+   * @param {Object} position - New position {x, y, z}
+   */
+  setPosition(position) {
+    if (!position) return;
+    
+    // Update model position directly
+    if (this.model) {
+      this.model.position.set(position.x, position.y, position.z);
+    }
+    
+    // Update physics body position
+    if (this.physicsBody) {
+      this.physicsBody.position.set(position.x, position.y, position.z);
+      this.physicsBody.previousPosition.set(position.x, position.y, position.z);
+      this.physicsBody.initPosition.set(position.x, position.y, position.z);
+      
+      // Reset velocity to prevent physics from overriding the position
+      this.physicsBody.velocity.set(0, 0, 0);
+      this.physicsBody.initVelocity.set(0, 0, 0);
+    }
+    
+    // Store the position
+    this.position = { ...position };
+  }
+  
+  /**
+   * Set the enemy's health (for networked updates)
+   * @param {number} health - New health value
+   */
+  setHealth(health) {
+    if (health === undefined) return;
+    
+    const previousHealth = this.health;
+    this.health = Math.max(0, health);
+    
+    // Update health bar
+    this.updateHealthBar();
+    
+    // If the health was reduced, flash the model
+    if (this.health < previousHealth) {
+      this.flashOnHit();
+    }
+    
+    // Check for death
+    if (previousHealth > 0 && this.health <= 0 && !this.isDead) {
+      this.die();
+    }
+  }
+  
+  /**
+   * Set the enemy's state (for networked updates)
+   * @param {string} state - New state
+   */
+  setState(state) {
+    if (!state) return;
+    
+    // Update state and potentially trigger animations or behaviors
+    // Implementation depends on enemy types
+  }
+  
+  /**
    * Remove the enemy from the scene and clean up resources
    */
   remove() {

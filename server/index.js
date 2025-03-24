@@ -316,6 +316,7 @@ function createGameRoom(hostId, roomName = null) {
     players: new Map(),
     gameMode: 'freeplay',
     gameObjects: [],
+    enemies: [],  // Track enemies in the room
     startTime: Date.now(),
     lastUpdate: Date.now()
   };
@@ -378,6 +379,7 @@ function broadcastGameState(roomId) {
   io.to(roomId).emit('game-state-update', {
     players: sanitizedPlayers,
     gameObjects: room.gameObjects,
+    enemies: room.enemies || [],
     timestamp: Date.now()
   });
 }
@@ -677,6 +679,124 @@ io.on('connection', (socket) => {
     player.lastUpdate = Date.now();
     
     // We don't need to broadcast here as we have a game loop that broadcasts state regularly
+  });
+  
+  // Spell casting events
+  socket.on('spell-cast', (data) => {
+    if (!currentRoomId) return;
+    
+    const room = gameRooms.get(currentRoomId);
+    if (!room) return;
+    
+    const { spellId, targetPosition, targetId, cameraPosition, targetDirection } = data;
+    
+    // Basic validation
+    if (!spellId) return;
+    
+    // Broadcast the spell cast to all players in the room
+    socket.to(currentRoomId).emit('remote-spell-cast', {
+      playerId: socket.id,
+      spellId,
+      targetPosition,
+      targetId,
+      // Include camera position and direction for accurate spawning
+      cameraPosition,
+      targetDirection
+    });
+    
+    console.log(`Player ${socket.id} cast spell ${spellId} in room ${currentRoomId}`);
+  });
+  
+  // Enemy damage event
+  socket.on('enemy-damage', (data) => {
+    if (!currentRoomId) return;
+    
+    const room = gameRooms.get(currentRoomId);
+    if (!room) return;
+    
+    const { enemyId, damage, sourceType, sourceId } = data;
+    
+    // Basic validation
+    if (!enemyId || !damage) return;
+    
+    // Find the enemy in the room
+    const enemyIndex = room.enemies.findIndex(e => e.id === enemyId);
+    if (enemyIndex === -1) {
+      console.warn(`Enemy ${enemyId} not found in room ${currentRoomId}`);
+      return;
+    }
+    
+    const enemy = room.enemies[enemyIndex];
+    
+    // Apply damage to enemy
+    enemy.health -= damage;
+    enemy.lastDamageSource = {
+      playerId: socket.id,
+      sourceType,
+      sourceId
+    };
+    enemy.lastUpdate = Date.now();
+    
+    // Update all clients with the new enemy state
+    io.to(currentRoomId).emit('enemy-update', {
+      enemyId,
+      health: enemy.health,
+      lastDamageSource: enemy.lastDamageSource
+    });
+    
+    // Check if enemy is dead
+    if (enemy.health <= 0) {
+      // Remove enemy from room
+      room.enemies.splice(enemyIndex, 1);
+      
+      // Broadcast enemy death
+      io.to(currentRoomId).emit('enemy-death', {
+        enemyId,
+        killerPlayerId: socket.id
+      });
+      
+      console.log(`Enemy ${enemyId} killed by player ${socket.id} in room ${currentRoomId}`);
+    }
+  });
+  
+  // Spawn enemy request (typically from room host)
+  socket.on('enemy-spawn-request', (data) => {
+    if (!currentRoomId) return;
+    
+    const room = gameRooms.get(currentRoomId);
+    if (!room) return;
+    
+    // Only allow the host to spawn enemies
+    if (room.hostId !== socket.id) {
+      console.warn(`Non-host player ${socket.id} attempted to spawn an enemy`);
+      return;
+    }
+    
+    const { type, position, health } = data;
+    const enemyId = uuidv4();
+    
+    // Create new enemy
+    const enemy = {
+      id: enemyId,
+      type: type || 'training-dummy',
+      position,
+      health: health || 5,
+      state: 'idle',
+      lastUpdate: Date.now()
+    };
+    
+    // Add to room
+    room.enemies.push(enemy);
+    
+    // Broadcast to all clients
+    io.to(currentRoomId).emit('enemy-spawn', {
+      enemyId,
+      type: enemy.type,
+      position: enemy.position,
+      health: enemy.health
+    });
+    
+    console.log(`Host ${socket.id} spawned enemy ${enemyId} in room ${currentRoomId}`);
   });
   
   // ==================== DISCONNECT HANDLING ====================

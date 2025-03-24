@@ -21,6 +21,9 @@ export class SpellRegistry {
     
     // Initialize predefined spells
     this.registerDefaultSpells();
+    
+    // Listen for remote spell casts
+    this.eventBus.on('spell:remote-cast', this.handleRemoteSpellCast.bind(this));
   }
 
   /**
@@ -156,6 +159,45 @@ export class SpellRegistry {
     this.registerSpell(laserBeamSpell);
   }
 
+  /**
+   * Generate instruction page texture
+   * @param {CanvasRenderingContext2D} context - Canvas context to draw on
+   * @param {boolean} isLeftPage - Whether this is the left page
+   */
+  /**
+   * Handle remote spell cast from another player
+   * @param {Object} data - Remote spell cast data
+   */
+  handleRemoteSpellCast(data) {
+    const { playerId, spellId, targetPosition, targetId } = data;
+    
+    // Get the spell by ID
+    const spell = this.getSpellById(spellId);
+    if (!spell) {
+      console.error(`Received remote cast for unknown spell: ${spellId}`);
+      return;
+    }
+    
+    // Create context with the required information
+    const context = {
+      eventBus: this.eventBus,
+      targetPosition,
+      targetId,
+      // Other context properties will be added by the specific spell implementation
+    };
+    
+    // Trigger the remote spell cast
+    console.log(`Remote spell cast: ${spell.name} by player ${playerId}`);
+    spell.remotecast(data, context);
+    
+    // Emit an event for UI feedback
+    this.eventBus.emit('ui:remote-spell-cast', {
+      playerId,
+      spellId,
+      spellName: spell.name
+    });
+  }
+  
   /**
    * Generate instruction page texture
    * @param {CanvasRenderingContext2D} context - Canvas context to draw on

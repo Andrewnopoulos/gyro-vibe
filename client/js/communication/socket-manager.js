@@ -92,7 +92,12 @@ export class SocketManager {
       'physics:object-created',
       'physics:object-pickup',
       'physics:object-drop',
-      'physics:apply-force'
+      'physics:apply-force',
+      // New events for spell casting and enemy synchronization
+      'remote-spell-cast',
+      'enemy-spawn',
+      'enemy-update',
+      'enemy-death'
     ];
     
     // Set up handlers for all multiplayer events

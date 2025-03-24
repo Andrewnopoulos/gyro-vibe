@@ -78,28 +78,42 @@ export class LaserBeamSpell extends Spell {
       return; // Already channeling or laser is active
     }
     
+    // Check if this is a remote cast
+    const isRemote = context?.isRemote;
+    
     this.isChanneling = true;
     this.channelStartTime = Date.now();
     this.channelContext = context;
     
     console.log('Laser beam starting channeling with context:', 
-      context.gravityGunController ? 'GravityGunController available' : 'No GravityGunController');
+      context.gravityGunController ? 'GravityGunController available' : 'No GravityGunController',
+      isRemote ? '(REMOTE CAST)' : '(LOCAL CAST)');
     
-    // Play start channeling sound
-    this.eventBus.emit('audio:play', { 
-      sound: 'spawnObject', // Reuse existing sound as placeholder
-      volume: 0.5
-    });
+    // Play start channeling sound (only for local casts)
+    if (!isRemote) {
+      this.eventBus.emit('audio:play', { 
+        sound: 'spawnObject', // Reuse existing sound as placeholder
+        volume: 0.5
+      });
+    }
     
-    // Create visual feedback on spellbook
-    this.createChannelingVisual(context);
+    // Create visual feedback on spellbook (only for local casts)
+    if (!isRemote) {
+      this.createChannelingVisual(context);
+    }
     
-    // Set timeout to auto-fire laser after max duration
-    this.channelTimeout = setTimeout(() => {
-      if (this.isChanneling) {
-        this.fireLaser();
-      }
-    }, this.channelMaxDuration * 1000);
+    // For remote casts, immediately fire the laser instead of waiting for channeling
+    if (isRemote) {
+      // Use a short timeout to ensure the context is properly set up
+      setTimeout(() => this.fireLaser(), 50);
+    } else {
+      // Set timeout to auto-fire laser after max duration (only for local casts)
+      this.channelTimeout = setTimeout(() => {
+        if (this.isChanneling) {
+          this.fireLaser();
+        }
+      }, this.channelMaxDuration * 1000);
+    }
   }
   
   /**

@@ -489,8 +489,19 @@ export const SpellEffects = {
     blackHoleContainer.add(disk);
     blackHoleContainer.add(particles);
     
-    // Position black hole in front of player initially, but then it stays fixed
-    if (camera) {
+    // Check if a fixed position is provided (for remote casts)
+    if (context.fixedPosition) {
+      // Use the provided fixed position
+      blackHoleContainer.position.copy(context.fixedPosition);
+      
+      console.log('Black hole created at fixed remote position:', 
+        context.fixedPosition.x.toFixed(2), 
+        context.fixedPosition.y.toFixed(2), 
+        context.fixedPosition.z.toFixed(2)
+      );
+    } 
+    // Otherwise use local camera for positioning
+    else if (camera) {
       const direction = new THREE.Vector3(0, 0, -1);
       direction.applyQuaternion(camera.quaternion);
       
@@ -505,7 +516,7 @@ export const SpellEffects = {
       // Store the initial position - we won't update this later
       const initialPosition = blackHoleContainer.position.clone();
       
-      console.log('Black hole created at fixed position:', 
+      console.log('Black hole created at fixed position from camera:', 
         initialPosition.x.toFixed(2), 
         initialPosition.y.toFixed(2), 
         initialPosition.z.toFixed(2)

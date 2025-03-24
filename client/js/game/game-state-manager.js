@@ -45,8 +45,20 @@ export class GameStateManager {
     // Physics event
     this.socketManager.on('physics:state-update', this.handlePhysicsStateUpdate.bind(this));
     
+    // New events for spell casting and enemy synchronization
+    this.socketManager.on('remote-spell-cast', this.handleRemoteSpellCast.bind(this));
+    this.socketManager.on('enemy-spawn', this.handleEnemySpawn.bind(this));
+    this.socketManager.on('enemy-update', this.handleEnemyUpdate.bind(this));
+    this.socketManager.on('enemy-death', this.handleEnemyDeath.bind(this));
+    
     // Listen for local player updates to sync with server
     this.eventBus.on('player:local-moved', this.handleLocalPlayerMoved.bind(this));
+    
+    // Listen for local spell casts to sync with server
+    this.eventBus.on('spell:cast', this.handleLocalSpellCast.bind(this));
+    
+    // Listen for local enemy damage to sync with server
+    this.eventBus.on('entity:damage', this.handleLocalEnemyDamage.bind(this));
   }
 
   /**
@@ -225,6 +237,121 @@ export class GameStateManager {
   
   handlePhysicsStateUpdate(data) {
     this.eventBus.emit('physics:sync', data);
+  }
+  
+  /**
+   * Handle remote spell cast event from server
+   * @param {Object} data - Remote spell cast data
+   */
+  handleRemoteSpellCast(data) {
+    const { 
+      playerId, 
+      spellId, 
+      targetPosition, 
+      targetId,
+      cameraPosition,
+      targetDirection
+    } = data;
+    
+    if (playerId === this.localPlayerId) {
+      // Ignore our own spells that come back from the server
+      return;
+    }
+    
+    // Emit event for spell system to handle visualizing the remote spell
+    this.eventBus.emit('spell:remote-cast', {
+      playerId,
+      spellId,
+      targetPosition,
+      targetId,
+      // Pass along camera position and direction for accurate spawning
+      cameraPosition,
+      targetDirection
+    });
+  }
+  
+  /**
+   * Handle enemy spawn event from server
+   * @param {Object} data - Enemy spawn data
+   */
+  handleEnemySpawn(data) {
+    const { enemyId, type, position, health } = data;
+    
+    // Emit event for enemy manager to create the enemy
+    this.eventBus.emit('enemy:spawn', {
+      id: enemyId,
+      type,
+      position,
+      health,
+      isNetworked: true // Flag to indicate this is a network-spawned enemy
+    });
+  }
+  
+  /**
+   * Handle enemy update event from server
+   * @param {Object} data - Enemy update data
+   */
+  handleEnemyUpdate(data) {
+    const { enemyId, position, health, state } = data;
+    
+    // Emit event for enemy manager to update the enemy
+    this.eventBus.emit('enemy:update', {
+      id: enemyId,
+      position,
+      health,
+      state,
+      isNetworked: true
+    });
+  }
+  
+  /**
+   * Handle enemy death event from server
+   * @param {Object} data - Enemy death data
+   */
+  handleEnemyDeath(data) {
+    const { enemyId, killerPlayerId } = data;
+    
+    // Emit event for enemy manager to handle the death
+    this.eventBus.emit('enemy:death', {
+      id: enemyId,
+      killerPlayerId,
+      isNetworked: true
+    });
+  }
+  
+  /**
+   * Handle local spell cast to sync with server
+   * @param {Object} data - Spell cast data
+   */
+  handleLocalSpellCast(data) {
+    if (this.localPlayerId && this.currentRoom) {
+      const { spellId, targetPosition, targetId } = data;
+      
+      // Send spell cast to server
+      this.socketManager.emit('spell-cast', {
+        spellId,
+        targetPosition,
+        targetId
+      });
+    }
+  }
+  
+  /**
+   * Handle local enemy damage to sync with server
+   * @param {Object} data - Damage data
+   */
+  handleLocalEnemyDamage(data) {
+    if (this.localPlayerId && this.currentRoom && data.isEnemy) {
+      const { id, amount, damageType, sourceId } = data;
+      
+      // Send damage to server
+      this.socketManager.emit('enemy-damage', {
+        enemyId: id,
+        damage: amount,
+        sourceType: damageType,
+        sourceId
+      });
+    }
   }
   
   /**

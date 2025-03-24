@@ -45,6 +45,9 @@ export class BlackHoleSpell extends Spell {
   castBlackHole(context) {
     console.log('Casting black hole spell');
     
+    // Check if this is a remote cast
+    const isRemote = context?.isRemote;
+    
     // For logging
     if (context.scene) {
       console.log('Using scene:', context.scene.type);
@@ -70,13 +73,25 @@ export class BlackHoleSpell extends Spell {
       eventBus: this.eventBus // Make sure to pass the event bus to the effect
     };
     
+    // If this is a remote cast, use the provided target position
+    if (isRemote && context.targetPosition) {
+      // Override the default camera-based positioning for remote casts
+      console.log('Using remote target position for black hole:', context.targetPosition);
+      effectContext.fixedPosition = new THREE.Vector3(
+        context.targetPosition.x,
+        context.targetPosition.y,
+        context.targetPosition.z
+      );
+    }
+    
     // Create black hole effect as a static object in the world
     const blackHoleEffect = SpellEffects.createBlackHole(effectContext, {
       duration: this.duration,
       strength: this.strength,
       radius: 0.5, // Visual size of black hole
       effectRadius: this.effectRadius, // Range of gravitational effect
-      damagePerSecond: 2 // Damage enemies at a rate of 2 HP per second if caught in the effect
+      damagePerSecond: 2, // Damage enemies at a rate of 2 HP per second if caught in the effect
+      isRemote: isRemote // Pass along remote flag
     });
     
     // Store reference to active effect
@@ -95,20 +110,25 @@ export class BlackHoleSpell extends Spell {
       console.log('Black hole created successfully');
       
       // Notify user about the black hole creation with some visual feedback
-      this.eventBus.emit('notification:show', {
-        message: 'Singularity created!',
-        duration: 2000,
-        type: 'spell'
-      });
+      // Only show notification for local casts
+      if (!isRemote) {
+        this.eventBus.emit('notification:show', {
+          message: 'Singularity created!',
+          duration: 2000,
+          type: 'spell'
+        });
+      }
     } else {
       console.error('Failed to create black hole effect');
     }
     
-    // Play sound effect
-    this.eventBus.emit('audio:play', { 
-      sound: 'blackHole', 
-      volume: 0.8
-    });
+    // Play sound effect (only for local casts)
+    if (!isRemote) {
+      this.eventBus.emit('audio:play', { 
+        sound: 'blackHole', 
+        volume: 0.8
+      });
+    }
   }
   
   /**

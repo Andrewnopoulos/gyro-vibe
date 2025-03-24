@@ -33,6 +33,11 @@ export class EnemyManager {
     
     // Listen for spell damage events
     this.eventBus.on('spell:hit', this.handleSpellHit.bind(this));
+    
+    // Network synchronization events
+    this.eventBus.on('enemy:spawn', this.handleEnemySpawn.bind(this));
+    this.eventBus.on('enemy:update', this.handleEnemyUpdate.bind(this));
+    this.eventBus.on('enemy:death', this.handleEnemyDeath.bind(this));
   }
   
   /**
@@ -176,5 +181,113 @@ export class EnemyManager {
    */
   getEnemyCount() {
     return this.enemies.size;
+  }
+  
+  /**
+   * Handle networked enemy spawn event
+   * @param {Object} data - Enemy spawn data
+   */
+  handleEnemySpawn(data) {
+    const { id, type, position, health, isNetworked } = data;
+    
+    // Check if we already have this enemy (prevent duplicates)
+    if (this.enemies.has(id)) {
+      console.log(`Enemy with ID ${id} already exists, updating instead of spawning`);
+      this.handleEnemyUpdate({
+        id,
+        position,
+        health,
+        isNetworked
+      });
+      return;
+    }
+    
+    // Spawn appropriate enemy type
+    if (type === 'training-dummy' || !type) {
+      const dummy = this.spawnTrainingDummy(position);
+      
+      // If this is a networked enemy, override the generated ID with the network ID
+      if (isNetworked) {
+        // Remove the original entry
+        this.enemies.delete(dummy.id);
+        
+        // Update the enemy's ID to match the network ID
+        dummy.id = id;
+        
+        // Re-add with the network ID
+        this.enemies.set(id, dummy);
+        
+        // Update health if provided
+        if (health !== undefined) {
+          dummy.setHealth(health);
+        }
+        
+        console.log(`Spawned networked training dummy with ID ${id} at position`, position);
+      }
+    } else {
+      console.warn(`Unknown enemy type: ${type} - cannot spawn`);
+    }
+  }
+  
+  /**
+   * Handle networked enemy update event
+   * @param {Object} data - Enemy update data
+   */
+  handleEnemyUpdate(data) {
+    const { id, position, health, state, isNetworked } = data;
+    
+    // Only process networked updates
+    if (!isNetworked) return;
+    
+    const enemy = this.enemies.get(id);
+    if (!enemy) {
+      console.warn(`Received update for non-existent enemy: ${id}`);
+      // If we get an update for an enemy we don't have, spawn it
+      this.handleEnemySpawn({
+        id,
+        type: 'training-dummy', // Default type
+        position,
+        health,
+        isNetworked: true
+      });
+      return;
+    }
+    
+    // Update position if provided
+    if (position) {
+      enemy.setPosition(position);
+    }
+    
+    // Update health if provided
+    if (health !== undefined) {
+      enemy.setHealth(health);
+    }
+    
+    // Update state if provided
+    if (state) {
+      enemy.setState(state);
+    }
+  }
+  
+  /**
+   * Handle networked enemy death event
+   * @param {Object} data - Enemy death data
+   */
+  handleEnemyDeath(data) {
+    const { id, killerPlayerId, isNetworked } = data;
+    
+    // Only process networked deaths
+    if (!isNetworked) return;
+    
+    const enemy = this.enemies.get(id);
+    if (!enemy) {
+      console.warn(`Received death for non-existent enemy: ${id}`);
+      return;
+    }
+    
+    console.log(`Enemy ${id} killed by player ${killerPlayerId}`);
+    
+    // Trigger death animation and cleanup
+    enemy.die();
   }
 }

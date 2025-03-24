@@ -90,6 +90,19 @@ export class StatusDisplay {
       this.showNotification(`Player left the room`, 'info');
     });
     
+    // Remote spell casting notifications
+    this.eventBus.on('ui:remote-spell-cast', (data) => {
+      const { playerId, spellName } = data;
+      this.showNotification(`Player cast ${spellName || 'a spell'}`, 'spell');
+    });
+    
+    // Enemy events
+    this.eventBus.on('enemy:death', (data) => {
+      if (data.killerPlayerId && data.isNetworked) {
+        this.showNotification(`Enemy defeated by another player!`, 'success');
+      }
+    });
+    
     // Set up calibration button
     if (this.calibrateBtn) {
       this.calibrateBtn.addEventListener('click', () => {
@@ -199,6 +212,8 @@ export class StatusDisplay {
       notification.style.backgroundColor = 'rgba(23, 162, 184, 0.9)';
     } else if (type === 'error') {
       notification.style.backgroundColor = 'rgba(220, 53, 69, 0.9)';
+    } else if (type === 'spell') {
+      notification.style.backgroundColor = 'rgba(138, 43, 226, 0.9)'; // Purple for spell casts
     } else {
       notification.style.backgroundColor = 'rgba(108, 117, 125, 0.9)';
     }

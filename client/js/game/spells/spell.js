@@ -53,20 +53,81 @@ export class Spell {
   /**
    * Cast the spell
    * @param {Object} context - Context for spell casting (camera, scene, etc.)
+   * @param {boolean} [isRemote=false] - Whether this is a remote cast (from another player)
    * @returns {boolean} Whether casting was successful
    */
-  cast(context) {
-    if (!this.isReady()) {
+  cast(context, isRemote = false) {
+    if (!isRemote && !this.isReady()) {
       return false;
     }
     
-    // Record cast time for cooldown
-    this.lastCastTime = Date.now();
+    // Record cast time for cooldown (only for local casts)
+    if (!isRemote) {
+      this.lastCastTime = Date.now();
+    }
     
     // Execute the spell effect
     this.effect(context);
     
+    // Emit event for multiplayer synchronization (only for local casts)
+    if (!isRemote && context.eventBus) {
+      // Get camera position (for spawn point)
+      let cameraPosition = null;
+      if (context.camera) {
+        cameraPosition = {
+          x: context.camera.position.x,
+          y: context.camera.position.y,
+          z: context.camera.position.z
+        };
+      }
+      
+      // Get camera direction (for object trajectory)
+      let cameraDirection = null;
+      if (context.camera && context.camera.getWorldDirection) {
+        const dir = new THREE.Vector3();
+        context.camera.getWorldDirection(dir);
+        cameraDirection = {
+          x: dir.x,
+          y: dir.y,
+          z: dir.z
+        };
+      }
+      
+      // Determine target position and optional target ID
+      const targetPosition = context.targetPosition || cameraPosition;
+      
+      const targetId = context.targetId || null;
+      
+      context.eventBus.emit('spell:cast', {
+        spellId: this.id,
+        targetPosition,
+        targetId,
+        cameraPosition, // Include camera position
+        targetDirection: cameraDirection // Include camera direction for orientation
+      });
+    }
+    
     return true;
+  }
+  
+  /**
+   * Handle a remote cast of this spell (from another player)
+   * @param {Object} data - Remote cast data
+   * @param {Object} context - Context for spell casting
+   * @returns {boolean} Whether remote casting was successful
+   */
+  remotecast(data, context) {
+    // Create a modified context that includes the remote player's data
+    const remoteContext = {
+      ...context,
+      isRemote: true,
+      playerId: data.playerId,
+      targetPosition: data.targetPosition,
+      targetId: data.targetId
+    };
+    
+    // Call the normal cast method but with remote flag
+    return this.cast(remoteContext, true);
   }
   
   /**

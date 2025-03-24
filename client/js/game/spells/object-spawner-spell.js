@@ -82,16 +82,21 @@ export class ObjectSpawnerSpell extends Spell {
     this.channelContext = context;
     
     // Spawn the initial small object
-    this.spawnChanneledObject(0); // 0 = starting size
+    // If this is a remote cast, use the remote position data
+    this.spawnChanneledObject(0, context.isRemote, context); // 0 = starting size
     
-    // Play start channeling sound
-    this.eventBus.emit('audio:play', { 
-      sound: 'spawnObject', 
-      volume: 0.5
-    });
+    // Play start channeling sound (only for local casts)
+    if (!context.isRemote) {
+      this.eventBus.emit('audio:play', { 
+        sound: 'spawnObject', 
+        volume: 0.5
+      });
+    }
     
-    // Create visual feedback on spellbook
-    this.createChannelingVisual(context);
+    // Create visual feedback on spellbook (only for local casts)
+    if (!context.isRemote) {
+      this.createChannelingVisual(context);
+    }
     
     // Set timeout to auto-finish channeling after max duration
     this.channelTimeout = setTimeout(() => {
@@ -291,19 +296,38 @@ export class ObjectSpawnerSpell extends Spell {
         x: 0, y: 0, z: 0
       };
       
-      // Get camera direction for launch
-      let cameraDirection;
-      this.eventBus.emit('camera:get-direction', (direction) => {
-        cameraDirection = direction;
-      });
+      // Check if this is a remote cast
+      const isRemote = this.channelContext?.isRemote;
+      let launchDirection;
       
-      if (cameraDirection) {
+      if (isRemote && this.channelContext?.targetPosition) {
+        // For remote casts, use a direction based on the remote target position
+        // This is an approximation since we don't have the exact remote direction
+        if (this.channelContext.targetDirection) {
+          // If direction was provided in remote cast data
+          launchDirection = new THREE.Vector3(
+            this.channelContext.targetDirection.x,
+            this.channelContext.targetDirection.y,
+            this.channelContext.targetDirection.z
+          ).normalize();
+        } else {
+          // Fallback - use forward direction relative to target position
+          launchDirection = new THREE.Vector3(0, 0, -1);
+        }
+      } else {
+        // For local casts, use the local camera direction
+        this.eventBus.emit('camera:get-direction', (direction) => {
+          launchDirection = direction;
+        });
+      }
+      
+      if (launchDirection) {
         // Launch power based on channel time
         const launchPower = 1 + (finalProgress * 5);
         velocity = {
-          x: cameraDirection.x * launchPower,
-          y: cameraDirection.y * launchPower + 2, // Add upward motion
-          z: cameraDirection.z * launchPower
+          x: launchDirection.x * launchPower,
+          y: launchDirection.y * launchPower + 2, // Add upward motion
+          z: launchDirection.z * launchPower
         };
       }
       
@@ -317,35 +341,42 @@ export class ObjectSpawnerSpell extends Spell {
         }
       });
       
-      // Play release sound, louder for bigger objects
-      this.eventBus.emit('audio:play', { 
-        sound: 'objectRelease', 
-        volume: 0.6 + (finalProgress * 0.4),
-        pitch: 1.0 - (finalProgress * 0.3) // Lower pitch for bigger objects
-      });
+      // Play release sound, louder for bigger objects (only for local casts)
+      if (!isRemote) {
+        this.eventBus.emit('audio:play', { 
+          sound: 'objectRelease', 
+          volume: 0.6 + (finalProgress * 0.4),
+          pitch: 1.0 - (finalProgress * 0.3) // Lower pitch for bigger objects
+        });
+      }
       
-      // Check if the released object hits any enemies
-      // Larger objects do more damage
-      const damage = Math.floor(2 + finalProgress * 3); // 2-5 damage based on object size
-      
-      // Use a raycaster in the direction of launch to check for enemy hits
-      const camera = this.channelContext?.camera;
-      if (camera && this.channelContext?.scene) {
-        const raycaster = new THREE.Raycaster();
-        raycaster.set(camera.position, cameraDirection);
-        raycaster.camera = camera; // Set camera for proper sprite raycasting
+      // Check if the released object hits any enemies (only for local casts)
+      // We'll let the physics system handle remote cast collisions instead
+      if (!isRemote) {
+        // Larger objects do more damage
+        const damage = Math.floor(2 + finalProgress * 3); // 2-5 damage based on object size
         
-        // Check for enemy hit - add a timeout to give object time to travel
-        setTimeout(() => {
-          if (this.channelContext && this.channelContext.scene) {
-            this.checkEnemyHit(raycaster, this.channelContext.scene, this.eventBus, damage);
-          }
-        }, 100);
+        // Use a raycaster in the direction of launch to check for enemy hits
+        const camera = this.channelContext?.camera;
+        if (camera && this.channelContext?.scene) {
+          const raycaster = new THREE.Raycaster();
+          raycaster.set(camera.position, launchDirection);
+          raycaster.camera = camera; // Set camera for proper sprite raycasting
+          
+          // Check for enemy hit - add a timeout to give object time to travel
+          setTimeout(() => {
+            if (this.channelContext && this.channelContext.scene) {
+              this.checkEnemyHit(raycaster, this.channelContext.scene, this.eventBus, damage);
+            }
+          }, 100);
+        }
       }
     }
     
-    // Remove visual effects from spellbook
-    this.removeChannelingVisuals();
+    // Remove visual effects from spellbook (only for local casts)
+    if (!this.channelContext?.isRemote) {
+      this.removeChannelingVisuals();
+    }
     
     // Clear references
     this.channelObjectId = null;
@@ -415,32 +446,47 @@ export class ObjectSpawnerSpell extends Spell {
   /**
    * Spawn a channeled object at the given scale
    * @param {number} channelProgress - Progress of channeling (0-1)
+   * @param {boolean} isRemote - Whether this is a remote cast
+   * @param {Object} context - Casting context with remote data if applicable
    */
-  spawnChanneledObject(channelProgress) {
-    // Get camera position and direction from the main scene camera
-    let cameraPosition, cameraDirection;
+  spawnChanneledObject(channelProgress, isRemote = false, context = null) {
+    let spawnPosition;
     
-    this.eventBus.emit('camera:get-position', (position) => {
-      cameraPosition = position;
-    });
-    
-    this.eventBus.emit('camera:get-direction', (direction) => {
-      cameraDirection = direction;
-    });
-    
-    if (!cameraPosition || !cameraDirection) {
-      console.error('Failed to get camera position/direction for object spawning');
-      return;
+    if (isRemote && context && context.targetPosition) {
+      // For remote casts, use the position data sent from the original caster
+      spawnPosition = new THREE.Vector3(
+        context.targetPosition.x,
+        context.targetPosition.y,
+        context.targetPosition.z
+      );
+      
+      console.log('Using remote target position for object spawning:', spawnPosition);
+    } else {
+      // For local casts, use local camera position and direction
+      let cameraPosition, cameraDirection;
+      
+      this.eventBus.emit('camera:get-position', (position) => {
+        cameraPosition = position;
+      });
+      
+      this.eventBus.emit('camera:get-direction', (direction) => {
+        cameraDirection = direction;
+      });
+      
+      if (!cameraPosition || !cameraDirection) {
+        console.error('Failed to get camera position/direction for object spawning');
+        return;
+      }
+      
+      // Spawn position closer to player during channeling
+      const distance = 1.2 + (channelProgress * 0.3);
+      spawnPosition = cameraPosition.clone().add(
+        cameraDirection.clone().multiplyScalar(distance)
+      );
+      
+      // Positioned higher to better interact with black hole
+      spawnPosition.y -= 0.3;
     }
-    
-    // Spawn position closer to player during channeling
-    const distance = 1.2 + (channelProgress * 0.3);
-    const spawnPosition = cameraPosition.clone().add(
-      cameraDirection.clone().multiplyScalar(distance)
-    );
-    
-    // Positioned higher to better interact with black hole
-    spawnPosition.y -= 0.3;
     
     // Less random offset during channeling to make it feel more controlled
     spawnPosition.x += (Math.random() - 0.5) * 0.1;
@@ -461,7 +507,11 @@ export class ObjectSpawnerSpell extends Spell {
     objectProps.mass = mass;
     
     // Add unique ID to track this object
-    const objectId = 'channeled_' + Date.now();
+    const objectId = 'channeled_' + Date.now() + (isRemote ? '_remote' : '_local');
+    
+    // Generate a random seed for consistent properties between clients
+    const seed = isRemote && context ? context.playerId : Date.now();
+    objectProps.seed = seed;
     
     // Command physics system to create the object with minimal initial velocity
     this.eventBus.emit('physics:spawn-object', {
@@ -482,7 +532,8 @@ export class ObjectSpawnerSpell extends Spell {
       visualEffect: {
         type: 'channeling',
         intensity: 0.2
-      }
+      },
+      isRemote: isRemote // Flag to indicate this is a remote object
     });
     
     // Store reference to this object
@@ -494,30 +545,60 @@ export class ObjectSpawnerSpell extends Spell {
    * @param {Object} context - Casting context with camera, scene, etc.
    */
   spawnObject(context) {
-    // Get camera position and direction from the main scene camera
-    let cameraPosition, cameraDirection;
+    // Check if this is a remote cast
+    const isRemote = context?.isRemote;
+    let spawnPosition, direction;
     
-    this.eventBus.emit('camera:get-position', (position) => {
-      cameraPosition = position;
-    });
-    
-    this.eventBus.emit('camera:get-direction', (direction) => {
-      cameraDirection = direction;
-    });
-    
-    if (!cameraPosition || !cameraDirection) {
-      console.error('Failed to get camera position/direction for object spawning');
-      return;
+    if (isRemote && context?.targetPosition) {
+      // For remote casts, use the position data from the original caster
+      spawnPosition = new THREE.Vector3(
+        context.targetPosition.x,
+        context.targetPosition.y,
+        context.targetPosition.z
+      );
+      
+      console.log('Using remote target position for non-channeled object spawning:', spawnPosition);
+      
+      // Direction is either provided in the remote data or we use a default
+      if (context.targetDirection) {
+        direction = new THREE.Vector3(
+          context.targetDirection.x,
+          context.targetDirection.y,
+          context.targetDirection.z
+        ).normalize();
+      } else {
+        // Default direction if not provided
+        direction = new THREE.Vector3(0, 0, -1);
+      }
+    } else {
+      // For local casts, use the local camera position and direction
+      let cameraPosition, cameraDirection;
+      
+      this.eventBus.emit('camera:get-position', (position) => {
+        cameraPosition = position;
+      });
+      
+      this.eventBus.emit('camera:get-direction', (direction) => {
+        cameraDirection = direction;
+      });
+      
+      if (!cameraPosition || !cameraDirection) {
+        console.error('Failed to get camera position/direction for object spawning');
+        return;
+      }
+      
+      // Adjust spawn position to be high above player for better black hole interaction
+      // Spawn position 1.5-2.5 meters in front of the camera, but much higher
+      const distance = 1.5 + Math.random();
+      spawnPosition = cameraPosition.clone().add(
+        cameraDirection.clone().multiplyScalar(distance)
+      );
+      
+      // Store direction for velocity
+      direction = cameraDirection;
     }
     
-    // Adjust spawn position to be high above player for better black hole interaction
-    // Spawn position 1.5-2.5 meters in front of the camera, but much higher
-    const distance = 1.5 + Math.random();
-    const spawnPosition = cameraPosition.clone().add(
-      cameraDirection.clone().multiplyScalar(distance)
-    );
-    
-    // Positioned much higher to better interact with black hole
+    // Positioned lower to better interact with black hole
     spawnPosition.y -= 0.3;
     
     // Add some random offset to prevent objects spawning exactly on top of each other
@@ -528,27 +609,38 @@ export class ObjectSpawnerSpell extends Spell {
     // Generate random properties for the object
     const randomObject = this.generateRandomObjectProps();
     
+    // Generate a consistent seed for properties between clients
+    const seed = isRemote && context ? context.playerId : Date.now();
+    randomObject.seed = seed;
+    
+    // Create a unique ID for the spawned object
+    const objectId = 'spawned_' + Date.now() + (isRemote ? '_remote' : '_local');
+    
     // Command physics system to create the object
     this.eventBus.emit('physics:spawn-object', {
       ...randomObject,
+      id: objectId,
       position: {
         x: spawnPosition.x,
         y: spawnPosition.y,
         z: spawnPosition.z
       },
-      // Add initial velocity to push object away from player
+      // Add initial velocity to push object away from spawn point
       velocity: {
-        x: cameraDirection.x * 2,
-        y: cameraDirection.y * 2 + 1, // Add slight upward motion
-        z: cameraDirection.z * 2
-      }
+        x: direction.x * 2,
+        y: direction.y * 2 + 1, // Add slight upward motion
+        z: direction.z * 2
+      },
+      isRemote: isRemote // Flag to indicate this is a remote object
     });
     
-    // Play sound effect
-    this.eventBus.emit('audio:play', { 
-      sound: 'spawnObject', 
-      volume: 0.7
-    });
+    // Play sound effect (only for local casts)
+    if (!isRemote) {
+      this.eventBus.emit('audio:play', { 
+        sound: 'spawnObject', 
+        volume: 0.7
+      });
+    }
   }
   
   /**
