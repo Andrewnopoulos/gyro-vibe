@@ -7,10 +7,8 @@ const path = require('path');
 const os = require('os');
 const { v4: uuidv4 } = require('uuid');
 
-// Check if running on Railway
 const isRailway = !!process.env.RAILWAY_ENVIRONMENT;
 
-// Get local IP address (only used for local development)
 function getLocalIpAddress() {
   const interfaces = os.networkInterfaces();
   for (const name of Object.keys(interfaces)) {
@@ -25,26 +23,20 @@ function getLocalIpAddress() {
 
 const LOCAL_IP = getLocalIpAddress();
 
-// The public URL of the application (for Railway)
 const PUBLIC_URL = isRailway ? 'gyro-vibe-production.up.railway.app' : LOCAL_IP;
 
-// Express app setup
 const app = express();
 
-// HTTP Server
 const httpServer = http.createServer(app);
 
-// HTTPS Server (for mobile sensor access)
 let httpsServer;
 let httpsAvailable = false;
 
 try {
-  // Load SSL certificates
   const privateKey = fs.readFileSync(path.join(__dirname, 'certificates/key.pem'), 'utf8');
   const certificate = fs.readFileSync(path.join(__dirname, 'certificates/cert.pem'), 'utf8');
   const credentials = { key: privateKey, cert: certificate };
   
-  // Create HTTPS server
   httpsServer = https.createServer(credentials, app);
   httpsAvailable = true;
 } catch (err) {
@@ -52,8 +44,6 @@ try {
   console.log('Running in HTTP mode only (sensors might not work on mobile devices)');
 }
 
-// Socket.IO setup - now used for signaling only
-// Create io instance with common configuration
 const io = new Server({ 
   cors: {
     origin: "*",
@@ -61,20 +51,17 @@ const io = new Server({
   }
 });
 
-// Attach to appropriate servers
 io.attach(httpServer);
 if (!isRailway && httpsAvailable) {
   io.attach(httpsServer);
 }
 
-// Store active clients for WebRTC signaling
 const desktopClients = new Map();
 const mobileClients = new Map();
 
-// Multiplayer game state
 const gameRooms = new Map();
 const MAX_PLAYERS_PER_ROOM = 8;
-const GAME_STATE_BROADCAST_INTERVAL = 50; // 20Hz update rate
+const GAME_STATE_BROADCAST_INTERVAL = 50;
 
 // Middleware setup
 

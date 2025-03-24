@@ -1,26 +1,15 @@
 import * as THREE from 'three';
 import { Spell } from './spell.js';
 
-/**
- * LaserBeamSpell - A powerful white laser beam that damages enemies in its path
- * The player can charge it up via channeling, similar to the object spawner
- * The laser is only fired once the channeling is released
- */
 export class LaserBeamSpell extends Spell {
-  /**
-   * @param {Object} options - Spell configuration options
-   * @param {EventBus} options.eventBus - Event bus for communication
-   * @param {number} options.page - Page number in the spellbook
-   * @param {number} [options.cooldown=0] - Cooldown time in seconds (no cooldown by default)
-   */
   constructor(options) {
     super({
       id: 'laserBeam',
       name: 'Zoltraak',
-      shape: 'space', // This is triggered by space bar similar to object spawner
+      shape: 'space',
       description: 'Channel a powerful energy beam that damages all enemies in its path. Hold longer to increase the beam\'s thickness and damage.',
       page: options.page,
-      cooldown: options.cooldown || 0, // No cooldown as requested
+      cooldown: options.cooldown || 0,
       visualOptions: {
         strokeColor: '#FFFFFF',
         lineWidth: 3
@@ -30,68 +19,46 @@ export class LaserBeamSpell extends Spell {
 
     this.eventBus = options.eventBus;
     
-    // Channeling state
     this.isChanneling = false;
     this.channelStartTime = 0;
-    this.channelMaxDuration = 3; // Max channeling duration in seconds
-    this.laserDuration = 0.5; // Increased from 0.3 to 0.5 seconds
+    this.channelMaxDuration = 3;
+    this.laserDuration = 0.5;
     this.laserActive = false;
     
-    // Bind the keyup handler to this instance for proper cleanup
     this.keyUpHandler = this.handleKeyUp.bind(this);
     
-    // Listen for keyup to detect when space is released
     this.setupEventListeners();
   }
 
-  /**
-   * Set up event listeners for space key release
-   */
   setupEventListeners() {
-    // Listen for space bar release
     document.addEventListener('keyup', this.keyUpHandler);
     
-    // Set up update loop for channeling
     this.updateInterval = setInterval(() => {
       if (this.isChanneling) {
         this.updateChannelingVisuals();
       }
-    }, 50); // Update every 50ms
+    }, 50);
   }
   
-  /**
-   * Handle key up event
-   * @param {KeyboardEvent} event - The keyboard event
-   */
   handleKeyUp(event) {
     if (event.code === 'Space' && this.isChanneling) {
       this.fireLaser();
     }
   }
   
-  /**
-   * Start the channeling process for the spell
-   * @param {Object} context - Casting context with camera, scene, etc.
-   */
   startChanneling(context) {
     if (this.isChanneling || this.laserActive) {
       return; // Already channeling or laser is active
     }
     
-    // Check if this is a remote cast
     const isRemote = context?.isRemote;
     
     this.isChanneling = true;
     this.channelStartTime = Date.now();
     this.channelContext = context;
     
-    console.log('Laser beam starting channeling with context:', 
-      context.gravityGunController ? 'GravityGunController available' : 'No GravityGunController',
-      isRemote ? '(REMOTE CAST)' : '(LOCAL CAST)');
     
-    // For LOCAL casts, immediately emit a starting event with accurate position data
     if (!isRemote) {
-      // Get accurate camera position and direction
       let cameraPosition = null;
       let cameraDirection = null;
       
@@ -115,11 +82,6 @@ export class LaserBeamSpell extends Spell {
         }
       });
       
-      // Log and emit the starting cast event with accurate position
-      console.log("Sending initial spell cast with position data:", 
-        cameraPosition ? `Camera: (${cameraPosition.x.toFixed(2)}, ${cameraPosition.y.toFixed(2)}, ${cameraPosition.z.toFixed(2)})` : "No camera position",
-        cameraDirection ? `Direction: (${cameraDirection.x.toFixed(2)}, ${cameraDirection.y.toFixed(2)}, ${cameraDirection.z.toFixed(2)})` : "No direction"
-      );
       
       this.eventBus.emit('spell:cast', {
         spellId: this.id,
@@ -127,22 +89,17 @@ export class LaserBeamSpell extends Spell {
         targetId: context.targetId || null,
         cameraPosition,
         targetDirection: cameraDirection,
-        // Initial cast has no channel data yet
         initialCast: true
       });
       
-      // Play start channeling sound
       this.eventBus.emit('audio:play', { 
-        sound: 'spawnObject', // Reuse existing sound as placeholder
+        sound: 'spawnObject',
         volume: 0.5
       });
       
-      // Create visual feedback on spellbook
       this.createChannelingVisual(context);
     }
     
-    // In multiplayer, we'll use a different approach
-    // For local casts, set timeout to auto-fire after max duration
     this.channelTimeout = setTimeout(() => {
       if (this.isChanneling) {
         this.fireLaser();

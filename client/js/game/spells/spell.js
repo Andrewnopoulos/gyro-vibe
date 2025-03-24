@@ -1,20 +1,6 @@
 import * as THREE from 'three';
 
-/**
- * Base class for all spells
- */
 export class Spell {
-  /**
-   * @param {Object} options - Spell configuration options
-   * @param {string} options.id - Unique identifier for the spell
-   * @param {string} options.name - Display name of the spell
-   * @param {string} options.shape - Shape required to cast this spell (circle, triangle, etc.)
-   * @param {string} options.description - Description of what the spell does
-   * @param {number} options.page - Page number in the spellbook
-   * @param {Function} options.effect - Function to execute when spell is cast
-   * @param {Object} [options.visualOptions] - Options for visual representation
-   * @param {string} [options.icon] - Icon identifier for the spell
-   */
   constructor(options) {
     this.id = options.id;
     this.name = options.name;
@@ -24,14 +10,10 @@ export class Spell {
     this.effect = options.effect || (() => console.log(`Spell ${this.name} cast but no effect implemented`));
     this.visualOptions = options.visualOptions || {};
     this.icon = options.icon;
-    this.cooldown = options.cooldown || 0; // Cooldown in seconds
-    this.lastCastTime = 0; // Timestamp of last cast
+    this.cooldown = options.cooldown || 0;
+    this.lastCastTime = 0;
   }
 
-  /**
-   * Check if spell is ready to cast (not on cooldown)
-   * @returns {boolean} Whether spell can be cast
-   */
   isReady() {
     if (this.cooldown <= 0) return true;
     
@@ -40,10 +22,6 @@ export class Spell {
     return elapsed >= this.cooldown;
   }
 
-  /**
-   * Get cooldown progress (0-1, where 1 is ready)
-   * @returns {number} Cooldown progress
-   */
   getCooldownProgress() {
     if (this.cooldown <= 0) return 1;
     
@@ -52,28 +30,18 @@ export class Spell {
     return Math.min(1, elapsed / this.cooldown);
   }
 
-  /**
-   * Cast the spell
-   * @param {Object} context - Context for spell casting (camera, scene, etc.)
-   * @param {boolean} [isRemote=false] - Whether this is a remote cast (from another player)
-   * @returns {boolean} Whether casting was successful
-   */
   cast(context, isRemote = false) {
     if (!isRemote && !this.isReady()) {
       return false;
     }
     
-    // Record cast time for cooldown (only for local casts)
     if (!isRemote) {
       this.lastCastTime = Date.now();
     }
     
-    // Execute the spell effect
     this.effect(context);
     
-    // Emit event for multiplayer synchronization (only for local casts)
     if (!isRemote && context.eventBus) {
-      // Get camera position (for spawn point)
       let cameraPosition = null;
       if (context.camera) {
         cameraPosition = {
@@ -83,7 +51,6 @@ export class Spell {
         };
       }
       
-      // Get camera direction (for object trajectory)
       let cameraDirection = null;
       if (context.camera && context.camera.getWorldDirection) {
         const dir = new THREE.Vector3();
@@ -95,7 +62,6 @@ export class Spell {
         };
       }
       
-      // Determine target position and optional target ID
       const targetPosition = context.targetPosition || cameraPosition;
       
       const targetId = context.targetId || null;
