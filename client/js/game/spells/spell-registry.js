@@ -193,13 +193,49 @@ export class SpellRegistry {
    * @param {Object} data - Remote spell cast data
    */
   handleRemoteSpellCast(data) {
-    const { playerId, spellId, targetPosition, targetId, channelData } = data;
+    const { playerId, spellId, targetPosition, targetId, cameraPosition, targetDirection, channelData, initialCast } = data;
     
     // Get the spell by ID
     const spell = this.getSpellById(spellId);
     if (!spell) {
       console.error(`Received remote cast for unknown spell: ${spellId}`);
       return;
+    }
+    
+    // Find remote player model if available
+    let remotePlayerModel = null;
+    this.eventBus.emit('multiplayer:get-player', playerId, (player) => {
+      remotePlayerModel = player;
+    });
+    
+    // Get accurate player position and direction data if not provided in the event
+    let accuratePosition = cameraPosition;
+    let accurateDirection = targetDirection;
+    
+    if (!accuratePosition || !accurateDirection) {
+      // Try to get position from GameStateManager
+      this.eventBus.emit('multiplayer:get-player-position', playerId, (position) => {
+        if (position) {
+          accuratePosition = {
+            x: position.x,
+            y: position.y,
+            z: position.z
+          };
+          console.log(`Got player position from GameStateManager: (${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)})`);
+        }
+      });
+      
+      // Try to get direction from GameStateManager
+      this.eventBus.emit('multiplayer:get-player-direction', playerId, (direction) => {
+        if (direction) {
+          accurateDirection = {
+            x: direction.x,
+            y: direction.y,
+            z: direction.z
+          };
+          console.log(`Got player direction from GameStateManager: (${direction.x.toFixed(2)}, ${direction.y.toFixed(2)}, ${direction.z.toFixed(2)})`);
+        }
+      });
     }
     
     // Create context with the required information
@@ -213,6 +249,15 @@ export class SpellRegistry {
       camera: this.getMainCamera(),
       // Mark as a remote cast
       isRemote: true,
+      // Include the remote player's ID and model information
+      remotePlayerId: playerId,
+      remotePlayerModel: remotePlayerModel,
+      // Add camera position and direction from remote player for accurate positioning
+      // Prioritize network-provided data, then fall back to GameStateManager data
+      cameraPosition: accuratePosition,
+      targetDirection: accurateDirection,
+      // Flag whether this is an initial cast or update
+      initialCast: initialCast,
       // Other context properties will be added by the specific spell implementation
     };
     
@@ -237,7 +282,7 @@ export class SpellRegistry {
     
     // Trigger the remote spell cast
     console.log(`Remote spell cast: ${spell.name} by player ${playerId}`, 
-      channelData ? `with channel data: ${JSON.stringify(channelData)}` : '');
+      initialCast ? '(initial cast)' : (channelData ? `with channel data: ${JSON.stringify(channelData)}` : ''));
     spell.remotecast(data, context);
     
     // Emit an event for UI feedback

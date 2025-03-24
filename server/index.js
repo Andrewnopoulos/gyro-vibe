@@ -688,10 +688,23 @@ io.on('connection', (socket) => {
     const room = gameRooms.get(currentRoomId);
     if (!room) return;
     
-    const { spellId, targetPosition, targetId, cameraPosition, targetDirection, channelData } = data;
+    const { spellId, targetPosition, targetId, cameraPosition, targetDirection, channelData, initialCast } = data;
     
     // Basic validation
     if (!spellId) return;
+    
+    // Enhance logging to help troubleshoot positioning issues
+    const posInfo = cameraPosition ? 
+      `[${cameraPosition.x.toFixed(2)}, ${cameraPosition.y.toFixed(2)}, ${cameraPosition.z.toFixed(2)}]` : 'no position';
+      
+    if (initialCast) {
+      console.log(`Initial spell cast: ${spellId} by Player ${socket.id} at ${posInfo}`);
+    } else if (channelData) {
+      console.log(`Channeled spell cast: ${spellId} by Player ${socket.id} with progress ${channelData.channelProgress?.toFixed(2)}`);
+    }
+    
+    // Get player's data for reliable position information
+    const player = room.players.get(socket.id);
     
     // Broadcast the spell cast to all players in the room
     socket.to(currentRoomId).emit('remote-spell-cast', {
@@ -700,10 +713,13 @@ io.on('connection', (socket) => {
       targetPosition,
       targetId,
       // Include camera position and direction for accurate spawning
-      cameraPosition,
+      // If not provided explicitly, use player position from server state
+      cameraPosition: cameraPosition || (player ? player.position : null),
       targetDirection,
       // Include channel data for spells like Zoltraak that need channel progress
-      channelData
+      channelData,
+      // Pass along whether this is the initial cast
+      initialCast: initialCast === true // Ensure this is a boolean
     });
     
     console.log(`Player ${socket.id} cast spell ${spellId} in room ${currentRoomId}`);

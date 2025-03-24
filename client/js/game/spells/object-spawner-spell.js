@@ -123,11 +123,54 @@ export class ObjectSpawnerSpell extends Spell {
     // For normal local casts or remote casts without channel data,
     // proceed with regular channeling
     
+    // For LOCAL casts, immediately emit a starting event with accurate position data
+    if (!isRemote) {
+      // Get accurate camera position and direction
+      let cameraPosition = null;
+      let cameraDirection = null;
+      
+      this.eventBus.emit('camera:get-position', (position) => {
+        if (position) {
+          cameraPosition = {
+            x: position.x,
+            y: position.y,
+            z: position.z
+          };
+        }
+      });
+      
+      this.eventBus.emit('camera:get-direction', (direction) => {
+        if (direction) {
+          cameraDirection = {
+            x: direction.x,
+            y: direction.y,
+            z: direction.z
+          };
+        }
+      });
+      
+      // Emit the starting cast event with accurate position
+      console.log("Sending initial object spawner spell cast with position data:", 
+        cameraPosition ? `Camera: (${cameraPosition.x.toFixed(2)}, ${cameraPosition.y.toFixed(2)}, ${cameraPosition.z.toFixed(2)})` : "No camera position",
+        cameraDirection ? `Direction: (${cameraDirection.x.toFixed(2)}, ${cameraDirection.y.toFixed(2)}, ${cameraDirection.z.toFixed(2)})` : "No direction"
+      );
+      
+      this.eventBus.emit('spell:cast', {
+        spellId: this.id,
+        targetPosition: context.targetPosition || null,
+        targetId: context.targetId || null,
+        cameraPosition,
+        targetDirection: cameraDirection,
+        // Initial cast has no channel data yet
+        initialCast: true
+      });
+    }
+    
     // Spawn the initial small object
-    this.spawnChanneledObject(0, context.isRemote, context); // 0 = starting size
+    this.spawnChanneledObject(0, isRemote, context); // 0 = starting size
     
     // Play start channeling sound (only for local casts)
-    if (!context.isRemote) {
+    if (!isRemote) {
       this.eventBus.emit('audio:play', { 
         sound: 'spawnObject', 
         volume: 0.5
@@ -135,7 +178,7 @@ export class ObjectSpawnerSpell extends Spell {
     }
     
     // Create visual feedback on spellbook (only for local casts)
-    if (!context.isRemote) {
+    if (!isRemote) {
       this.createChannelingVisual(context);
     }
     
@@ -534,16 +577,64 @@ export class ObjectSpawnerSpell extends Spell {
   spawnChanneledObject(channelProgress, isRemote = false, context = null) {
     let spawnPosition;
     
-    if (isRemote && context && context.targetPosition) {
-      // For remote casts, use the position data sent from the original caster
-      spawnPosition = new THREE.Vector3(
-        context.targetPosition.x,
-        context.targetPosition.y,
-        context.targetPosition.z
-      );
+    if (isRemote && context) {
+      // For remote casts, prioritize different position data sources
       
-      console.log('Using remote target position for object spawning:', spawnPosition);
-    } else {
+      // First try to use the explicitly provided camera position from the network event
+      if (context.cameraPosition) {
+        spawnPosition = new THREE.Vector3(
+          context.cameraPosition.x,
+          context.cameraPosition.y,
+          context.cameraPosition.z
+        );
+        console.log('Using network-provided camera position for object spawning:', spawnPosition);
+        
+        // If we have a target direction, offset in that direction
+        if (context.targetDirection) {
+          const dirOffset = new THREE.Vector3(
+            context.targetDirection.x,
+            context.targetDirection.y,
+            context.targetDirection.z
+          ).normalize().multiplyScalar(1.2);
+          
+          spawnPosition.add(dirOffset);
+        }
+      }
+      // Then try to use the target position as fallback
+      else if (context.targetPosition) {
+        spawnPosition = new THREE.Vector3(
+          context.targetPosition.x,
+          context.targetPosition.y,
+          context.targetPosition.z
+        );
+        console.log('Using remote target position for object spawning:', spawnPosition);
+      }
+      // Then try to get position from GameStateManager
+      else if (context.remotePlayerId && this.eventBus) {
+        const remotePlayerId = context.remotePlayerId;
+        
+        // Get position from GameStateManager
+        this.eventBus.emit('multiplayer:get-player-position', remotePlayerId, (position) => {
+          if (position) {
+            spawnPosition = position.clone();
+            console.log(`Got position from GameStateManager for player ${remotePlayerId}:`, spawnPosition);
+            
+            // Try to get direction from GameStateManager to offset properly
+            this.eventBus.emit('multiplayer:get-player-direction', remotePlayerId, (direction) => {
+              if (direction) {
+                // Offset in the direction the player is facing
+                const offset = direction.clone().multiplyScalar(1.2 + (channelProgress * 0.3));
+                spawnPosition.add(offset);
+                console.log(`Using direction from GameStateManager for offset:`, direction);
+              }
+            });
+          }
+        });
+      }
+    }
+    
+    // If we still don't have a position (either local cast or failed to get remote position)
+    if (!spawnPosition) {
       // For local casts, use local camera position and direction
       let cameraPosition, cameraDirection;
       
@@ -566,8 +657,12 @@ export class ObjectSpawnerSpell extends Spell {
         cameraDirection.clone().multiplyScalar(distance)
       );
       
-      // Positioned higher to better interact with black hole
+      // Positioned lower for better interaction with physics
       spawnPosition.y -= 0.3;
+      
+      if (isRemote && context) {
+        console.warn('Falling back to local camera for remote cast due to missing position data');
+      }
     }
     
     // Less random offset during channeling to make it feel more controlled
@@ -631,28 +726,77 @@ export class ObjectSpawnerSpell extends Spell {
     const isRemote = context?.isRemote;
     let spawnPosition, direction;
     
-    if (isRemote && context?.targetPosition) {
-      // For remote casts, use the position data from the original caster
-      spawnPosition = new THREE.Vector3(
-        context.targetPosition.x,
-        context.targetPosition.y,
-        context.targetPosition.z
-      );
+    if (isRemote) {
+      // For remote casts, prioritize different position data sources
       
-      console.log('Using remote target position for non-channeled object spawning:', spawnPosition);
-      
-      // Direction is either provided in the remote data or we use a default
-      if (context.targetDirection) {
-        direction = new THREE.Vector3(
-          context.targetDirection.x,
-          context.targetDirection.y,
-          context.targetDirection.z
-        ).normalize();
-      } else {
-        // Default direction if not provided
-        direction = new THREE.Vector3(0, 0, -1);
+      // First try to use the explicitly provided camera position from the network event
+      if (context.cameraPosition) {
+        spawnPosition = new THREE.Vector3(
+          context.cameraPosition.x,
+          context.cameraPosition.y,
+          context.cameraPosition.z
+        );
+        console.log('Using network-provided camera position for non-channeled object spawning:', spawnPosition);
+        
+        // Direction is provided in the remote data or we'll try to find it later
+        if (context.targetDirection) {
+          direction = new THREE.Vector3(
+            context.targetDirection.x,
+            context.targetDirection.y,
+            context.targetDirection.z
+          ).normalize();
+        }
       }
-    } else {
+      // Then try to use the target position as fallback
+      else if (context.targetPosition) {
+        spawnPosition = new THREE.Vector3(
+          context.targetPosition.x,
+          context.targetPosition.y,
+          context.targetPosition.z
+        );
+        console.log('Using remote target position for non-channeled object spawning:', spawnPosition);
+        
+        // Direction is provided in the remote data or we use a default
+        if (context.targetDirection) {
+          direction = new THREE.Vector3(
+            context.targetDirection.x,
+            context.targetDirection.y,
+            context.targetDirection.z
+          ).normalize();
+        } else {
+          // Default direction if not provided
+          direction = new THREE.Vector3(0, 0, -1);
+        }
+      }
+      // Then try to get position from GameStateManager
+      else if (context.remotePlayerId && this.eventBus) {
+        const remotePlayerId = context.remotePlayerId;
+        
+        // Get position from GameStateManager
+        this.eventBus.emit('multiplayer:get-player-position', remotePlayerId, (position) => {
+          if (position) {
+            spawnPosition = position.clone();
+            console.log(`Got position from GameStateManager for player ${remotePlayerId}:`, spawnPosition);
+            
+            // If we don't have a direction yet, try to get it from GameStateManager
+            if (!direction) {
+              this.eventBus.emit('multiplayer:get-player-direction', remotePlayerId, (playerDirection) => {
+                if (playerDirection) {
+                  direction = playerDirection.clone();
+                  console.log(`Using direction from GameStateManager:`, direction);
+                } else {
+                  // Default direction if not found
+                  direction = new THREE.Vector3(0, 0, -1);
+                }
+              });
+            }
+          }
+        });
+      }
+    }
+    
+    // If we still don't have a position or direction (either local cast or failed to get remote data)
+    if (!spawnPosition || !direction) {
       // For local casts, use the local camera position and direction
       let cameraPosition, cameraDirection;
       
@@ -678,6 +822,10 @@ export class ObjectSpawnerSpell extends Spell {
       
       // Store direction for velocity
       direction = cameraDirection;
+      
+      if (isRemote) {
+        console.warn('Falling back to local camera for remote non-channeled cast due to missing position/direction data');
+      }
     }
     
     // Positioned lower to better interact with black hole

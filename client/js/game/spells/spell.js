@@ -124,29 +124,44 @@ export class Spell {
       ...context,
       isRemote: true,
       playerId: data.playerId,
+      remotePlayerId: data.playerId, // Explicit property for clarity
       targetPosition: data.targetPosition,
       targetId: data.targetId,
       // Add camera position and direction from the remote player
       // for accurate positioning of complex effects
       cameraPosition: data.cameraPosition,
       targetDirection: data.targetDirection,
-      // Pass remote player information to ensure proper spell origin
-      remotePlayerInfo: {
-        id: data.playerId,
-        position: data.cameraPosition,
-        direction: data.targetDirection
-      }
+      // Pass channel data if present
+      channelData: data.channelData,
+      // Pass whether this is an initial cast
+      initialCast: data.initialCast
     };
     
-    // Log the remote cast received
-    console.log(`Remote cast of ${this.name} from player ${data.playerId}`, {
-      targetPosition: data.targetPosition ? 
-        `(${data.targetPosition.x.toFixed(2)}, ${data.targetPosition.y.toFixed(2)}, ${data.targetPosition.z.toFixed(2)})` : 
-        'none',
-      cameraPosition: data.cameraPosition ?
-        `(${data.cameraPosition.x.toFixed(2)}, ${data.cameraPosition.y.toFixed(2)}, ${data.cameraPosition.z.toFixed(2)})` :
-        'none'
-    });
+    // Enhanced debug logging for remote casts, especially on initial cast which is crucial for positioning
+    if (data.initialCast) {
+      console.log(`Initial remote cast of ${this.name} from player ${data.playerId}`, {
+        targetPosition: data.targetPosition ? 
+          `(${data.targetPosition.x.toFixed(2)}, ${data.targetPosition.y.toFixed(2)}, ${data.targetPosition.z.toFixed(2)})` : 
+          'none',
+        cameraPosition: data.cameraPosition ?
+          `(${data.cameraPosition.x.toFixed(2)}, ${data.cameraPosition.y.toFixed(2)}, ${data.cameraPosition.z.toFixed(2)})` :
+          'none',
+        targetDirection: data.targetDirection ?
+          `(${data.targetDirection.x.toFixed(2)}, ${data.targetDirection.y.toFixed(2)}, ${data.targetDirection.z.toFixed(2)})` :
+          'none'
+      });
+    } else {
+      console.log(`Remote cast of ${this.name} from player ${data.playerId}`, {
+        targetPosition: data.targetPosition ? 
+          `(${data.targetPosition.x.toFixed(2)}, ${data.targetPosition.y.toFixed(2)}, ${data.targetPosition.z.toFixed(2)})` : 
+          'none',
+        cameraPosition: data.cameraPosition ?
+          `(${data.cameraPosition.x.toFixed(2)}, ${data.cameraPosition.y.toFixed(2)}, ${data.cameraPosition.z.toFixed(2)})` :
+          'none',
+        hasChannelData: !!data.channelData,
+        channelProgress: data.channelData?.channelProgress
+      });
+    }
     
     // Call the normal cast method but with remote flag
     return this.cast(remoteContext, true);

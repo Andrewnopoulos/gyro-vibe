@@ -89,16 +89,55 @@ export class LaserBeamSpell extends Spell {
       context.gravityGunController ? 'GravityGunController available' : 'No GravityGunController',
       isRemote ? '(REMOTE CAST)' : '(LOCAL CAST)');
     
-    // Play start channeling sound (only for local casts)
+    // For LOCAL casts, immediately emit a starting event with accurate position data
     if (!isRemote) {
+      // Get accurate camera position and direction
+      let cameraPosition = null;
+      let cameraDirection = null;
+      
+      this.eventBus.emit('camera:get-position', (position) => {
+        if (position) {
+          cameraPosition = {
+            x: position.x,
+            y: position.y,
+            z: position.z
+          };
+        }
+      });
+      
+      this.eventBus.emit('camera:get-direction', (direction) => {
+        if (direction) {
+          cameraDirection = {
+            x: direction.x,
+            y: direction.y,
+            z: direction.z
+          };
+        }
+      });
+      
+      // Log and emit the starting cast event with accurate position
+      console.log("Sending initial spell cast with position data:", 
+        cameraPosition ? `Camera: (${cameraPosition.x.toFixed(2)}, ${cameraPosition.y.toFixed(2)}, ${cameraPosition.z.toFixed(2)})` : "No camera position",
+        cameraDirection ? `Direction: (${cameraDirection.x.toFixed(2)}, ${cameraDirection.y.toFixed(2)}, ${cameraDirection.z.toFixed(2)})` : "No direction"
+      );
+      
+      this.eventBus.emit('spell:cast', {
+        spellId: this.id,
+        targetPosition: context.targetPosition || null,
+        targetId: context.targetId || null,
+        cameraPosition,
+        targetDirection: cameraDirection,
+        // Initial cast has no channel data yet
+        initialCast: true
+      });
+      
+      // Play start channeling sound
       this.eventBus.emit('audio:play', { 
         sound: 'spawnObject', // Reuse existing sound as placeholder
         volume: 0.5
       });
-    }
-    
-    // Create visual feedback on spellbook (only for local casts)
-    if (!isRemote) {
+      
+      // Create visual feedback on spellbook
       this.createChannelingVisual(context);
     }
     
@@ -482,27 +521,35 @@ export class LaserBeamSpell extends Spell {
     
     // Emit event for multiplayer synchronization with channel progress
     if (this.channelContext.eventBus) {
-      // Get camera position (for spawn point)
+      // Get accurate camera position using the event bus
       let cameraPosition = null;
-      if (this.channelContext.camera) {
-        cameraPosition = {
-          x: this.channelContext.camera.position.x,
-          y: this.channelContext.camera.position.y,
-          z: this.channelContext.camera.position.z
-        };
-      }
+      this.eventBus.emit('camera:get-position', (position) => {
+        if (position) {
+          cameraPosition = {
+            x: position.x,
+            y: position.y,
+            z: position.z
+          };
+        }
+      });
       
-      // Get camera direction (for object trajectory)
+      // Get accurate camera direction using the event bus
       let cameraDirection = null;
-      if (this.channelContext.camera && this.channelContext.camera.getWorldDirection) {
-        const dir = new THREE.Vector3();
-        this.channelContext.camera.getWorldDirection(dir);
-        cameraDirection = {
-          x: dir.x,
-          y: dir.y,
-          z: dir.z
-        };
-      }
+      this.eventBus.emit('camera:get-direction', (direction) => {
+        if (direction) {
+          cameraDirection = {
+            x: direction.x,
+            y: direction.y,
+            z: direction.z
+          };
+        }
+      });
+      
+      // Log for debugging
+      console.log("Sending spell cast with position data:", 
+        cameraPosition ? `Camera: (${cameraPosition.x.toFixed(2)}, ${cameraPosition.y.toFixed(2)}, ${cameraPosition.z.toFixed(2)})` : "No camera position",
+        cameraDirection ? `Direction: (${cameraDirection.x.toFixed(2)}, ${cameraDirection.y.toFixed(2)}, ${cameraDirection.z.toFixed(2)})` : "No direction"
+      );
       
       // Include channeling progress data for Zoltraak spell
       this.channelContext.eventBus.emit('spell:cast', {
@@ -1052,30 +1099,69 @@ export class LaserBeamSpell extends Spell {
     let weaponOrigin = null;
     let weaponDirection = null;
     
-    // Use remote player info if available
-    if (this.channelContext?.remotePlayerInfo) {
-      const remoteInfo = this.channelContext.remotePlayerInfo;
+    // First try to use the explicitly provided camera position and direction
+    if (this.channelContext?.cameraPosition && this.channelContext?.targetDirection) {
+      console.log('Using network-provided remote player position and direction');
+      weaponOrigin = new THREE.Vector3(
+        this.channelContext.cameraPosition.x,
+        this.channelContext.cameraPosition.y,
+        this.channelContext.cameraPosition.z
+      );
       
-      if (remoteInfo.position) {
-        weaponOrigin = new THREE.Vector3(
-          remoteInfo.position.x,
-          remoteInfo.position.y,
-          remoteInfo.position.z
-        );
+      weaponDirection = new THREE.Vector3(
+        this.channelContext.targetDirection.x,
+        this.channelContext.targetDirection.y,
+        this.channelContext.targetDirection.z
+      ).normalize();
+    }
+    // Then try to get position and direction directly from GameStateManager
+    else if (this.channelContext?.remotePlayerId && this.channelContext?.eventBus) {
+      const remotePlayerId = this.channelContext.remotePlayerId;
+      console.log(`Requesting position data from GameStateManager for player ${remotePlayerId}`);
+      
+      // Get position from GameStateManager
+      this.channelContext.eventBus.emit('multiplayer:get-player-position', remotePlayerId, (position) => {
+        if (position) {
+          weaponOrigin = position.clone();
+          // Adjust the height to match eye level
+          weaponOrigin.y += 1.6; // Approximate eye level
+          console.log(`Got position from GameStateManager: (${weaponOrigin.x.toFixed(2)}, ${weaponOrigin.y.toFixed(2)}, ${weaponOrigin.z.toFixed(2)})`);
+        }
+      });
+      
+      // Get direction from GameStateManager
+      this.channelContext.eventBus.emit('multiplayer:get-player-direction', remotePlayerId, (direction) => {
+        if (direction) {
+          weaponDirection = direction.clone();
+          console.log(`Got direction from GameStateManager: (${weaponDirection.x.toFixed(2)}, ${weaponDirection.y.toFixed(2)}, ${weaponDirection.z.toFixed(2)})`);
+        }
+      });
+    }
+    // As a fallback, try to use the remote player model
+    else if (this.channelContext?.remotePlayerId && this.channelContext?.remotePlayerModel) {
+      const remotePlayerId = this.channelContext.remotePlayerId;
+      const remotePlayerModel = this.channelContext.remotePlayerModel;
+      console.log(`Using remote player model data for player ${remotePlayerId}`);
+      
+      // Get the remote player's position
+      if (remotePlayerModel.getPosition) {
+        weaponOrigin = remotePlayerModel.getPosition();
+        
+        // Adjust the height to match eye level
+        if (weaponOrigin) {
+          weaponOrigin.y += 1.6; // Approximate eye level
+        }
       }
       
-      if (remoteInfo.direction) {
-        weaponDirection = new THREE.Vector3(
-          remoteInfo.direction.x,
-          remoteInfo.direction.y,
-          remoteInfo.direction.z
-        ).normalize();
+      // Get the remote player's forward direction
+      if (remotePlayerModel.getForwardDirection) {
+        weaponDirection = remotePlayerModel.getForwardDirection();
       }
     }
     
-    // If we couldn't get remote player data, fall back to camera data
+    // If we still couldn't get position/direction, fall back to local camera
     if (!weaponOrigin || !weaponDirection) {
-      console.warn('Missing remote player position/direction for laser beam, using local camera');
+      console.warn('Missing remote player data for laser beam, falling back to local camera');
       
       let cameraPosition, cameraDirection;
       
@@ -1096,6 +1182,10 @@ export class LaserBeamSpell extends Spell {
       weaponOrigin = cameraPosition.clone();
       weaponDirection = cameraDirection.clone();
     }
+    
+    // Debug log the final position and direction being used
+    console.log(`Remote laser using position: (${weaponOrigin.x.toFixed(2)}, ${weaponOrigin.y.toFixed(2)}, ${weaponOrigin.z.toFixed(2)})`);
+    console.log(`Remote laser using direction: (${weaponDirection.x.toFixed(2)}, ${weaponDirection.y.toFixed(2)}, ${weaponDirection.z.toFixed(2)})`);
     
     if (!this.channelContext?.scene) {
       console.error('Missing scene for remote laser beam');

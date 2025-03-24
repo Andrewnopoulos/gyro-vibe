@@ -1,3 +1,5 @@
+import * as THREE from 'three';
+
 /**
  * Manages multiplayer game state
  */
@@ -64,6 +66,19 @@ export class GameStateManager {
     this.eventBus.on('multiplayer:get-player', (playerId, callback) => {
       if (typeof callback === 'function') {
         callback(this.getPlayer(playerId));
+      }
+    });
+    
+    // Listen for player position and direction requests
+    this.eventBus.on('multiplayer:get-player-position', (playerId, callback) => {
+      if (typeof callback === 'function') {
+        callback(this.getPlayerPosition(playerId));
+      }
+    });
+    
+    this.eventBus.on('multiplayer:get-player-direction', (playerId, callback) => {
+      if (typeof callback === 'function') {
+        callback(this.getPlayerForwardDirection(playerId));
       }
     });
   }
@@ -258,12 +273,21 @@ export class GameStateManager {
       targetId,
       cameraPosition,
       targetDirection,
-      channelData // Channel data for spells like Zoltraak
+      channelData, // Channel data for spells like Zoltraak
+      initialCast // Whether this is the initial cast event
     } = data;
     
     if (playerId === this.localPlayerId) {
       // Ignore our own spells that come back from the server
       return;
+    }
+    
+    // Log incoming cast data for debugging
+    if (initialCast) {
+      console.log(`Received initial spell cast for ${spellId} from player ${playerId} with position:`,
+        cameraPosition ? `(${cameraPosition.x.toFixed(2)}, ${cameraPosition.y.toFixed(2)}, ${cameraPosition.z.toFixed(2)})` : 'no position');
+    } else if (channelData) {
+      console.log(`Received channeled spell update for ${spellId} from player ${playerId} with progress: ${channelData.channelProgress?.toFixed(2)}`);
     }
     
     // Emit event for spell system to handle visualizing the remote spell
@@ -276,7 +300,9 @@ export class GameStateManager {
       cameraPosition,
       targetDirection,
       // Pass along channeling data for spells that need it
-      channelData
+      channelData,
+      // Pass along whether this is an initial cast
+      initialCast
     });
   }
   
@@ -477,6 +503,45 @@ export class GameStateManager {
    */
   getPlayer(playerId) {
     return this.players.get(playerId) || null;
+  }
+  
+  /**
+   * Get player position as a THREE.Vector3
+   * @param {string} playerId - ID of the player to get position for
+   * @returns {THREE.Vector3|null} Player position or null if not found
+   */
+  getPlayerPosition(playerId) {
+    const player = this.players.get(playerId);
+    if (!player || !player.lastState || !player.lastState.position) {
+      console.warn(`No position data found for player ${playerId}`);
+      return null;
+    }
+    
+    const position = player.lastState.position;
+    return new THREE.Vector3(position.x, position.y, position.z);
+  }
+  
+  /**
+   * Get player forward direction as a THREE.Vector3
+   * @param {string} playerId - ID of the player to get direction for
+   * @returns {THREE.Vector3|null} Player forward direction or null if not found
+   */
+  getPlayerForwardDirection(playerId) {
+    const player = this.players.get(playerId);
+    if (!player || !player.lastState || !player.lastState.rotation) {
+      console.warn(`No rotation data found for player ${playerId}`);
+      return null;
+    }
+    
+    // Create quaternion from player rotation
+    const rotation = player.lastState.rotation;
+    const quaternion = new THREE.Quaternion(rotation.x, rotation.y, rotation.z, rotation.w);
+    
+    // Apply quaternion to forward vector to get direction
+    const forward = new THREE.Vector3(0, 0, -1);
+    forward.applyQuaternion(quaternion);
+    
+    return forward;
   }
   
   /**
