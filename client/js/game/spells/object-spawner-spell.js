@@ -81,8 +81,49 @@ export class ObjectSpawnerSpell extends Spell {
     this.channelStartTime = Date.now();
     this.channelContext = context;
     
+    // Check if this is a remote cast with channel data
+    const isRemote = context?.isRemote;
+    
+    if (isRemote && context.channelProgressData) {
+      // For remote casts, directly use the channeled progress data
+      const { channelProgress, velocity } = context.channelProgressData;
+      
+      // Spawn object at the final size
+      this.spawnChanneledObject(channelProgress, true, context);
+      
+      // Short delay to let physics engine initialize the object
+      setTimeout(() => {
+        if (this.channelObjectId && velocity) {
+          // Apply the final velocity from remote cast
+          this.eventBus.emit('physics:update-object', {
+            id: this.channelObjectId,
+            velocity: velocity,
+            visualEffect: {
+              type: 'release',
+              intensity: channelProgress
+            }
+          });
+          
+          // Play release sound for remote casts too
+          this.eventBus.emit('audio:play', { 
+            sound: 'objectRelease', 
+            volume: 0.6 + (channelProgress * 0.4),
+            pitch: 1.0 - (channelProgress * 0.3)
+          });
+          
+          // Finish channeling almost immediately for remote casts
+          this.isChanneling = false;
+          this.channelObjectId = null;
+        }
+      }, 50);
+      
+      return; // We don't need to continue normal channeling for remote casts with data
+    }
+    
+    // For normal local casts or remote casts without channel data,
+    // proceed with regular channeling
+    
     // Spawn the initial small object
-    // If this is a remote cast, use the remote position data
     this.spawnChanneledObject(0, context.isRemote, context); // 0 = starting size
     
     // Play start channeling sound (only for local casts)
@@ -348,6 +389,47 @@ export class ObjectSpawnerSpell extends Spell {
           volume: 0.6 + (finalProgress * 0.4),
           pitch: 1.0 - (finalProgress * 0.3) // Lower pitch for bigger objects
         });
+        
+        // Emit event for multiplayer synchronization with channel progress
+        if (this.channelContext.eventBus) {
+          // Get camera position (for spawn point)
+          let cameraPosition = null;
+          if (this.channelContext.camera) {
+            cameraPosition = {
+              x: this.channelContext.camera.position.x,
+              y: this.channelContext.camera.position.y,
+              z: this.channelContext.camera.position.z
+            };
+          }
+          
+          // Get camera direction (for object trajectory)
+          let cameraDirection = null;
+          if (this.channelContext.camera && this.channelContext.camera.getWorldDirection) {
+            const dir = new THREE.Vector3();
+            this.channelContext.camera.getWorldDirection(dir);
+            cameraDirection = {
+              x: dir.x,
+              y: dir.y,
+              z: dir.z
+            };
+          }
+          
+          // Include channeling progress data for object spawner
+          this.channelContext.eventBus.emit('spell:cast', {
+            spellId: this.id,
+            targetPosition: this.channelContext.targetPosition || null,
+            targetId: this.channelContext.targetId || null,
+            cameraPosition,
+            targetDirection: cameraDirection,
+            // Add channeling data for remote players
+            channelData: {
+              type: 'objectSpawner',
+              channelProgress: finalProgress,
+              objectId: this.channelObjectId,
+              velocity: velocity
+            }
+          });
+        }
       }
       
       // Check if the released object hits any enemies (only for local casts)

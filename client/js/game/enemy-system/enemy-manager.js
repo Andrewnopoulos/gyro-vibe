@@ -204,25 +204,32 @@ export class EnemyManager {
     
     // Spawn appropriate enemy type
     if (type === 'training-dummy' || !type) {
-      const dummy = this.spawnTrainingDummy(position);
-      
-      // If this is a networked enemy, override the generated ID with the network ID
+      // For networked enemies, create with the provided ID directly
       if (isNetworked) {
-        // Remove the original entry
-        this.enemies.delete(dummy.id);
+        const dummy = new TrainingDummy({
+          scene: this.scene,
+          world: this.world,
+          eventBus: this.eventBus,
+          position: position,
+          health: health || 5,
+          id: id, // Use the network-provided ID
+          isNetworked: true,
+          type: 'training-dummy'
+        });
         
-        // Update the enemy's ID to match the network ID
-        dummy.id = id;
-        
-        // Re-add with the network ID
+        // Register the enemy
         this.enemies.set(id, dummy);
+        
+        console.log(`Spawned networked training dummy with ID ${id} at position`, 
+          position.x.toFixed(2), position.y.toFixed(2), position.z.toFixed(2));
+      } else {
+        // For local enemies, use the standard spawn method
+        const dummy = this.spawnTrainingDummy(position);
         
         // Update health if provided
         if (health !== undefined) {
           dummy.setHealth(health);
         }
-        
-        console.log(`Spawned networked training dummy with ID ${id} at position`, position);
       }
     } else {
       console.warn(`Unknown enemy type: ${type} - cannot spawn`);
@@ -274,18 +281,35 @@ export class EnemyManager {
    * @param {Object} data - Enemy death data
    */
   handleEnemyDeath(data) {
-    const { id, killerPlayerId, isNetworked } = data;
+    const { id, enemyId, killerPlayerId, isNetworked, reason } = data;
     
-    // Only process networked deaths
-    if (!isNetworked) return;
+    // Use enemyId if provided (server format) otherwise use id (client format)
+    const targetId = enemyId || id;
     
-    const enemy = this.enemies.get(id);
-    if (!enemy) {
-      console.warn(`Received death for non-existent enemy: ${id}`);
+    // Handle both networked deaths and "enemy not found" cleanup cases
+    if (!isNetworked && reason !== 'not_found') {
       return;
     }
     
-    console.log(`Enemy ${id} killed by player ${killerPlayerId}`);
+    const enemy = this.enemies.get(targetId);
+    
+    // Special case: server couldn't find this enemy, so we should clean it up locally
+    if (reason === 'not_found') {
+      if (enemy) {
+        console.log(`Cleaning up enemy ${targetId} that doesn't exist on server`);
+        enemy.remove();
+        this.enemies.delete(targetId);
+      }
+      return;
+    }
+    
+    // Regular enemy death case
+    if (!enemy) {
+      console.warn(`Received death for non-existent enemy: ${targetId}`);
+      return;
+    }
+    
+    console.log(`Enemy ${targetId} killed by player ${killerPlayerId}`);
     
     // Trigger death animation and cleanup
     enemy.die();

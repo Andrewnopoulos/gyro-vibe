@@ -1,3 +1,5 @@
+import * as THREE from 'three';
+
 /**
  * Base class for all spells
  */
@@ -123,8 +125,28 @@ export class Spell {
       isRemote: true,
       playerId: data.playerId,
       targetPosition: data.targetPosition,
-      targetId: data.targetId
+      targetId: data.targetId,
+      // Add camera position and direction from the remote player
+      // for accurate positioning of complex effects
+      cameraPosition: data.cameraPosition,
+      targetDirection: data.targetDirection,
+      // Pass remote player information to ensure proper spell origin
+      remotePlayerInfo: {
+        id: data.playerId,
+        position: data.cameraPosition,
+        direction: data.targetDirection
+      }
     };
+    
+    // Log the remote cast received
+    console.log(`Remote cast of ${this.name} from player ${data.playerId}`, {
+      targetPosition: data.targetPosition ? 
+        `(${data.targetPosition.x.toFixed(2)}, ${data.targetPosition.y.toFixed(2)}, ${data.targetPosition.z.toFixed(2)})` : 
+        'none',
+      cameraPosition: data.cameraPosition ?
+        `(${data.cameraPosition.x.toFixed(2)}, ${data.cameraPosition.y.toFixed(2)}, ${data.cameraPosition.z.toFixed(2)})` :
+        'none'
+    });
     
     // Call the normal cast method but with remote flag
     return this.cast(remoteContext, true);

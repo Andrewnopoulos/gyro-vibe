@@ -92,8 +92,18 @@ export class StatusDisplay {
     
     // Remote spell casting notifications
     this.eventBus.on('ui:remote-spell-cast', (data) => {
-      const { playerId, spellName } = data;
-      this.showNotification(`Player cast ${spellName || 'a spell'}`, 'spell');
+      const { playerId, spellId, spellName } = data;
+      
+      // Get player username if available
+      let playerName = 'A player';
+      this.eventBus.emit('multiplayer:get-player', playerId, (player) => {
+        if (player && player.username) {
+          playerName = player.username;
+        }
+      });
+      
+      // Show notification with spell name and player identifier
+      this.showNotification(`${playerName} cast ${spellName || 'a spell'}`, 'spell');
     });
     
     // Enemy events

@@ -13,6 +13,8 @@ export class Enemy {
    * @param {Object} options.position - Initial position {x, y, z}
    * @param {number} options.health - Initial health amount
    * @param {string} options.type - Enemy type identifier
+   * @param {string} options.id - Optional predefined ID (for networked enemies)
+   * @param {boolean} options.isNetworked - Whether this enemy is network-synchronized
    */
   constructor(options) {
     this.scene = options.scene;
@@ -20,12 +22,15 @@ export class Enemy {
     this.eventBus = options.eventBus;
     this.position = options.position || { x: 0, y: 0, z: 0 };
     
-    this.id = `enemy_${Math.random().toString(36).substr(2, 9)}`;
+    // Use provided ID for networked enemies or generate a new one
+    this.id = options.id || `enemy_${Math.random().toString(36).substr(2, 9)}`;
     this.maxHealth = options.health || 10;
     this.health = this.maxHealth;
     this.type = options.type || 'basic';
     this.isDead = false;
     this.isRemoving = false;
+    this.isNetworked = options.isNetworked || false;
+    this.lastNetworkUpdate = Date.now();
     
     this.model = null;
     this.physicsBody = null;
@@ -35,6 +40,9 @@ export class Enemy {
     this.animations = {};
     this.currentAnimation = null;
     this.deathAnimationStartTime = 0;
+    
+    console.log(`Creating ${this.isNetworked ? 'networked' : 'local'} enemy ${this.id} of type ${this.type} at position`, 
+      this.position.x.toFixed(2), this.position.y.toFixed(2), this.position.z.toFixed(2));
     
     // Create the enemy model and physics body
     this.initialize();
@@ -221,6 +229,21 @@ export class Enemy {
     
     // Flash red on hit
     this.flashOnHit();
+    
+    // For local enemies (non-networked), we need to propagate damage to the server
+    // but only if this is the first time we're handling this damage event
+    if (!this.isNetworked && data.isNetworked !== true && !data.isLocalEvent) {
+      // Clone only the specific properties we need, avoiding circular references
+      this.eventBus.emit('entity:damage', {
+        id: this.id,
+        amount: data.amount,
+        damageType: data.damageType || 'generic',
+        sourceId: typeof data.sourceId === 'string' ? data.sourceId : null,
+        isEnemy: true,
+        // Mark this as a local-originating damage event
+        isLocalEvent: true
+      });
+    }
     
     // Check for death
     if (previousHealth > 0 && this.health <= 0) {

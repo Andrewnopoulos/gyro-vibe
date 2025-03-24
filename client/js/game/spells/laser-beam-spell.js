@@ -102,17 +102,24 @@ export class LaserBeamSpell extends Spell {
       this.createChannelingVisual(context);
     }
     
-    // For remote casts, immediately fire the laser instead of waiting for channeling
-    if (isRemote) {
-      // Use a short timeout to ensure the context is properly set up
-      setTimeout(() => this.fireLaser(), 50);
-    } else {
-      // Set timeout to auto-fire laser after max duration (only for local casts)
-      this.channelTimeout = setTimeout(() => {
-        if (this.isChanneling) {
-          this.fireLaser();
-        }
-      }, this.channelMaxDuration * 1000);
+    // In multiplayer, we'll use a different approach
+    // For local casts, set timeout to auto-fire after max duration
+    this.channelTimeout = setTimeout(() => {
+      if (this.isChanneling) {
+        this.fireLaser();
+      }
+    }, this.channelMaxDuration * 1000);
+    
+    // If this is a remote cast and it has channelProgressData, use that
+    if (isRemote && context.channelProgressData) {
+      // Short delay to ensure context is properly set up
+      setTimeout(() => {
+        // Use the provided channel progress data from the remote player
+        const { channelProgress } = context.channelProgressData;
+        this.isChanneling = false; // Stop channeling
+        this.laserActive = true;
+        this.fireRemoteLaser(channelProgress);
+      }, 50);
     }
   }
   
@@ -472,6 +479,47 @@ export class LaserBeamSpell extends Spell {
     
     // Create laser beam visual effect
     this.createLaserVisual(laserOptions);
+    
+    // Emit event for multiplayer synchronization with channel progress
+    if (this.channelContext.eventBus) {
+      // Get camera position (for spawn point)
+      let cameraPosition = null;
+      if (this.channelContext.camera) {
+        cameraPosition = {
+          x: this.channelContext.camera.position.x,
+          y: this.channelContext.camera.position.y,
+          z: this.channelContext.camera.position.z
+        };
+      }
+      
+      // Get camera direction (for object trajectory)
+      let cameraDirection = null;
+      if (this.channelContext.camera && this.channelContext.camera.getWorldDirection) {
+        const dir = new THREE.Vector3();
+        this.channelContext.camera.getWorldDirection(dir);
+        cameraDirection = {
+          x: dir.x,
+          y: dir.y,
+          z: dir.z
+        };
+      }
+      
+      // Include channeling progress data for Zoltraak spell
+      this.channelContext.eventBus.emit('spell:cast', {
+        spellId: this.id,
+        targetPosition: this.channelContext.targetPosition || null,
+        targetId: this.channelContext.targetId || null,
+        cameraPosition,
+        targetDirection: cameraDirection,
+        // Add channeling data for remote players
+        channelData: {
+          type: 'zoltraak',
+          channelProgress: channelProgress,
+          damage: damage,
+          beamWidth: beamWidth
+        }
+      });
+    }
     
     // Remove channeling visuals
     this.removeChannelingVisuals();
@@ -991,6 +1039,102 @@ export class LaserBeamSpell extends Spell {
     context.fillText(`Page ${this.page}`, width - 20, height - 20);
   }
   
+  /**
+   * Fire the laser beam for a remote player with specified channel progress
+   * @param {number} channelProgress - Progress of the channel (0-1)
+   */
+  fireRemoteLaser(channelProgress) {
+    // Calculate beam width and damage based on channel progress
+    const beamWidth = this.calculateBeamWidth(channelProgress);
+    const damage = this.calculateDamage(channelProgress);
+    
+    // Get position and direction from remote player data
+    let weaponOrigin = null;
+    let weaponDirection = null;
+    
+    // Use remote player info if available
+    if (this.channelContext?.remotePlayerInfo) {
+      const remoteInfo = this.channelContext.remotePlayerInfo;
+      
+      if (remoteInfo.position) {
+        weaponOrigin = new THREE.Vector3(
+          remoteInfo.position.x,
+          remoteInfo.position.y,
+          remoteInfo.position.z
+        );
+      }
+      
+      if (remoteInfo.direction) {
+        weaponDirection = new THREE.Vector3(
+          remoteInfo.direction.x,
+          remoteInfo.direction.y,
+          remoteInfo.direction.z
+        ).normalize();
+      }
+    }
+    
+    // If we couldn't get remote player data, fall back to camera data
+    if (!weaponOrigin || !weaponDirection) {
+      console.warn('Missing remote player position/direction for laser beam, using local camera');
+      
+      let cameraPosition, cameraDirection;
+      
+      this.eventBus.emit('camera:get-position', (position) => {
+        cameraPosition = position;
+      });
+      
+      this.eventBus.emit('camera:get-direction', (direction) => {
+        cameraDirection = direction;
+      });
+      
+      if (!cameraPosition || !cameraDirection) {
+        console.error('Missing context for remote laser beam');
+        this.laserActive = false;
+        return;
+      }
+      
+      weaponOrigin = cameraPosition.clone();
+      weaponDirection = cameraDirection.clone();
+    }
+    
+    if (!this.channelContext?.scene) {
+      console.error('Missing scene for remote laser beam');
+      this.laserActive = false;
+      return;
+    }
+    
+    // Create a raycaster to check for enemy hits
+    const raycaster = new THREE.Raycaster(weaponOrigin, weaponDirection);
+    raycaster.camera = this.channelContext.camera; // Set camera for proper sprite raycasting
+    
+    // Create the laser visual effect
+    const laserOptions = {
+      width: beamWidth,
+      color: 0xFFFFFF,
+      duration: this.laserDuration,
+      origin: weaponOrigin,
+      direction: weaponDirection
+    };
+    
+    // Check for hits and apply damage to all enemies in the path
+    this.damageEnemiesInLaserPath(raycaster, this.channelContext.scene, damage);
+    
+    // Create laser beam visual effect
+    this.createLaserVisual(laserOptions);
+    
+    // Play laser fire sound effect
+    this.eventBus.emit('audio:play', { 
+      sound: 'objectRelease', // Reuse existing sound as placeholder
+      volume: 0.8 + (channelProgress * 0.2),
+      pitch: 1.2 - (channelProgress * 0.4) // Higher pitch for laser
+    });
+    
+    // Reset laser active state after duration
+    setTimeout(() => {
+      this.laserActive = false;
+    }, this.laserDuration * 1000);
+  }
+
   /**
    * Clean up resources when spell is no longer needed
    */

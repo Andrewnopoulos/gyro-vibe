@@ -688,7 +688,7 @@ io.on('connection', (socket) => {
     const room = gameRooms.get(currentRoomId);
     if (!room) return;
     
-    const { spellId, targetPosition, targetId, cameraPosition, targetDirection } = data;
+    const { spellId, targetPosition, targetId, cameraPosition, targetDirection, channelData } = data;
     
     // Basic validation
     if (!spellId) return;
@@ -701,7 +701,9 @@ io.on('connection', (socket) => {
       targetId,
       // Include camera position and direction for accurate spawning
       cameraPosition,
-      targetDirection
+      targetDirection,
+      // Include channel data for spells like Zoltraak that need channel progress
+      channelData
     });
     
     console.log(`Player ${socket.id} cast spell ${spellId} in room ${currentRoomId}`);
@@ -719,10 +721,22 @@ io.on('connection', (socket) => {
     // Basic validation
     if (!enemyId || !damage) return;
     
+    // Make sure enemies array exists
+    if (!Array.isArray(room.enemies)) {
+      room.enemies = [];
+    }
+    
     // Find the enemy in the room
-    const enemyIndex = room.enemies.findIndex(e => e.id === enemyId);
+    const enemyIndex = room.enemies.findIndex(e => e && e.id === enemyId);
     if (enemyIndex === -1) {
+      // Instead of just warning, let clients know this enemy doesn't exist
+      // so they can clean up any references
       console.warn(`Enemy ${enemyId} not found in room ${currentRoomId}`);
+      io.to(currentRoomId).emit('enemy-death', {
+        enemyId: enemyId,
+        reason: 'not_found',
+        // No killer player ID since this is a cleanup operation
+      });
       return;
     }
     

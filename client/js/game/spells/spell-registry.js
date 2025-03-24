@@ -165,11 +165,35 @@ export class SpellRegistry {
    * @param {boolean} isLeftPage - Whether this is the left page
    */
   /**
+   * Get the main scene for visual effects
+   * @returns {THREE.Scene|null} The main scene or null if not available
+   */
+  getMainScene() {
+    let scene = null;
+    this.eventBus.emit('scene:get-scene', (sceneObj) => {
+      scene = sceneObj;
+    });
+    return scene;
+  }
+  
+  /**
+   * Get the main camera for proper positioning
+   * @returns {THREE.Camera|null} The main camera or null if not available
+   */
+  getMainCamera() {
+    let camera = null;
+    this.eventBus.emit('scene:get-camera', (cameraObj) => {
+      camera = cameraObj;
+    });
+    return camera;
+  }
+
+  /**
    * Handle remote spell cast from another player
    * @param {Object} data - Remote spell cast data
    */
   handleRemoteSpellCast(data) {
-    const { playerId, spellId, targetPosition, targetId } = data;
+    const { playerId, spellId, targetPosition, targetId, channelData } = data;
     
     // Get the spell by ID
     const spell = this.getSpellById(spellId);
@@ -183,11 +207,37 @@ export class SpellRegistry {
       eventBus: this.eventBus,
       targetPosition,
       targetId,
+      // Get the main scene for visual effects
+      scene: this.getMainScene(),
+      // Get main camera for proper positioning
+      camera: this.getMainCamera(),
+      // Mark as a remote cast
+      isRemote: true,
       // Other context properties will be added by the specific spell implementation
     };
     
+    // Add channel data for spells that need it
+    if (channelData) {
+      if (spellId === 'laserBeam' && channelData.type === 'zoltraak') {
+        // For Zoltraak, add channeling progress data
+        context.channelProgressData = {
+          channelProgress: channelData.channelProgress || 0,
+          damage: channelData.damage || 1,
+          beamWidth: channelData.beamWidth || 0.05
+        };
+      } else if (spellId === 'objectSpawner' && channelData.type === 'objectSpawner') {
+        // For object spawner, add channeling progress data
+        context.channelProgressData = {
+          channelProgress: channelData.channelProgress || 0,
+          objectId: channelData.objectId,
+          velocity: channelData.velocity || { x: 0, y: 0, z: 0 }
+        };
+      }
+    }
+    
     // Trigger the remote spell cast
-    console.log(`Remote spell cast: ${spell.name} by player ${playerId}`);
+    console.log(`Remote spell cast: ${spell.name} by player ${playerId}`, 
+      channelData ? `with channel data: ${JSON.stringify(channelData)}` : '');
     spell.remotecast(data, context);
     
     // Emit an event for UI feedback

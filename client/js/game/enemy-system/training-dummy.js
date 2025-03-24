@@ -7,13 +7,20 @@ import { Enemy } from './enemy.js';
 export class TrainingDummy extends Enemy {
   /**
    * @param {Object} options - Enemy creation options
+   * @param {boolean} [options.isNetworked=false] - Whether this is a networked enemy
+   * @param {string} [options.id] - Optional predefined ID for networked enemies
    */
   constructor(options) {
     // Call parent constructor with the training dummy type
     super({
       ...options,
-      type: 'training_dummy'
+      type: 'training_dummy',
+      isNetworked: options.isNetworked || false,
+      id: options.id // Pass along ID if provided
     });
+    
+    // Set network-specific properties
+    this.needsUpdate = !this.isNetworked; // Only local enemies need regular physics updates
   }
   
   /**

@@ -59,6 +59,13 @@ export class GameStateManager {
     
     // Listen for local enemy damage to sync with server
     this.eventBus.on('entity:damage', this.handleLocalEnemyDamage.bind(this));
+    
+    // Listen for player data lookup requests (for UI and other components)
+    this.eventBus.on('multiplayer:get-player', (playerId, callback) => {
+      if (typeof callback === 'function') {
+        callback(this.getPlayer(playerId));
+      }
+    });
   }
 
   /**
@@ -250,7 +257,8 @@ export class GameStateManager {
       targetPosition, 
       targetId,
       cameraPosition,
-      targetDirection
+      targetDirection,
+      channelData // Channel data for spells like Zoltraak
     } = data;
     
     if (playerId === this.localPlayerId) {
@@ -266,7 +274,9 @@ export class GameStateManager {
       targetId,
       // Pass along camera position and direction for accurate spawning
       cameraPosition,
-      targetDirection
+      targetDirection,
+      // Pass along channeling data for spells that need it
+      channelData
     });
   }
   
@@ -325,14 +335,24 @@ export class GameStateManager {
    */
   handleLocalSpellCast(data) {
     if (this.localPlayerId && this.currentRoom) {
-      const { spellId, targetPosition, targetId } = data;
+      const { spellId, targetPosition, targetId, cameraPosition, targetDirection, channelData } = data;
       
-      // Send spell cast to server
+      // Send spell cast to server with additional positioning info
       this.socketManager.emit('spell-cast', {
         spellId,
         targetPosition,
-        targetId
+        targetId,
+        cameraPosition,
+        targetDirection,
+        // Include channel data for spells like Zoltraak
+        channelData
       });
+      
+      console.log(`Local spell cast ${spellId} sent to server with positioning data`, 
+        targetPosition ? `target: (${targetPosition.x.toFixed(2)}, ${targetPosition.y.toFixed(2)}, ${targetPosition.z.toFixed(2)})` : 'no target',
+        cameraPosition ? `camera: (${cameraPosition.x.toFixed(2)}, ${cameraPosition.y.toFixed(2)}, ${cameraPosition.z.toFixed(2)})` : 'no camera',
+        channelData ? `channelData: ${JSON.stringify(channelData)}` : ''
+      );
     }
   }
   
@@ -342,15 +362,28 @@ export class GameStateManager {
    */
   handleLocalEnemyDamage(data) {
     if (this.localPlayerId && this.currentRoom && data.isEnemy) {
-      const { id, amount, damageType, sourceId } = data;
+      const { id, amount, damageType, sourceId, isLocalEvent } = data;
       
-      // Send damage to server
-      this.socketManager.emit('enemy-damage', {
-        enemyId: id,
-        damage: amount,
-        sourceType: damageType,
-        sourceId
-      });
+      // Only send to server if this was a local-originating event
+      // This prevents loops where network events trigger more network events
+      if (isLocalEvent && !data.processingComplete) {
+        console.log(`Sending local enemy damage to server: ${id} - Amount: ${amount}`);
+        
+        // Create a clean object with just the required properties for network transmission
+        // This prevents circular references that could cause stack overflow
+        const cleanData = {
+          enemyId: id,
+          damage: typeof amount === 'number' ? amount : parseFloat(amount),
+          sourceType: typeof damageType === 'string' ? damageType : 'generic',
+          sourceId: typeof sourceId === 'string' ? sourceId : this.localPlayerId // Use player ID as fallback source
+        };
+        
+        // Mark that we've processed this event to prevent re-sending
+        data.processingComplete = true;
+        
+        // Send damage to server
+        this.socketManager.emit('enemy-damage', cleanData);
+      }
     }
   }
   
@@ -435,6 +468,15 @@ export class GameStateManager {
    */
   getPlayers() {
     return this.players;
+  }
+  
+  /**
+   * Get player by ID
+   * @param {string} playerId - ID of the player to get
+   * @returns {Object|null} Player data or null if not found
+   */
+  getPlayer(playerId) {
+    return this.players.get(playerId) || null;
   }
   
   /**
