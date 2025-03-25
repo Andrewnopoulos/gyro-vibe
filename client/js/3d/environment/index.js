@@ -80,7 +80,78 @@ export class Environment {
       
       // Listen for update events to update debug wireframes
       this.eventBus.on('scene:update', this.update.bind(this));
+      
+      // Listen for environment reset requests when leaving multiplayer
+      this.eventBus.on('environment:reset', this.resetEnvironment.bind(this));
     }
+  }
+  
+  /**
+   * Reset environment when leaving multiplayer
+   * Recreates walls, well and other key structures
+   */
+  resetEnvironment() {
+    console.log('Resetting environment after leaving multiplayer...');
+    
+    // Reset flags to allow reloading
+    this.villageLoaded = false;
+    this.decorationsLoaded = false;
+    
+    // Remove existing objects from scene that need to be recreated
+    this.removeSceneObjects();
+    
+    // Clear objects map
+    this.objects.clear();
+    
+    // Recreate skybox and terrain
+    this.createSkybox();
+    this.createTerrain();
+    
+    // Reload village and decorations
+    this.lazyLoadVillage();
+    
+    // No need to call lazyLoadDecorations() here as it will be called by lazyLoadVillage()
+  }
+  
+  /**
+   * Remove objects from the scene that need to be recreated
+   */
+  removeSceneObjects() {
+    if (!this.scene) return;
+    
+    // Use array to avoid modifying during iteration
+    const objectsToRemove = [];
+    
+    // Find all village walls, well parts, and other objects to remove
+    this.scene.traverse((object) => {
+      if (object.userData) {
+        if (object.userData.isVillageWall || 
+            object.userData.isWallCrenel || 
+            object.userData.isWellBase ||
+            object.userData.isWellWall) {
+          objectsToRemove.push(object);
+        }
+      }
+    });
+    
+    // Remove objects from scene
+    for (const object of objectsToRemove) {
+      if (object.parent) {
+        object.parent.remove(object);
+      }
+      
+      // Dispose of geometries and materials to avoid memory leaks
+      if (object.geometry) object.geometry.dispose();
+      if (object.material) {
+        if (Array.isArray(object.material)) {
+          object.material.forEach(material => material.dispose());
+        } else {
+          object.material.dispose();
+        }
+      }
+    }
+    
+    console.log(`Removed ${objectsToRemove.length} objects from scene`);
   }
   
   /**

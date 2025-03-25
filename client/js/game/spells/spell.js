@@ -99,8 +99,6 @@ export class Spell {
   }
 
   castUp(context, isRemote = false) {
-    console.log("castup context ", context);
-    console.log("isremote ", isRemote);
     if (!isRemote && !this.isKeyDown) {
       return false;
     }

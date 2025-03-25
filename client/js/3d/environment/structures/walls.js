@@ -159,7 +159,14 @@ export class VillageWalls {
     
     wall.castShadow = true;
     wall.receiveShadow = true;
+    wall.userData.isVillageWall = true;
     this.scene.add(wall);
+    
+    // Track wall in objects map for proper cleanup/recreation
+    if (this.objects) {
+      const wallId = `wall_${start.x}_${start.z}_${end.x}_${end.z}`;
+      this.objects.set(wallId, wall);
+    }
     
     // Add crenellations on top of the wall
     this.addCrenellations(wall, wallLength, height, thickness);
@@ -202,6 +209,7 @@ export class VillageWalls {
       crenelMesh.position.set(position, wallHeight/2 + crenel.height/2, 0);
       crenelMesh.castShadow = true;
       crenelMesh.receiveShadow = true;
+      crenelMesh.userData.isWallCrenel = true;
       
       group.add(crenelMesh);
     }

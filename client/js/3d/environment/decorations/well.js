@@ -30,6 +30,7 @@ export class Well {
     base.position.set(position.x, 0.25, position.z);
     base.castShadow = true;
     base.receiveShadow = true;
+    base.userData.isWellBase = true;
     this.scene.add(base);
     
     // Create wall
@@ -39,6 +40,7 @@ export class Well {
     wall.position.set(position.x, 1, position.z);
     wall.castShadow = true;
     wall.receiveShadow = true;
+    wall.userData.isWellWall = true;
     this.scene.add(wall);
     
     // Create roof structure

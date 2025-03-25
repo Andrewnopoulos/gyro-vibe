@@ -137,6 +137,8 @@ export class GameStateManager {
     this.gameObjects = [];
     
     this.eventBus.emit('multiplayer:room-left');
+    // Trigger environment recreation after leaving a room
+    this.eventBus.emit('environment:reset');
   }
   
   handleRoomError(data) {
