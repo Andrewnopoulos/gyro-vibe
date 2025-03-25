@@ -13,6 +13,7 @@ export class Spell {
     this.icon = options.icon;
     this.cooldown = options.cooldown || 0;
     this.lastCastTime = 0;
+    this.isKeyDown = false;
   }
 
   isReady() {
@@ -39,6 +40,8 @@ export class Spell {
     if (!isRemote) {
       this.lastCastTime = Date.now();
     }
+
+    this.isKeyDown = true;
     
     const cast_data = this.effectKeyDown(context);
 
@@ -65,11 +68,7 @@ export class Spell {
           z: dir.z
         };
       }
-      
-      const targetPosition = context.targetPosition || cameraPosition;
-      
-      const targetId = context.targetId || null;
-      
+
       // Add spellData information about this being a keydown event
       const spellData = {
         isKeyDown: true,
@@ -100,9 +99,13 @@ export class Spell {
   }
 
   castUp(context, isRemote = false) {
-    if (!isRemote && !this.isReady()) {
+    console.log("castup context ", context);
+    console.log("isremote ", isRemote);
+    if (!isRemote && !this.isKeyDown) {
       return false;
     }
+
+    this.isKeyDown = false;
     
     const cast_data = this.effectKeyUp(context);
 

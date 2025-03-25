@@ -593,8 +593,6 @@ export class LaserBeamSpell extends Spell {
     const startTime = Date.now();
     let animationFrameId = null;
 
-    console.log("animating laser beam");
-    
     const animate = () => {
       const elapsedTime = (Date.now() - startTime) / 1000;
       

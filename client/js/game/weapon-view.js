@@ -1185,7 +1185,7 @@ export class WeaponView {
       this.eventBus.emit('get:gravity-gun-controller', (controller) => {
         gravityGunController = controller;
       });
-      
+
       spell.castUp({
         camera: this.weaponCamera,
         scene: mainScene || this.weaponScene, // Use main scene if available, otherwise fall back to weapon scene

@@ -25,7 +25,7 @@ export class ObjectSpawnerSpell extends Spell {
         lineWidth: 3
       },
       effectKeyDown: (context) => this.startChanneling(context),
-      effectKeyUp: () => this.finishChanneling(),
+      effectKeyUp: (context) => this.finishChanneling(context),
     });
 
     this.eventBus = options.eventBus;
@@ -37,10 +37,6 @@ export class ObjectSpawnerSpell extends Spell {
     this.channelObjectId = null;
     this.channelMaxDuration = 3; // Max channeling duration in seconds
     
-    // Bind the keyup handler to this instance for proper cleanup
-    this.keyUpHandler = this.handleKeyUp.bind(this);
-    
-    // Listen for keyup to detect when space is released
     this.setupEventListeners();
   }
 
@@ -48,25 +44,12 @@ export class ObjectSpawnerSpell extends Spell {
    * Set up event listeners for space key release
    */
   setupEventListeners() {
-    // Listen for space bar release
-    document.addEventListener('keyup', this.keyUpHandler);
-    
     // Set up update loop for channeling
     this.updateInterval = setInterval(() => {
       if (this.isChanneling) {
         this.updateChanneledObject();
       }
     }, 50); // Update every 50ms
-  }
-  
-  /**
-   * Handle key up event
-   * @param {KeyboardEvent} event - The keyboard event
-   */
-  handleKeyUp(event) {
-    if (event.code === 'Space' && this.isChanneling) {
-      ;
-    }
   }
   
   /**
@@ -156,15 +139,13 @@ export class ObjectSpawnerSpell extends Spell {
         cameraDirection ? `Direction: (${cameraDirection.x.toFixed(2)}, ${cameraDirection.y.toFixed(2)}, ${cameraDirection.z.toFixed(2)})` : "No direction"
       );
       
-      // this.eventBus.emit('spell:cast', {
-      //   spellId: this.id,
-      //   targetPosition: context.targetPosition || null,
-      //   targetId: context.targetId || null,
-      //   cameraPosition,
-      //   targetDirection: cameraDirection,
-      //   // Initial cast has no channel data yet
-      //   initialCast: true
-      // });
+      this.eventBus.emit('spell:cast', {
+        spellId: this.id,
+        targetPosition: context.targetPosition || null,
+        targetId: context.targetId || null,
+        cameraPosition,
+        targetDirection: cameraDirection
+      });
     }
     
     // Spawn the initial small object
@@ -365,7 +346,13 @@ export class ObjectSpawnerSpell extends Spell {
   /**
    * Finish channeling the spell and finalize the object
    */
-  finishChanneling() {
+  finishChanneling(context) {
+
+    if (context) {
+      // TODO
+      console.log("This is where remote object spawning would go")
+    }
+
     if (!this.isChanneling) return;
     
     this.isChanneling = false;
@@ -1231,9 +1218,6 @@ export class ObjectSpawnerSpell extends Spell {
       clearInterval(this.updateInterval);
       this.updateInterval = null;
     }
-    
-    // Remove event listeners
-    document.removeEventListener('keyup', this.keyUpHandler);
     
     // Clear any timeouts
     if (this.channelTimeout) {
