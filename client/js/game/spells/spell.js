@@ -44,9 +44,6 @@ export class Spell {
     this.isKeyDown = true;
     
     const cast_data = this.effectKeyDown(context);
-
-    console.log("cast data")
-    console.log(cast_data)
     
     if (!isRemote && context.eventBus) {
       let cameraPosition = null;
@@ -76,14 +73,12 @@ export class Spell {
       };
 
       if (cast_data) {
-        console.log("emitting generated cast data");
         // Add spellData to cast_data if it doesn't already have it
         if (!cast_data.spellData) {
           cast_data.spellData = spellData;
         }
         context.eventBus.emit('spell:cast', cast_data);
       } else {
-        console.log("don't emit generic cast data");
         // context.eventBus.emit('spell:cast', {
         //   spellId: this.id,
         //   targetPosition,
@@ -99,8 +94,6 @@ export class Spell {
   }
 
   castUp(context, isRemote = false) {
-    console.log("castup context ", context);
-    console.log("isremote ", isRemote);
     if (!isRemote && !this.isKeyDown) {
       return false;
     }
@@ -108,9 +101,6 @@ export class Spell {
     this.isKeyDown = false;
     
     const cast_data = this.effectKeyUp(context);
-
-    console.log("cast up data")
-    console.log(cast_data)
     
     if (!isRemote && context.eventBus) {
       let cameraPosition = null;

@@ -82,6 +82,33 @@ class App {
       
       // Automatically request session creation to ensure QR code is generated
       this.socketManager.emit('create-session');
+      
+      // Always spawn a mechanical spider in single player mode
+      setTimeout(() => {
+        try {
+          console.log("Attempting to spawn spider in single player mode");
+          
+          // Set first-person mode regardless of multiplayer status for testing
+          if (!this.firstPersonController.isEnabled()) {
+            this.sceneManager.setFirstPersonMode(true);
+            this.firstPersonController.toggleFirstPersonMode();
+          }
+          
+          // Spawn one mechanical spider in front of the player
+          if (this.enemyManager) {
+            console.log("Spider spawning at: 0, 1.5, -10");
+            this.enemyManager.spawnMechanicalSpider({
+              x: 0,
+              y: 1.5, // Slightly above ground to ensure it doesn't clip
+              z: -10  // In front of the player
+            });
+          } else {
+            console.error("Enemy manager not available for spider spawning");
+          }
+        } catch (error) {
+          console.error("Error spawning mechanical spider:", error);
+        }
+      }, 3000); // Longer delay to ensure everything is initialized
     });
     
     // Mark core initialization as complete
@@ -176,13 +203,20 @@ class App {
           this.sceneManager.setFirstPersonMode(true);
           this.firstPersonController.toggleFirstPersonMode();
         }
-        // Spawn training dummies when joining a room
+        // Spawn enemies when joining a room
         if (this.enemyManager) {
           // Remove any existing enemies first
           this.enemyManager.removeAllEnemies();
           
-          // Spawn 5 training dummies around the map
+          // Spawn training dummies around the map
           this.enemyManager.spawnTrainingDummies(20);
+          
+          // Spawn one mechanical spider
+          this.enemyManager.spawnMechanicalSpider({
+            x: 0,
+            y: 1.5, // Slightly above ground to ensure it doesn't clip
+            z: -10  // In front of the player
+          });
         }
       });
       
@@ -193,13 +227,20 @@ class App {
           this.firstPersonController.toggleFirstPersonMode();
         }
         
-        // Spawn training dummies when creating a room
+        // Spawn enemies when creating a room
         if (this.enemyManager) {
           // Remove any existing enemies first
           this.enemyManager.removeAllEnemies();
           
-          // Spawn 5 training dummies around the map
+          // Spawn training dummies around the map
           this.enemyManager.spawnTrainingDummies(20);
+          
+          // Spawn one mechanical spider
+          this.enemyManager.spawnMechanicalSpider({
+            x: 0,
+            y: 1.5, // Slightly above ground to ensure it doesn't clip
+            z: -10  // In front of the player
+          });
         }
       });
     }

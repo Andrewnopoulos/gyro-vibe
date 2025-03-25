@@ -1,4 +1,5 @@
 import { TrainingDummy } from './training-dummy.js';
+import { MechanicalSpider } from './mechanical-spider.js';
 
 /**
  * Manages all enemies in the game
@@ -98,6 +99,19 @@ export class EnemyManager {
         sourceId: spellId
       });
     }
+  }
+
+  spawnMechanicalSpider(position) {
+    const spider = new MechanicalSpider({
+      scene: this.scene,
+      world: this.world,
+      eventBus: this.eventBus,
+      position: position,
+      health: 20
+    });
+    
+    this.enemies.set(spider.id, spider);
+    return spider;
   }
   
   /**
@@ -231,7 +245,9 @@ export class EnemyManager {
           dummy.setHealth(health);
         }
       }
-    } else {
+    } else if (type == 'mechanical-spider') {
+      this.spawnMechanicalSpider(position);
+    }else {
       console.warn(`Unknown enemy type: ${type} - cannot spawn`);
     }
   }

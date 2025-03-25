@@ -1,168 +1,191 @@
-Multiplayer Integration Plan: Spell Casts and Enemy Synchronization
-Phase 1: Analysis and Architecture (1-2 days)
-
-Review Current Multiplayer System
-
-Examine GameStateManager, SocketManager, and PlayerManager to understand how position/rotation data are currently synchronized
-Identify the event flow between clients and server
-Map out how physics objects are currently synchronized (if at all)
-
-
-Define Synchronization Requirements
-
-Specify which spell properties need synchronization (type, target, damage, visual effects)
-Define enemy properties to synchronize (position, health, attack state, targeting)
-Identify potential network optimization needs (e.g., update frequency, data compression)
-
-
-Design Extension Points
-
-Plan how to extend the current network protocol
-Design new event types for enemy state and spell casting
-Create serialization format for spell and enemy data
-
-
-
-Phase 2: Server-Side Implementation (2-3 days)
-
-Extend Socket.IO Event Handlers
-
-Add spell-cast event handler on server
-Add enemy-update and enemy-damage event handlers
-Add enemy-spawn and enemy-death event handlers
-
-
-Implement Server-Side Validation
-
-Add basic validation for spell casting (cooldowns, range checks)
-Add validation for enemy damage (prevent cheating)
-Implement server authority for critical gameplay actions
-
-
-Create Room-Based Broadcasting
-
-Implement broadcast mechanism for spell effects to all room members
-Create efficient enemy state broadcasting (consider delta encoding)
-Add game state reconciliation for late-joining players
-
-
-
-Phase 3: Client-Side Implementation (3-4 days)
-
-Extend SpellRegistry and Spell Classes
-
-Modify spell casting to emit network events
-Add network event listeners for remote spell casts
-Implement visual effects for remote player spell casts
-
-
-Enhance EnemyManager
-
-Add network event emission for enemy spawning/state/damage
-Implement remote enemy state application
-Add interpolation for smooth enemy movement across network
-Create reconciliation mechanism for enemy health
-
-
-Update Gravity Gun/Physics Objects
-
-Ensure consistent behavior with networked spell effects
-Synchronize physical interactions with enemies
-
-
-
-Phase 4: UI and Feedback (1-2 days)
-
-Add Visual Indicators
-
-Create visual feedback for remote player spell casts
-Add indicators for networked damage sources
-Implement "spell hit" animations that work across network
-
-
-Enhance In-Game Notifications
-
-Add notifications for remote player kills
-Show spell effects from other players
-Display team damage statistics
-
-
-
-Phase 5: Testing and Optimization (2-3 days)
-
-Implement Testing Framework
-
-Create test scenarios for synchronized spell casting
-Test edge cases (disconnections during spell casts, etc.)
-Validate behavior with multiple clients
-
-
-Optimize Network Traffic
-
-Analyze bandwidth usage and optimize packet size
-Implement delta compression for enemy state updates
-Add priority system for critical vs. non-critical updates
-
-
-Refine Synchronization Logic
-
-Tune update frequency based on testing results
-Optimize server-side validation
-Implement prediction/reconciliation for smoother gameplay
-
-
-
-Phase 6: Documentation and Deployment (1-2 days)
-
-Update Code Documentation
-
-Document all new network events and their payload formats
-Create sequence diagrams for synchronized gameplay actions
-Document potential edge cases and their handling
-
-
-Create Deployment Plan
-
-Outline server capacity requirements
-Define rollout strategy
-Create monitoring plan for network performance
-
-
-Prepare Release Notes
-
-Document new multiplayer features for players
-Highlight known limitations
-Provide troubleshooting guidance
-
-
-
-Key Implementation Details
-New Socket Events to Implement:
-Copy// Client to Server
-'spell-cast': { spellId, targetPosition, targetId? }
-'enemy-damage': { enemyId, damage, sourceType, sourceId }
-
-// Server to Clients
-'remote-spell-cast': { playerId, spellId, targetPosition, targetId? }
-'enemy-spawn': { enemyId, type, position, health }
-'enemy-update': { enemyId, position?, health?, state? }
-'enemy-death': { enemyId, killerPlayerId? }
-Main Files to Modify:
-
-Server-side:
-
-server/socket-handler.js (add new event handlers)
-server/room-manager.js (extend room state to include enemies)
-server/game-state.js (add spell and enemy synchronization)
-
-
-Client-side:
-
-client/js/game/game-state-manager.js (add new event handlers)
-client/js/game/spells/spell.js (extend with network functionality)
-client/js/game/enemy-system/enemy-manager.js (add network synchronization)
-client/js/game/spells/spell-effects.js (handle remote spell effects)
-
-
-
-This plan provides a structured approach to implementing multiplayer spell casting and enemy synchronization. Once completed, you'll have a more cohesive multiplayer experience where players can see each other's spells and fight enemies together.
+# Mechanical Spider Enemy Implementation Plan
+
+This plan outlines a step-by-step approach to implementing a mechanical spider enemy with procedural animation in the existing game codebase.
+
+## 1. Create the MechanicalSpider Class
+
+First, create a new file `mechanical-spider.js` in the `client/js/game/enemy-system/` directory:
+
+1. Create a class that extends the base `Enemy` class
+2. Implement a constructor that initializes spider-specific properties:
+   - Number of legs (8)
+   - Body size and shape
+   - Leg dimensions
+   - Animation parameters
+   - Movement properties
+3. Override the `createModel`, `createPhysics`, and `updateBehavior` methods
+4. Add helper methods for procedural animation and leg placement
+
+## 2. Create 3D Model Components
+
+For the spider model:
+
+1. Create a central body component using primitive shapes:
+   - Main body (sphere or capsule)
+   - Head section with "eyes" (small spheres)
+   - Mechanical details (cylinders, boxes for joints)
+2. Create leg components:
+   - Each leg will have 3 segments (coxa, femur, tibia)
+   - Joints connecting the segments
+   - Use cylinder primitives for leg segments
+   - Create distinct visual appearance for mechanical parts
+
+## 3. Implement Leg Structure
+
+For each leg:
+
+1. Create a container object to track each leg's state:
+   ```javascript
+   {
+     index: 0,                     // Leg index
+     segments: [],                 // THREE.js mesh objects for segments
+     joints: [],                   // THREE.js mesh objects for joints
+     basePosition: new THREE.Vector3(),  // Where leg connects to body
+     restPosition: new THREE.Vector3(),  // Default/neutral position
+     targetPosition: new THREE.Vector3(), // Where the leg is trying to reach
+     currentPosition: new THREE.Vector3(), // Current foot position
+     phase: 0,                     // 0-1 step progress
+     moving: false,                // Whether leg is currently moving
+     lastMoveTime: 0,              // When leg last started moving
+     rayResult: null               // Physics raycast result for foot placement
+   }
+   ```
+
+2. Position the legs radially around the body
+3. Set initial rest positions for each leg
+
+## 4. Implement Physics Integration
+
+1. Create a main physics body for the spider's body:
+   - Use a sphere or compound shape for the central body
+   - Add collision detection
+   - Configure proper mass and material properties
+
+2. Implement leg-ground interaction:
+   - Use raycasts from the body to determine ground placement
+   - Calculate foot positions based on terrain height
+   - Update the body position based on leg placement
+
+3. Create sensors for the spider to detect the player and obstacles
+
+## 5. Implement Procedural Animation System
+
+The core animation system consists of:
+
+1. Gait controller to coordinate leg movements:
+   - Implement alternating tetrapod gait (move groups of 4 legs at a time)
+   - Define sequence of leg movements for walking
+
+2. Leg step cycle function:
+   - Calculate step height using sin curve 
+   - Interpolate between previous and target positions
+   - Manage timing of each leg's movement
+
+3. Inverse Kinematics (IK) solver for legs:
+   - Given a target foot position, calculate joint angles
+   - Implement FABRIK or two-joint analytical IK solution
+   - Update each leg segment position and rotation
+
+4. Leg placement algorithm:
+   - Determine when a leg should move
+   - Calculate new target positions based on movement direction
+   - Ensure legs don't cross each other
+
+## 6. Implement Movement Behavior
+
+1. Create a state machine for the spider's behavior:
+   - IDLE: Standing still, occasionally shifting weight
+   - PATROL: Walking along predefined waypoints
+   - CHASE: Pursuing the player
+   - ATTACK: Performing attack animation when close to player
+
+2. Implement path finding and terrain navigation:
+   - Calculate movement vector toward target
+   - Adjust body orientation to match movement direction
+   - Handle slopes and obstacles
+
+3. Attack mechanics:
+   - Define attack range and damage values
+   - Create attack animation (rearing up front legs)
+   - Emit damage events when attacks connect
+
+## 7. Integrate with Enemy Manager
+
+1. Update the `EnemyManager` class to handle spawning MechanicalSpiders:
+   ```javascript
+   spawnMechanicalSpider(position) {
+     const spider = new MechanicalSpider({
+       scene: this.scene,
+       world: this.world,
+       eventBus: this.eventBus,
+       position,
+       health: 20
+     });
+     
+     this.enemies.set(spider.id, spider);
+     return spider;
+   }
+   ```
+
+2. Update the enemy spawning code to include mechanical spiders
+3. Add handling for networked spider sync if needed
+4. Register the spider type in the network system
+
+## 8. Detailed Implementation of Procedural Leg Animation
+
+The core animation will be implemented with these functions:
+
+1. `updateLegPositions(delta)`:
+   - Determine which legs should move based on gait pattern
+   - For each leg, determine if it should stay planted or move to new position
+   - Calculate step heights and interpolations for moving legs
+
+2. `calculateLegIK(leg, targetPosition)`:
+   - Given a target foot position, calculate angles for each joint
+   - Apply rotations to leg segments
+   - Handle constraints in joint rotations
+
+3. `findFootTargetPosition(leg)`:
+   - Cast a ray downward from the leg's default position
+   - Find intersection with ground
+   - Adjust target based on body movement direction
+
+4. `updateBodyPosition(delta)`:
+   - Calculate the average of all planted leg positions
+   - Smoothly interpolate body position based on leg support
+   - Adjust body orientation based on terrain and movement
+
+## 9. Add Visual Effects and Polish
+
+1. Add mechanical details and animations:
+   - Eyes that glow/react to player
+   - Steam/particle effects at joints
+   - Mechanical sounds for movement
+
+2. Death animation:
+   - Legs collapse under the body
+   - Sparks/explosion effects
+   - Body parts detach
+
+3. Attack animations:
+   - Raised front legs
+   - Glowing attack indicators
+   - Impact effects
+
+## 10. Performance Optimization
+
+1. Optimize raycasting using a reduced frequency
+2. Simplify IK calculations at greater distances from player
+3. Level of detail (LOD) for spider model at distance
+4. Optimize physics by using simpler collision shapes when possible
+
+## Code Structure Blueprint
+
+With this plan, the implementation would follow this file structure:
+
+- `mechanical-spider.js`: Main enemy class
+- `spider-leg.js`: Class to manage leg state and animation
+- `spider-ik-solver.js`: IK calculations for leg positioning
+- `spider-gait-controller.js`: Coordination of leg movements
+
+This modular approach keeps the code organized and allows for easier updates and refinements of the spider behavior.
