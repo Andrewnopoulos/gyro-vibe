@@ -14,12 +14,39 @@ export class QRCodeGenerator {
     this.qrcodeDisplay = document.getElementById('qrcodeDisplay');
     this.mobileUrl = document.getElementById('mobileUrl');
     
-    // In portal mode, hide the URL text immediately
-    if (this.isPortalMode && this.mobileUrl) {
+    // Check if user is on a mobile device (but not on the /mobile endpoint)
+    this.isMobileDevice = this.checkIsMobileDevice();
+    
+    // In portal mode or on mobile device, hide the URL text immediately
+    if ((this.isPortalMode || this.isMobileDevice) && this.mobileUrl) {
       this.mobileUrl.style.display = 'none';
     }
     
-    this.setupEventListeners();
+    // Only setup event listeners if not on mobile device
+    if (!this.isMobileDevice) {
+      this.setupEventListeners();
+    } else {
+      console.log('Mobile device detected. QR code generation disabled.');
+    }
+  }
+  
+  /**
+   * Check if the current device is a mobile device not using the mobile endpoint
+   * @returns {boolean} Whether the device is a mobile device
+   */
+  checkIsMobileDevice() {
+    const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+    
+    // Detect phones
+    const mobileRegex = /(android|bb\d+|meego).+mobile|avantgo|bada\/|blackberry|blazer|compal|elaine|fennec|hiptop|iemobile|ip(hone|od)|iris|kindle|lge |maemo|midp|mmp|mobile.+firefox|netfront|opera m(ob|in)i|palm( os)?|phone|p(ixi|re)\/|plucker|pocket|psp|series(4|6)0|symbian|treo|up\.(browser|link)|vodafone|wap|windows ce|xda|xiino/i;
+    
+    // Detect tablets
+    const tabletRegex = /android|ipad|playbook|silk/i;
+    
+    // Check if not accessing via the mobile-specific endpoint
+    const isMobileEndpoint = window.location.pathname.includes('/mobile');
+    
+    return (mobileRegex.test(userAgent) || tabletRegex.test(userAgent)) && !isMobileEndpoint;
   }
 
   /**
@@ -35,6 +62,11 @@ export class QRCodeGenerator {
    * Generate QR code for mobile connection
    */
   generateQRCode() {
+    // If on a mobile device, don't generate QR code
+    if (this.isMobileDevice) {
+      return;
+    }
+    
     const sessionId = this.socketManager.getSessionId();
     const protocol = window.location.protocol;
     const host = window.location.host;
@@ -43,7 +75,9 @@ export class QRCodeGenerator {
     
     if (!sessionId) {
       console.error('Session ID not available for QR code');
-      this.qrcodeDisplay.innerHTML = 'Error: Session not created yet';
+      if (this.qrcodeDisplay) {
+        this.qrcodeDisplay.innerHTML = 'Error: Session not created yet';
+      }
       return;
     }
     
@@ -80,37 +114,41 @@ export class QRCodeGenerator {
     }
     
     // Set the URL text - show appropriate info based on environment
-    if (isRailway) {
-      this.mobileUrl.innerHTML = `<div><strong>URL:</strong> ${urlToUse}</div>`;
-    } else {
-      this.mobileUrl.innerHTML = `
-        <div><strong>HTTP:</strong> ${httpUrl}</div>
-        <div><strong>HTTPS:</strong> ${httpsUrl} (recommended for sensors)</div>`;
+    if (this.mobileUrl) {
+      if (isRailway) {
+        this.mobileUrl.innerHTML = `<div><strong>URL:</strong> ${urlToUse}</div>`;
+      } else {
+        this.mobileUrl.innerHTML = `
+          <div><strong>HTTP:</strong> ${httpUrl}</div>
+          <div><strong>HTTPS:</strong> ${httpsUrl} (recommended for sensors)</div>`;
+      }
     }
     
     // Generate QR code for the most appropriate URL
-    try {
-      // Create a canvas element first
-      const canvas = document.createElement('canvas');
-      // In portal mode, make the QR code smaller
-      const qrSize = this.isPortalMode ? 150 : 200;
-      canvas.width = qrSize;
-      canvas.height = qrSize;
-      this.qrcodeDisplay.innerHTML = ''; // Clear the container
-      this.qrcodeDisplay.appendChild(canvas);
-      
-      window.QRCodeLib.toCanvas(canvas, urlToUse, {
-        width: qrSize,
-        margin: 1
-      }, function (error) {
-        if (error) {
-          console.error('Error generating QR code:', error);
-          this.qrcodeDisplay.innerHTML = 'Error generating QR code. Please use the URL below.';
-        }
-      });
-    } catch (e) {
-      console.error('Exception while generating QR code:', e);
-      this.qrcodeDisplay.innerHTML = 'Error generating QR code. Please use the URL below.';
+    if (this.qrcodeDisplay) {
+      try {
+        // Create a canvas element first
+        const canvas = document.createElement('canvas');
+        // In portal mode, make the QR code smaller
+        const qrSize = this.isPortalMode ? 150 : 200;
+        canvas.width = qrSize;
+        canvas.height = qrSize;
+        this.qrcodeDisplay.innerHTML = ''; // Clear the container
+        this.qrcodeDisplay.appendChild(canvas);
+        
+        window.QRCodeLib.toCanvas(canvas, urlToUse, {
+          width: qrSize,
+          margin: 1
+        }, function (error) {
+          if (error) {
+            console.error('Error generating QR code:', error);
+            this.qrcodeDisplay.innerHTML = 'Error generating QR code. Please use the URL below.';
+          }
+        });
+      } catch (e) {
+        console.error('Exception while generating QR code:', e);
+        this.qrcodeDisplay.innerHTML = 'Error generating QR code. Please use the URL below.';
+      }
     }
   }
 }

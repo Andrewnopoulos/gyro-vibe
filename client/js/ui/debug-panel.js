@@ -16,7 +16,11 @@ export class DebugPanel {
     this.panel = null;
     this.physicsUtils = null; // Will be set via event if available
     
-    if (DEBUG_CONFIG.ENABLE_MULTIPLAYER_DEBUG || physicsManager) {
+    // Check if user is on a mobile device (but not on the /mobile endpoint)
+    this.isMobileDevice = this.checkIsMobileDevice();
+    
+    // Only create debug panel if debug is enabled, there's a physics manager, and not on mobile
+    if ((DEBUG_CONFIG.ENABLE_MULTIPLAYER_DEBUG || physicsManager) && !this.isMobileDevice) {
       this.createDebugPanel();
       this.setupEventListeners();
       
@@ -41,7 +45,28 @@ export class DebugPanel {
           this.physicsUtils = utils;
         }
       });
+    } else if (this.isMobileDevice) {
+      console.log('Mobile device detected. Debug panel disabled.');
     }
+  }
+  
+  /**
+   * Check if the current device is a mobile device not using the mobile endpoint
+   * @returns {boolean} Whether the device is a mobile device
+   */
+  checkIsMobileDevice() {
+    const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+    
+    // Detect phones
+    const mobileRegex = /(android|bb\d+|meego).+mobile|avantgo|bada\/|blackberry|blazer|compal|elaine|fennec|hiptop|iemobile|ip(hone|od)|iris|kindle|lge |maemo|midp|mmp|mobile.+firefox|netfront|opera m(ob|in)i|palm( os)?|phone|p(ixi|re)\/|plucker|pocket|psp|series(4|6)0|symbian|treo|up\.(browser|link)|vodafone|wap|windows ce|xda|xiino/i;
+    
+    // Detect tablets
+    const tabletRegex = /android|ipad|playbook|silk/i;
+    
+    // Check if not accessing via the mobile-specific endpoint
+    const isMobileEndpoint = window.location.pathname.includes('/mobile');
+    
+    return (mobileRegex.test(userAgent) || tabletRegex.test(userAgent)) && !isMobileEndpoint;
   }
   
   /**

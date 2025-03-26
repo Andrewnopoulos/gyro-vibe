@@ -16,19 +16,46 @@ export class LobbyManager {
     this.currentRoomInfo = null;
     this.lobbyShowing = false;
     
-    this.createUI();
-    this.setupEventListeners();
+    // Check if user is on a mobile device (but not on the /mobile endpoint)
+    this.isMobileDevice = this.checkIsMobileDevice();
     
-    // Start with lobby minimized
-    this.hideLobby();
-    
-    // Set up the lobby toggle button
-    this.lobbyToggleBtn = document.getElementById('lobbyToggleBtn');
-    if (this.lobbyToggleBtn) {
-      this.lobbyToggleBtn.addEventListener('click', () => {
-        this.toggleLobby();
-      });
+    // Only create UI if not on a mobile device
+    if (!this.isMobileDevice) {
+      this.createUI();
+      this.setupEventListeners();
+      
+      // Start with lobby minimized
+      this.hideLobby();
+      
+      // Set up the lobby toggle button
+      this.lobbyToggleBtn = document.getElementById('lobbyToggleBtn');
+      if (this.lobbyToggleBtn) {
+        this.lobbyToggleBtn.addEventListener('click', () => {
+          this.toggleLobby();
+        });
+      }
+    } else {
+      console.log('Mobile device detected. Multiplayer lobby UI disabled.');
     }
+  }
+  
+  /**
+   * Check if the current device is a mobile device not using the mobile endpoint
+   * @returns {boolean} Whether the device is a mobile device
+   */
+  checkIsMobileDevice() {
+    const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+    
+    // Detect phones
+    const mobileRegex = /(android|bb\d+|meego).+mobile|avantgo|bada\/|blackberry|blazer|compal|elaine|fennec|hiptop|iemobile|ip(hone|od)|iris|kindle|lge |maemo|midp|mmp|mobile.+firefox|netfront|opera m(ob|in)i|palm( os)?|phone|p(ixi|re)\/|plucker|pocket|psp|series(4|6)0|symbian|treo|up\.(browser|link)|vodafone|wap|windows ce|xda|xiino/i;
+    
+    // Detect tablets
+    const tabletRegex = /android|ipad|playbook|silk/i;
+    
+    // Check if not accessing via the mobile-specific endpoint
+    const isMobileEndpoint = window.location.pathname.includes('/mobile');
+    
+    return (mobileRegex.test(userAgent) || tabletRegex.test(userAgent)) && !isMobileEndpoint;
   }
   
   /**
@@ -734,6 +761,11 @@ export class LobbyManager {
    * Show room overlay
    */
   showRoomOverlay() {
+    // If on mobile device, don't show room overlay
+    if (this.isMobileDevice) {
+      return;
+    }
+    
     if (this.roomOverlay) {
       this.roomOverlay.style.display = 'block';
     }
@@ -743,6 +775,11 @@ export class LobbyManager {
    * Hide room overlay
    */
   hideRoomOverlay() {
+    // If on mobile device, no need to hide (already hidden)
+    if (this.isMobileDevice) {
+      return;
+    }
+    
     if (this.roomOverlay) {
       this.roomOverlay.style.display = 'none';
     }
@@ -752,6 +789,11 @@ export class LobbyManager {
    * Show lobby overlay
    */
   showLobby() {
+    // If on mobile device, don't show lobby
+    if (this.isMobileDevice) {
+      return;
+    }
+    
     if (this.lobbyOverlay) {
       this.lobbyOverlay.style.display = 'block';
       this.refreshRoomsList();
@@ -768,6 +810,11 @@ export class LobbyManager {
    * Hide lobby overlay
    */
   hideLobby() {
+    // If on mobile device, no need to hide (already hidden)
+    if (this.isMobileDevice) {
+      return;
+    }
+    
     if (this.lobbyOverlay) {
       this.lobbyOverlay.style.display = 'none';
       this.lobbyShowing = false;

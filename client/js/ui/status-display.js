@@ -17,13 +17,35 @@ export class StatusDisplay {
     this.debugSection = document.getElementById('debugSection');
     this.debugShowing = false;
     
-    // In portal mode, hide instructions immediately
-    if (this.isPortalMode && this.instructionsElement) {
+    // Check if user is on a mobile device (but not on the /mobile endpoint)
+    this.isMobileDevice = this.checkIsMobileDevice();
+    
+    // In portal mode or on mobile device, hide instructions immediately
+    if ((this.isPortalMode || this.isMobileDevice) && this.instructionsElement) {
       this.instructionsElement.style.display = 'none';
     }
     
     this.setupEventListeners();
     this.setStatus('Connecting to server...', 'disconnected');
+  }
+  
+  /**
+   * Check if the current device is a mobile device not using the mobile endpoint
+   * @returns {boolean} Whether the device is a mobile device
+   */
+  checkIsMobileDevice() {
+    const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+    
+    // Detect phones
+    const mobileRegex = /(android|bb\d+|meego).+mobile|avantgo|bada\/|blackberry|blazer|compal|elaine|fennec|hiptop|iemobile|ip(hone|od)|iris|kindle|lge |maemo|midp|mmp|mobile.+firefox|netfront|opera m(ob|in)i|palm( os)?|phone|p(ixi|re)\/|plucker|pocket|psp|series(4|6)0|symbian|treo|up\.(browser|link)|vodafone|wap|windows ce|xda|xiino/i;
+    
+    // Detect tablets
+    const tabletRegex = /android|ipad|playbook|silk/i;
+    
+    // Check if not accessing via the mobile-specific endpoint
+    const isMobileEndpoint = window.location.pathname.includes('/mobile');
+    
+    return (mobileRegex.test(userAgent) || tabletRegex.test(userAgent)) && !isMobileEndpoint;
   }
 
   /**
@@ -163,11 +185,16 @@ export class StatusDisplay {
    * @param {boolean} show - Whether to show QR code
    */
   showQRCode(show) {
+    // If on a mobile device (not using /mobile endpoint), don't show QR code
+    if (this.isMobileDevice) {
+      return;
+    }
+    
     if (this.qrcodeElement) {
       this.qrcodeElement.style.display = show ? 'block' : 'none';
       
-      // Also show/hide instructions panel, but only if not in portal mode
-      if (this.instructionsElement && !this.isPortalMode) {
+      // Also show/hide instructions panel, but only if not in portal mode and not on mobile
+      if (this.instructionsElement && !this.isPortalMode && !this.isMobileDevice) {
         this.instructionsElement.style.display = show ? 'block' : 'none';
       }
       
