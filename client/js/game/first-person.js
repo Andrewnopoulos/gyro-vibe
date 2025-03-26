@@ -70,6 +70,13 @@ export class FirstPersonController {
         startTime: 0,
         minDistance: 70, // Minimum distance to detect swipe
         maxTime: 300 // Maximum time (ms) for swipe detection
+      },
+      // For double-tap detection
+      doubleTap: {
+        lastTapTime: 0,
+        maxDelay: 300, // Maximum time between taps (ms)
+        position: { x: 0, y: 0 },
+        maxDistance: 40 // Maximum distance between taps to consider it a double-tap
       }
     };
 
@@ -117,8 +124,8 @@ export class FirstPersonController {
         <strong style="color:#4fc3f7">Mobile Controls:</strong><br>
         • Left Joystick - Move<br>
         • Touch Right Side - Look Around<br>
-        • Swipe Horizontally - Flip Pages<br>
-        • Swipe Up - Cast Spell<br>
+        • Swipe Left/Right - Flip Pages<br>
+        • Double-Tap Right Side - Cast Spell<br>
         <strong>DESKTOP FOR BEST EXPERIENCE</strong>
       `;
 
@@ -478,31 +485,73 @@ export class FirstPersonController {
     // Handle touch end
     gameContainer.addEventListener('touchend', (e) => {
       if (!this.enabled) return;
-
+      
+      // Get the last touch that just ended
+      const lastTouch = e.changedTouches[0];
+      const touchX = lastTouch.clientX;
+      const touchY = lastTouch.clientY;
+      const now = Date.now();
+      const doubleTap = this.mobileControls.doubleTap;
+      
       // Check if all touches are ended
       if (e.touches.length === 0) {
         const leftJoystick = this.mobileControls.leftJoystick;
         const rightJoystick = this.mobileControls.rightJoystick;
         const swipe = this.mobileControls.swipe;
-
-        // Check for swipe gestures
+        
+        // Check for double-tap on right side of screen
+        if (touchX > window.innerWidth / 2) {
+          // Check if this could be a double-tap
+          const timeSinceLastTap = now - doubleTap.lastTapTime;
+          
+          if (timeSinceLastTap < doubleTap.maxDelay) {
+            // This is potentially the second tap in a double-tap
+            
+            // Calculate distance from last tap position
+            const deltaX = touchX - doubleTap.position.x;
+            const deltaY = touchY - doubleTap.position.y;
+            const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+            
+            // If taps are close enough together, consider it a double-tap
+            if (distance < doubleTap.maxDistance) {
+              // This is a double-tap - cast spell!
+              this.eventBus.emit('weapon:use');
+              console.log('Double-tap detected on right side - casting spell!');
+              
+              // Reset the last tap time to prevent triple-tap detection
+              doubleTap.lastTapTime = 0;
+            } else {
+              // Taps are too far apart, treat as a new first tap
+              doubleTap.lastTapTime = now;
+              doubleTap.position.x = touchX;
+              doubleTap.position.y = touchY;
+            }
+          } else {
+            // This is the first tap in a potential double-tap
+            doubleTap.lastTapTime = now;
+            doubleTap.position.x = touchX;
+            doubleTap.position.y = touchY;
+          }
+        }
+        
+        // Check for swipe gestures for page flipping on left side
         if (leftJoystick.active) {
           // Set end position for swipe detection
           swipe.endX = leftJoystick.currentX;
           swipe.endY = leftJoystick.currentY;
-
+          
           // Calculate swipe distance and direction
           const deltaX = swipe.endX - swipe.startX;
           const deltaY = swipe.endY - swipe.startY;
           const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-          const duration = Date.now() - swipe.startTime;
-
+          const duration = now - swipe.startTime;
+          
           // Check if this is a valid swipe
           if (distance > swipe.minDistance && duration < swipe.maxTime) {
             // Determine swipe direction
             const absX = Math.abs(deltaX);
             const absY = Math.abs(deltaY);
-
+            
             if (absX > absY) {
               // Horizontal swipe - flip pages
               if (deltaX > 0) {
@@ -513,13 +562,6 @@ export class FirstPersonController {
                 // Swipe left - flip page left (Q key)
                 this.eventBus.emit('weapon:flip-left');
                 console.log('Swipe left detected - flipping page left');
-              }
-            } else {
-              // Vertical swipe
-              if (deltaY < 0) {
-                // Swipe up - cast spell (Space key)
-                this.eventBus.emit('weapon:use');
-                console.log('Swipe up detected - casting spell');
               }
             }
           }
@@ -607,18 +649,19 @@ export class FirstPersonController {
           // God mode mobile controls
           this.controlsGuide.innerHTML = `
             <strong style="color:#ffd700">GOD MODE CONTROLS:</strong><br>
-            • Swipe - Look Around<br>
-            • Tap - Cast Spell<br>
-            • Tilt Phone - Navigate<br>
+            • Left Joystick - Move<br>
+            • Touch Right Side - Look Around<br>
+            • Double-Tap Right Side - Cast Spell<br>
             <span style="color:#ffd700">⚡ Flying Enabled ⚡</span>
           `;
         } else {
           // Normal mobile controls
           this.controlsGuide.innerHTML = `
             <strong style="color:#4fc3f7">Mobile Controls:</strong><br>
-            • Swipe - Look Around<br>
-            • Tap - Cast Spell<br>
-            • Tilt Phone - Aim<br>
+            • Left Joystick - Move<br>
+            • Touch Right Side - Look Around<br>
+            • Swipe Left/Right - Flip Pages<br>
+            • Double-Tap Right Side - Cast Spell<br>
             <strong>Play on desktop for full experience</strong>
           `;
         }
