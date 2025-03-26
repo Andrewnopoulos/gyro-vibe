@@ -60,32 +60,61 @@ export class FirstPersonController {
     
     console.log('Creating UI elements in container:', this.container);
     
+    // Check if we're on a mobile device
+    const isMobileDevice = this.checkIsMobileDevice();
+    
     // Add controls guide
     this.controlsGuide = document.createElement('div');
-    this.controlsGuide.style.position = 'absolute';
-    this.controlsGuide.style.bottom = '10px';
-    this.controlsGuide.style.right = '10px';
-    this.controlsGuide.style.padding = '10px';
-    this.controlsGuide.style.backgroundColor = 'rgba(0,0,0,0.5)';
-    this.controlsGuide.style.color = 'white';
-    this.controlsGuide.style.fontSize = '12px';
-    this.controlsGuide.style.borderRadius = '4px';
-    this.controlsGuide.style.zIndex = '1000';
-    this.controlsGuide.style.display = 'none'; // Hidden by default
-    this.controlsGuide.innerHTML = `
-      <strong>Controls:</strong><br>
-      W/Arrow Up - Move Forward<br>
-      S/Arrow Down - Move Backward<br>
-      A/Arrow Left - Move Left<br>
-      D/Arrow Right - Move Right<br>
-      Space - Use Current Spell<br>
-      Q - Flip Page Left<br>
-      E - Flip Page Right<br>
-      V - Toggle Debug Raycast<br>
-      Mouse - Look Around<br>
-      <strong>Mobile Controls:</strong><br>
-      Touch Drag - Look Around
-    `;
+    
+    if (isMobileDevice) {
+      // Mobile-specific controls style
+      this.controlsGuide.style.position = 'absolute';
+      this.controlsGuide.style.top = '10px';
+      this.controlsGuide.style.left = '10px';
+      this.controlsGuide.style.padding = '8px';
+      this.controlsGuide.style.backgroundColor = 'rgba(0,0,0,0.6)';
+      this.controlsGuide.style.color = 'white';
+      this.controlsGuide.style.fontSize = '11px';
+      this.controlsGuide.style.borderRadius = '4px';
+      this.controlsGuide.style.zIndex = '1000';
+      this.controlsGuide.style.display = 'none'; // Hidden by default
+      this.controlsGuide.style.maxWidth = '160px';
+      this.controlsGuide.innerHTML = `
+        <strong style="color:#4fc3f7">Mobile Controls:</strong><br>
+        • Swipe - Look Around<br>
+        • Tap - Cast Spell<br>
+        • Draw Circle - Shield<br>
+        • Draw Triangle - Fireball<br>
+        • Tilt Phone - Aim
+      `;
+    } else {
+      // Desktop controls
+      this.controlsGuide.style.position = 'absolute';
+      this.controlsGuide.style.bottom = '10px';
+      this.controlsGuide.style.right = '10px';
+      this.controlsGuide.style.padding = '10px';
+      this.controlsGuide.style.backgroundColor = 'rgba(0,0,0,0.5)';
+      this.controlsGuide.style.color = 'white';
+      this.controlsGuide.style.fontSize = '12px';
+      this.controlsGuide.style.borderRadius = '4px';
+      this.controlsGuide.style.zIndex = '1000';
+      this.controlsGuide.style.display = 'none'; // Hidden by default
+      this.controlsGuide.innerHTML = `
+        <strong>Controls:</strong><br>
+        W/Arrow Up - Move Forward<br>
+        S/Arrow Down - Move Backward<br>
+        A/Arrow Left - Move Left<br>
+        D/Arrow Right - Move Right<br>
+        Space - Use Current Spell<br>
+        Q - Flip Page Left<br>
+        E - Flip Page Right<br>
+        V - Toggle Debug Raycast<br>
+        Mouse - Look Around<br>
+        <strong>Mobile Controls:</strong><br>
+        Touch Drag - Look Around
+      `;
+    }
+    
     this.controlsGuide.id = 'fp-controls-guide';
     this.container.appendChild(this.controlsGuide);
     console.log('Controls guide added to container');
@@ -211,41 +240,68 @@ export class FirstPersonController {
       this.godModeIndicator.style.display = this.godMode ? 'block' : 'none';
     }
     
+    // Check if we're on a mobile device
+    const isMobileDevice = this.checkIsMobileDevice();
+    
     // Update controls guide with God Mode instructions if active
     if (this.controlsGuide) {
-      if (this.godMode) {
-        // Update controls guide to include God Mode keys
-        this.controlsGuide.innerHTML = `
-          <strong>Controls (GOD MODE):</strong><br>
-          W/Arrow Up - Move Forward<br>
-          S/Arrow Down - Move Backward<br>
-          A/Arrow Left - Move Left<br>
-          D/Arrow Right - Move Right<br>
-          Q - Move Up<br>
-          E - Move Down<br>
-          Space - Cast Current Page Spell<br>
-          V - Toggle Debug Raycast<br>
-          Mouse - Look Around<br>
-          <strong>Mobile Controls:</strong><br>
-          Touch Drag - Look Around / Draw Runes
-        `;
+      if (isMobileDevice) {
+        // Mobile-specific controls
+        if (this.godMode) {
+          // God mode mobile controls
+          this.controlsGuide.innerHTML = `
+            <strong style="color:#ffd700">GOD MODE CONTROLS:</strong><br>
+            • Swipe - Look Around<br>
+            • Tap - Cast Spell<br>
+            • Tilt Phone - Navigate<br>
+            <span style="color:#ffd700">⚡ Flying Enabled ⚡</span>
+          `;
+        } else {
+          // Normal mobile controls
+          this.controlsGuide.innerHTML = `
+            <strong style="color:#4fc3f7">Mobile Controls:</strong><br>
+            • Swipe - Look Around<br>
+            • Tap - Cast Spell<br>
+            • Tilt Phone - Aim<br>
+            <strong>Play on desktop for full experience</strong>
+          `;
+        }
       } else {
-        // Restore normal controls guide
-        this.controlsGuide.innerHTML = `
-          <strong>Controls:</strong><br>
-          W/Arrow Up - Move Forward<br>
-          S/Arrow Down - Move Backward<br>
-          A/Arrow Left - Move Left<br>
-          D/Arrow Right - Move Right<br>
-          Space - Gravity Gun (pickup/drop objects)<br>
-          Q - Flip Page Left<br>
-          E - Flip Page Right<br>
-          T - Spawn Random Object<br>
-          V - Toggle Debug Raycast<br>
-          Mouse - Look Around<br>
-          <strong>Mobile Controls:</strong><br>
-          Touch Drag - Look Around / Draw Runes
-        `;
+        // Desktop controls
+        if (this.godMode) {
+          // Update controls guide to include God Mode keys
+          this.controlsGuide.innerHTML = `
+            <strong>Controls (GOD MODE):</strong><br>
+            W/Arrow Up - Move Forward<br>
+            S/Arrow Down - Move Backward<br>
+            A/Arrow Left - Move Left<br>
+            D/Arrow Right - Move Right<br>
+            Q - Move Up<br>
+            E - Move Down<br>
+            Space - Cast Current Page Spell<br>
+            V - Toggle Debug Raycast<br>
+            Mouse - Look Around<br>
+            <strong>Mobile Controls:</strong><br>
+            Touch Drag - Look Around / Draw Runes
+          `;
+        } else {
+          // Restore normal controls guide
+          this.controlsGuide.innerHTML = `
+            <strong>Controls:</strong><br>
+            W/Arrow Up - Move Forward<br>
+            S/Arrow Down - Move Backward<br>
+            A/Arrow Left - Move Left<br>
+            D/Arrow Right - Move Right<br>
+            Space - Gravity Gun (pickup/drop objects)<br>
+            Q - Flip Page Left<br>
+            E - Flip Page Right<br>
+            T - Spawn Random Object<br>
+            V - Toggle Debug Raycast<br>
+            Mouse - Look Around<br>
+            <strong>Mobile Controls:</strong><br>
+            Touch Drag - Look Around / Draw Runes
+          `;
+        }
       }
     }
     
@@ -257,6 +313,9 @@ export class FirstPersonController {
    */
   toggleFirstPersonMode() {
     this.enabled = !this.enabled;
+    
+    // Check if we're on a mobile device
+    const isMobileDevice = this.checkIsMobileDevice();
     
     if (this.enabled) {
       // Enable first-person mode
@@ -284,14 +343,45 @@ export class FirstPersonController {
         this.camera.position.y = PLAYER_HEIGHT;
       }
       
+      // Always show controls guide when first-person mode is enabled
       this.controlsGuide.style.display = 'block';
-      this.requestPointerLock();
+      
+      // Only request pointer lock on desktop - not needed on mobile
+      if (!isMobileDevice) {
+        this.requestPointerLock();
+      }
+      
+      // Apply additional mobile-specific UI tweaks if on mobile
+      if (isMobileDevice) {
+        // Make the controlsGuide fade out after a few seconds
+        setTimeout(() => {
+          // Add transition for smooth fade
+          if (this.controlsGuide) {
+            this.controlsGuide.style.transition = 'opacity 1s ease-in-out';
+            this.controlsGuide.style.opacity = '0.5';
+          }
+        }, 5000);
+        
+        // Add touch event to toggle controls guide visibility on tap
+        this.controlsGuide.addEventListener('click', (e) => {
+          e.stopPropagation(); // Prevent click from passing through
+          // Toggle opacity
+          this.controlsGuide.style.opacity = 
+            this.controlsGuide.style.opacity === '1' ? '0.5' : '1';
+        });
+      }
+      
       this.eventBus.emit('firstperson:enabled');
     } else {
       // Disable first-person mode
       this.sceneManager.setFirstPersonMode(false);
       this.controlsGuide.style.display = 'none';
-      document.exitPointerLock();
+      
+      // Only need to exit pointer lock on desktop
+      if (!isMobileDevice) {
+        document.exitPointerLock();
+      }
+      
       this.eventBus.emit('firstperson:disabled');
     }
   }
@@ -556,6 +646,25 @@ export class FirstPersonController {
   }
   
   
+  /**
+   * Check if the current device is a mobile device not using the mobile endpoint
+   * @returns {boolean} Whether the device is a mobile device
+   */
+  checkIsMobileDevice() {
+    const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+    
+    // Detect phones
+    const mobileRegex = /(android|bb\d+|meego).+mobile|avantgo|bada\/|blackberry|blazer|compal|elaine|fennec|hiptop|iemobile|ip(hone|od)|iris|kindle|lge |maemo|midp|mmp|mobile.+firefox|netfront|opera m(ob|in)i|palm( os)?|phone|p(ixi|re)\/|plucker|pocket|psp|series(4|6)0|symbian|treo|up\.(browser|link)|vodafone|wap|windows ce|xda|xiino/i;
+    
+    // Detect tablets
+    const tabletRegex = /android|ipad|playbook|silk/i;
+    
+    // Check if not accessing via the mobile-specific endpoint
+    const isMobileEndpoint = window.location.pathname.includes('/mobile');
+    
+    return (mobileRegex.test(userAgent) || tabletRegex.test(userAgent)) && !isMobileEndpoint;
+  }
+
   /**
    * Clean up resources and event listeners
    */
