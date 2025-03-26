@@ -17,6 +17,7 @@ import { DebugPanel } from './ui/debug-panel.js';
 import { LobbyManager } from './ui/lobby-manager.js';
 import { DEBUG_CONFIG } from './config.js';
 import { EnemyManager, HealthManager } from './game/enemy-system/index.js';
+import { PortalManager } from './game/portal-manager.js';
 
 /**
  * Main application class
@@ -78,6 +79,20 @@ class App {
     this.eventBus.on('get:gravity-gun-controller', (callback) => {
       if (typeof callback === 'function') {
         callback(this.gravityGunController);
+      }
+    });
+    
+    // Initialize portal manager for VibeVerse portals
+    this.portalManager = new PortalManager(
+      this.eventBus, 
+      this.sceneManager.getScene(),
+      this.firstPersonController
+    );
+    
+    // Register event listener for getting the username
+    this.eventBus.on('get:player-username', (callback) => {
+      if (typeof callback === 'function') {
+        callback(this.username);
       }
     });
     
