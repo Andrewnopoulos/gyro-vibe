@@ -216,7 +216,7 @@ export class StatusDisplay {
         this.instructionsElement.style.display = show ? 'block' : 'none';
       }
       
-      // In portal mode, use a different style for QR code
+      // In portal mode, use a different style for QR code and add instruction text
       if (this.isPortalMode && show) {
         this.qrcodeElement.style.top = 'unset';
         this.qrcodeElement.style.left = 'unset';
@@ -225,6 +225,20 @@ export class StatusDisplay {
         this.qrcodeElement.style.transform = 'none';
         this.qrcodeElement.style.padding = '10px';
         this.qrcodeElement.style.maxWidth = '200px';
+        
+        // Add instruction text if it doesn't exist
+        let instructionText = this.qrcodeElement.querySelector('.qr-instruction-text');
+        if (!instructionText) {
+          instructionText = document.createElement('div');
+          instructionText.className = 'qr-instruction-text';
+          instructionText.style.textAlign = 'center';
+          instructionText.style.marginTop = '8px';
+          instructionText.style.fontWeight = 'bold';
+          instructionText.style.fontSize = '12px';
+          instructionText.style.color = '#000';
+          instructionText.textContent = 'SCAN TO USE YOUR DEVICE AS A MOTION CONTROLLER';
+          this.qrcodeElement.appendChild(instructionText);
+        }
       }
       
       // Ensure z-index is appropriate
