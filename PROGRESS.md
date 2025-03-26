@@ -42,6 +42,9 @@ Implementation Details:
 - Set up parameter forwarding for both entry and exit portals
 - Entry portal allows returning to the referrer game
 - Exit portal sends player to portal.pieter.com with all required parameters
+- Removed mobile redirect to allow mobile users to access the main game interface
+- Removed /play endpoint completely for a unified interface experience
+- Deleted the play.html file as it's no longer needed
 
 SAMPLE CODE: for ThreeJS here's my sample code to make a start and exit portal:
 

@@ -136,23 +136,13 @@ function isMobileDevice(userAgent) {
 
 // Define all routes first - before static file middleware
 
-// Route for the main entry point - detects device type and routes accordingly
+// Route for the main entry point - no longer redirects based on device type
 app.get('/', (req, res) => {
-  const userAgent = req.headers['user-agent'];
-  
-  // If accessing from a mobile device, redirect to the mobile play page
-  if (isMobileDevice(userAgent)) {
-    return res.redirect('/play');
-  } else {
-    // Desktop experience
-    res.sendFile(path.join(__dirname, '../client/index.html'));
-  }
+  // Always serve the desktop experience regardless of device type
+  res.sendFile(path.join(__dirname, '../client/index.html'));
 });
 
-// Route for direct mobile play experience
-app.get('/play', (req, res) => {
-  res.sendFile(path.join(__dirname, '../client/play.html'));
-});
+// /play endpoint has been removed
 
 // Route for mobile client with session ID (used for QR code scanning)
 app.get('/mobile', (req, res) => {
