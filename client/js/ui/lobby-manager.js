@@ -542,6 +542,8 @@ export class LobbyManager {
    * Handle leave room button click
    */
   handleLeaveRoom() {
+    // Emit an event before leaving the room to notify app this is a manual leave
+    this.eventBus.emit('multiplayer:manual-leave-room');
     this.gameStateManager.leaveRoom();
   }
   

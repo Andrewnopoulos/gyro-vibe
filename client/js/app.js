@@ -31,6 +31,9 @@ class App {
     // Check if on mobile
     this.isMobileDevice = this.checkIsMobileDevice();
     
+    // Flag to track if user has manually left a room
+    this.hasManuallyLeftRoom = false;
+    
     // Get username from query parameter if in portal mode, or generate one for mobile
     this.username = null;
     if (this.isPortalMode || this.isMobileDevice) {
@@ -172,6 +175,12 @@ class App {
         return;
       }
       
+      // If player has manually left a room, don't auto-join again
+      if (this.hasManuallyLeftRoom) {
+        console.log(`${modeName} mode - Player previously left a room, not auto-joining`);
+        return;
+      }
+      
       const availableRooms = data.rooms || [];
       console.log(`${modeName} mode - Available rooms:`, availableRooms.length);
       
@@ -270,6 +279,13 @@ class App {
       if (!this.firstPersonController.isEnabled()) {
         this.firstPersonController.toggleFirstPersonMode();
       }
+    });
+    
+    // Listen for manual room leave event from the UI
+    this.eventBus.on('multiplayer:manual-leave-room', () => {
+      // Set flag when player manually leaves a room through the UI
+      this.hasManuallyLeftRoom = true;
+      console.log('Player manually left room, auto-join disabled');
     });
     
     // Auto-enable first-person mode in debug, portal mode, or mobile mode when joining a room
