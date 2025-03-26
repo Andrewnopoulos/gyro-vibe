@@ -871,6 +871,13 @@ export class WeaponView {
       }
     });
     
+    // Provide access to this WeaponView instance for direct method calls
+    this.eventBus.on('get:weapon-view', (callback) => {
+      if (typeof callback === 'function') {
+        callback(this);
+      }
+    });
+    
     // Add event listeners for page flipping animations
     this.eventBus.on('weapon:flip-left', () => this.startFlipLeft());
     this.eventBus.on('weapon:flip-right', () => this.startFlipRight());

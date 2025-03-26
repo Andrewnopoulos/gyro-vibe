@@ -124,7 +124,7 @@ export class FirstPersonController {
         <strong style="color:#4fc3f7">Mobile Controls:</strong><br>
         • Left Joystick - Move<br>
         • Touch Right Side - Look Around<br>
-        • Swipe Left/Right - Flip Pages<br>
+        • Swipe Left Joystick - Flip Pages<br>
         • Double-Tap Right Side - Cast Spell<br>
         <strong>DESKTOP FOR BEST EXPERIENCE</strong>
       `;
@@ -515,8 +515,27 @@ export class FirstPersonController {
             // If taps are close enough together, consider it a double-tap
             if (distance < doubleTap.maxDistance) {
               // This is a double-tap - cast spell!
-              this.eventBus.emit('weapon:use');
-              console.log('Double-tap detected on right side - casting spell!');
+              // Get a reference to the weapon view to directly call its methods
+              let weaponView = null;
+              this.eventBus.emit('get:weapon-view', (view) => {
+                weaponView = view;
+              });
+              
+              if (weaponView) {
+                // First call castSpaceBarSpell() to start the spell
+                weaponView.castSpaceBarSpell();
+                
+                // Then call releaseSpaceBarSpell() after a brief delay to complete the spell action
+                setTimeout(() => {
+                  weaponView.releaseSpaceBarSpell();
+                }, 100); // 100ms delay between press and release
+                
+                console.log('Double-tap detected on right side - casting spell!');
+              } else {
+                // Fall back to event if we couldn't get the weaponView directly
+                console.log('Using fallback event method for casting spell');
+                this.eventBus.emit('weapon:use');
+              }
               
               // Reset the last tap time to prevent triple-tap detection
               doubleTap.lastTapTime = 0;
