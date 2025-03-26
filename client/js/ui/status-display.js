@@ -4,9 +4,11 @@
 export class StatusDisplay {
   /**
    * @param {EventBus} eventBus - Application event bus
+   * @param {boolean} isPortalMode - Whether the app is in portal mode
    */
-  constructor(eventBus) {
+  constructor(eventBus, isPortalMode = false) {
     this.eventBus = eventBus;
+    this.isPortalMode = isPortalMode;
     this.deviceStatus = document.getElementById('deviceStatus');
     this.calibrateBtn = document.getElementById('calibrateBtn');
     this.qrcodeElement = document.getElementById('qrcode');
@@ -14,6 +16,11 @@ export class StatusDisplay {
     this.debugToggleBtn = document.getElementById('debugToggleBtn');
     this.debugSection = document.getElementById('debugSection');
     this.debugShowing = false;
+    
+    // In portal mode, hide instructions immediately
+    if (this.isPortalMode && this.instructionsElement) {
+      this.instructionsElement.style.display = 'none';
+    }
     
     this.setupEventListeners();
     this.setStatus('Connecting to server...', 'disconnected');
@@ -159,12 +166,21 @@ export class StatusDisplay {
     if (this.qrcodeElement) {
       this.qrcodeElement.style.display = show ? 'block' : 'none';
       
-      // Also show/hide instructions panel
-      if (this.instructionsElement) {
+      // Also show/hide instructions panel, but only if not in portal mode
+      if (this.instructionsElement && !this.isPortalMode) {
         this.instructionsElement.style.display = show ? 'block' : 'none';
       }
       
-      // Section headers have been removed
+      // In portal mode, use a different style for QR code
+      if (this.isPortalMode && show) {
+        this.qrcodeElement.style.top = 'unset';
+        this.qrcodeElement.style.left = 'unset';
+        this.qrcodeElement.style.bottom = '10px';
+        this.qrcodeElement.style.left = '10px';
+        this.qrcodeElement.style.transform = 'none';
+        this.qrcodeElement.style.padding = '10px';
+        this.qrcodeElement.style.maxWidth = '200px';
+      }
       
       // Ensure z-index is appropriate
       if (show) {

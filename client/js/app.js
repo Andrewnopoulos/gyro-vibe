@@ -23,6 +23,18 @@ import { EnemyManager, HealthManager } from './game/enemy-system/index.js';
  */
 class App {
   constructor() {
+    // Check for portal mode
+    this.isPortalMode = new URLSearchParams(window.location.search).get('portal') === 'true';
+    console.log('Portal mode:', this.isPortalMode);
+    
+    // Get username from query parameter if in portal mode
+    this.username = null;
+    if (this.isPortalMode) {
+      const urlParams = new URLSearchParams(window.location.search);
+      this.username = urlParams.get('username') || this.generateRandomUsername();
+      console.log('Portal mode username:', this.username);
+    }
+    
     // Create global event bus for cross-module communication
     this.eventBus = new EventBus();
     
@@ -32,8 +44,8 @@ class App {
     // Initialize managers
     this.socketManager = new SocketManager(this.eventBus);
     this.webRTCManager = new WebRTCManager(this.eventBus, this.socketManager);
-    this.statusDisplay = new StatusDisplay(this.eventBus);
-    this.qrCodeGenerator = new QRCodeGenerator(this.eventBus, this.socketManager);
+    this.statusDisplay = new StatusDisplay(this.eventBus, this.isPortalMode);
+    this.qrCodeGenerator = new QRCodeGenerator(this.eventBus, this.socketManager, this.isPortalMode);
     this.visualizationManager = new VisualizationManager(this.eventBus);
     
     // Create scene manager with the loading manager
@@ -76,18 +88,70 @@ class App {
     // Setup update loop for game components
     this.setupUpdateLoop();
     
-    // Listen for loading complete event
-    this.eventBus.on('loading:complete', () => {
-      console.log('All assets loaded, app ready');
+    // Automatically request session creation to ensure QR code is generated
+    this.socketManager.emit('create-session');
+    
+    // In portal mode, immediately enable first-person mode
+    if (this.isPortalMode) {
+      this.sceneManager.setFirstPersonMode(true);
+      this.firstPersonController.toggleFirstPersonMode();
       
-      // Automatically request session creation to ensure QR code is generated
-      this.socketManager.emit('create-session');
-    });
+      // In portal mode, auto-connect to multiplayer
+      this.setupPortalMultiplayer();
+    }
     
     // Mark core initialization as complete
     this.loadingManager.markAssetsLoaded(1, 'other');
     
     console.log('Application initialized');
+  }
+  
+  /**
+   * Generate a random player username
+   * @returns {string} Random username
+   */
+  generateRandomUsername() {
+    const adjectives = ['Brave', 'Mighty', 'Swift', 'Wise', 'Clever', 'Mystic', 'Arcane', 'Fierce', 'Cosmic', 'Shadow'];
+    const nouns = ['Wizard', 'Mage', 'Sorcerer', 'Spellcaster', 'Warlock', 'Conjurer', 'Enchanter', 'Magician', 'Sage', 'Alchemist'];
+    
+    const randomAdjective = adjectives[Math.floor(Math.random() * adjectives.length)];
+    const randomNoun = nouns[Math.floor(Math.random() * nouns.length)];
+    const randomNumber = Math.floor(Math.random() * 100) + 1;
+    
+    return `${randomAdjective}${randomNoun}${randomNumber}`;
+  }
+  
+  /**
+   * Handle portal mode multiplayer auto-join functionality
+   */
+  setupPortalMultiplayer() {
+    // Listen for available rooms list
+    this.eventBus.on('multiplayer:rooms-list', (data) => {
+      // If already in a room, don't try to join another
+      if (this.gameStateManager.isInRoom()) {
+        return;
+      }
+      
+      const availableRooms = data.rooms || [];
+      console.log('Portal mode - Available rooms:', availableRooms.length);
+      
+      // Check if there are any rooms that aren't full
+      const joinableRooms = availableRooms.filter(room => room.playerCount < room.maxPlayers);
+      
+      if (joinableRooms.length > 0) {
+        // Join the first available room
+        const roomToJoin = joinableRooms[0];
+        console.log('Portal mode - Joining existing room:', roomToJoin.roomName);
+        this.gameStateManager.joinRoom(roomToJoin.roomCode, this.username);
+      } else {
+        // No available rooms, create a new one
+        console.log('Portal mode - Creating new room');
+        this.gameStateManager.createRoom(this.username, `${this.username}'s Room`);
+      }
+    });
+    
+    // Request rooms list to trigger auto-join logic
+    this.gameStateManager.listRooms();
   }
   
   /**
@@ -125,8 +189,8 @@ class App {
               z: phoneQuaternion.z,
               w: phoneQuaternion.w
             };
-          } else if (DEBUG_CONFIG.ENABLE_MULTIPLAYER_DEBUG) {
-            // In debug mode, simulate phone orientation by deriving from camera orientation
+          } else if (DEBUG_CONFIG.ENABLE_MULTIPLAYER_DEBUG || this.isPortalMode) {
+            // In debug mode or portal mode, simulate phone orientation by deriving from camera orientation
             // This helps with testing the weapon visualization without needing a mobile device
             const cameraQuaternion = camera.quaternion;
             phoneOrientation = {
@@ -168,8 +232,8 @@ class App {
       }
     });
     
-    // Auto-enable first-person mode in debug mode when joining a room
-    if (DEBUG_CONFIG.ENABLE_MULTIPLAYER_DEBUG) {
+    // Auto-enable first-person mode in debug or portal mode when joining a room
+    if (DEBUG_CONFIG.ENABLE_MULTIPLAYER_DEBUG || this.isPortalMode) {
       this.eventBus.on('multiplayer:room-joined', () => {
         // Enable first-person mode if not already enabled
         if (!this.firstPersonController.isEnabled()) {
@@ -181,7 +245,7 @@ class App {
           // Remove any existing enemies first
           this.enemyManager.removeAllEnemies();
           
-          // Spawn 5 training dummies around the map
+          // Spawn training dummies around the map
           this.enemyManager.spawnTrainingDummies(20);
         }
       });
@@ -198,7 +262,7 @@ class App {
           // Remove any existing enemies first
           this.enemyManager.removeAllEnemies();
           
-          // Spawn 5 training dummies around the map
+          // Spawn training dummies around the map
           this.enemyManager.spawnTrainingDummies(20);
         }
       });

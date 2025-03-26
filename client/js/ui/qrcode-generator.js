@@ -5,12 +5,19 @@ export class QRCodeGenerator {
   /**
    * @param {EventBus} eventBus - Application event bus
    * @param {SocketManager} socketManager - Socket.IO manager
+   * @param {boolean} isPortalMode - Whether the app is in portal mode
    */
-  constructor(eventBus, socketManager) {
+  constructor(eventBus, socketManager, isPortalMode = false) {
     this.eventBus = eventBus;
     this.socketManager = socketManager;
+    this.isPortalMode = isPortalMode;
     this.qrcodeDisplay = document.getElementById('qrcodeDisplay');
     this.mobileUrl = document.getElementById('mobileUrl');
+    
+    // In portal mode, hide the URL text immediately
+    if (this.isPortalMode && this.mobileUrl) {
+      this.mobileUrl.style.display = 'none';
+    }
     
     this.setupEventListeners();
   }
@@ -85,13 +92,15 @@ export class QRCodeGenerator {
     try {
       // Create a canvas element first
       const canvas = document.createElement('canvas');
-      canvas.width = 200;
-      canvas.height = 200;
+      // In portal mode, make the QR code smaller
+      const qrSize = this.isPortalMode ? 150 : 200;
+      canvas.width = qrSize;
+      canvas.height = qrSize;
       this.qrcodeDisplay.innerHTML = ''; // Clear the container
       this.qrcodeDisplay.appendChild(canvas);
       
       window.QRCodeLib.toCanvas(canvas, urlToUse, {
-        width: 200,
+        width: qrSize,
         margin: 1
       }, function (error) {
         if (error) {
