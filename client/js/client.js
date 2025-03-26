@@ -50,9 +50,7 @@ if (isMobileDevice()) {
     if (controlsOverlay) {
       // Hide all children except calibration button
       Array.from(controlsOverlay.children).forEach(child => {
-        if (child.id !== 'calibrateBtn') {
-          child.style.display = 'none';
-        }
+        child.style.display = 'none';
       });
     }
     

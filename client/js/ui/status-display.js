@@ -25,8 +25,26 @@ export class StatusDisplay {
       this.instructionsElement.style.display = 'none';
     }
     
+    // For mobile users, hide the "waiting for mobile" status and set a better message
+    if (this.isMobileDevice) {
+      const statusOverlay = document.getElementById('status-overlay');
+      if (statusOverlay) {
+        // Initially hide the status overlay for mobile users
+        statusOverlay.style.display = 'none';
+      }
+      
+      if (this.deviceStatus) {
+        this.deviceStatus.textContent = 'Ready to play';
+        this.deviceStatus.className = 'connected';
+      }
+    }
+    
     this.setupEventListeners();
-    this.setStatus('Connecting to server...', 'disconnected');
+    
+    // Only set the "connecting" status for non-mobile users
+    if (!this.isMobileDevice) {
+      this.setStatus('Connecting to server...', 'disconnected');
+    }
   }
   
   /**
@@ -227,8 +245,23 @@ export class StatusDisplay {
    */
   setStatus(message, className) {
     if (this.deviceStatus) {
-      this.deviceStatus.textContent = message;
-      this.deviceStatus.className = className;
+      // For mobile users, don't show "waiting for mobile device" messages
+      if (this.isMobileDevice && (
+          message.includes("Waiting for mobile device") || 
+          message.includes("No mobile device connected"))) {
+        // Either hide the status completely or show a more appropriate message
+        this.deviceStatus.textContent = "Ready to play";
+        this.deviceStatus.className = "connected";
+        
+        // Hide the entire status overlay if it's just about waiting for mobile
+        const statusOverlay = document.getElementById('status-overlay');
+        if (statusOverlay) {
+          statusOverlay.style.display = 'none';
+        }
+      } else {
+        this.deviceStatus.textContent = message;
+        this.deviceStatus.className = className;
+      }
     }
   }
 
