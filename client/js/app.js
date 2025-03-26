@@ -28,12 +28,15 @@ class App {
     this.isPortalMode = new URLSearchParams(window.location.search).get('portal') === 'true';
     console.log('Portal mode:', this.isPortalMode);
     
-    // Get username from query parameter if in portal mode
+    // Check if on mobile
+    this.isMobileDevice = this.checkIsMobileDevice();
+    
+    // Get username from query parameter if in portal mode, or generate one for mobile
     this.username = null;
-    if (this.isPortalMode) {
+    if (this.isPortalMode || this.isMobileDevice) {
       const urlParams = new URLSearchParams(window.location.search);
       this.username = urlParams.get('username') || this.generateRandomUsername();
-      console.log('Portal mode username:', this.username);
+      console.log((this.isPortalMode ? 'Portal' : 'Mobile') + ' mode username:', this.username);
     }
     
     // Create global event bus for cross-module communication
@@ -106,19 +109,38 @@ class App {
     // Automatically request session creation to ensure QR code is generated
     this.socketManager.emit('create-session');
     
-    // In portal mode, immediately enable first-person mode
-    if (this.isPortalMode) {
+    // In portal mode or on mobile device, immediately enable first-person mode
+    if (this.isPortalMode || this.isMobileDevice) {
       this.sceneManager.setFirstPersonMode(true);
       this.firstPersonController.toggleFirstPersonMode();
       
-      // In portal mode, auto-connect to multiplayer
-      this.setupPortalMultiplayer();
+      // In portal mode or on mobile device, auto-connect to multiplayer
+      this.setupAutoMultiplayer();
     }
     
     // Mark core initialization as complete
     this.loadingManager.markAssetsLoaded(1, 'other');
     
     console.log('Application initialized');
+  }
+  
+  /**
+   * Check if the current device is a mobile device not using the /mobile endpoint
+   * @returns {boolean} Whether the device is a mobile device
+   */
+  checkIsMobileDevice() {
+    const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+    
+    // Detect phones
+    const mobileRegex = /(android|bb\d+|meego).+mobile|avantgo|bada\/|blackberry|blazer|compal|elaine|fennec|hiptop|iemobile|ip(hone|od)|iris|kindle|lge |maemo|midp|mmp|mobile.+firefox|netfront|opera m(ob|in)i|palm( os)?|phone|p(ixi|re)\/|plucker|pocket|psp|series(4|6)0|symbian|treo|up\.(browser|link)|vodafone|wap|windows ce|xda|xiino/i;
+    
+    // Detect tablets
+    const tabletRegex = /android|ipad|playbook|silk/i;
+    
+    // Check if not accessing via the mobile-specific endpoint
+    const isMobileEndpoint = window.location.pathname.includes('/mobile');
+    
+    return (mobileRegex.test(userAgent) || tabletRegex.test(userAgent)) && !isMobileEndpoint;
   }
   
   /**
@@ -137,9 +159,12 @@ class App {
   }
   
   /**
-   * Handle portal mode multiplayer auto-join functionality
+   * Handle automatic multiplayer functionality for portal mode and mobile devices
    */
-  setupPortalMultiplayer() {
+  setupAutoMultiplayer() {
+    // Get mode name for logging
+    const modeName = this.isPortalMode ? 'Portal' : 'Mobile';
+    
     // Listen for available rooms list
     this.eventBus.on('multiplayer:rooms-list', (data) => {
       // If already in a room, don't try to join another
@@ -148,7 +173,7 @@ class App {
       }
       
       const availableRooms = data.rooms || [];
-      console.log('Portal mode - Available rooms:', availableRooms.length);
+      console.log(`${modeName} mode - Available rooms:`, availableRooms.length);
       
       // Check if there are any rooms that aren't full
       const joinableRooms = availableRooms.filter(room => room.playerCount < room.maxPlayers);
@@ -156,11 +181,11 @@ class App {
       if (joinableRooms.length > 0) {
         // Join the first available room
         const roomToJoin = joinableRooms[0];
-        console.log('Portal mode - Joining existing room:', roomToJoin.roomName);
+        console.log(`${modeName} mode - Joining existing room:`, roomToJoin.roomName);
         this.gameStateManager.joinRoom(roomToJoin.roomCode, this.username);
       } else {
         // No available rooms, create a new one
-        console.log('Portal mode - Creating new room');
+        console.log(`${modeName} mode - Creating new room`);
         this.gameStateManager.createRoom(this.username, `${this.username}'s Room`);
       }
     });
@@ -247,8 +272,8 @@ class App {
       }
     });
     
-    // Auto-enable first-person mode in debug or portal mode when joining a room
-    if (DEBUG_CONFIG.ENABLE_MULTIPLAYER_DEBUG || this.isPortalMode) {
+    // Auto-enable first-person mode in debug, portal mode, or mobile mode when joining a room
+    if (DEBUG_CONFIG.ENABLE_MULTIPLAYER_DEBUG || this.isPortalMode || this.isMobileDevice) {
       this.eventBus.on('multiplayer:room-joined', () => {
         // Enable first-person mode if not already enabled
         if (!this.firstPersonController.isEnabled()) {
