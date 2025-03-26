@@ -116,9 +116,10 @@ export class FirstPersonController {
       this.controlsGuide.innerHTML = `
         <strong style="color:#4fc3f7">Mobile Controls:</strong><br>
         • Left Joystick - Move<br>
-        • Right Joystick - Look<br>
+        • Touch Right Side - Look Around<br>
         • Swipe Horizontally - Flip Pages<br>
-        • Swipe Up - Cast Spell
+        • Swipe Up - Cast Spell<br>
+        <strong>DESKTOP FOR BEST EXPERIENCE</strong>
       `;
 
       // Create virtual joysticks for mobile
@@ -248,14 +249,16 @@ export class FirstPersonController {
     Object.assign(leftStick.style, stickStyle);
     leftJoystick.appendChild(leftStick);
 
-    // Create right joystick (camera)
+    // Create right joystick (camera) - invisible but functionally active
     const rightJoystick = document.createElement('div');
     Object.assign(rightJoystick.style, joystickStyle);
     rightJoystick.style.bottom = '30px';
     rightJoystick.style.right = '30px';
+    rightJoystick.style.backgroundColor = 'rgba(0, 0, 0, 0)'; // Make it completely transparent
 
     const rightStick = document.createElement('div');
     Object.assign(rightStick.style, stickStyle);
+    rightStick.style.backgroundColor = 'rgba(0, 0, 0, 0)'; // Make stick transparent too
     rightJoystick.appendChild(rightStick);
 
     // Store references
@@ -266,7 +269,9 @@ export class FirstPersonController {
 
     // Add to document (initially hidden)
     leftJoystick.style.display = 'none';
+    // Right joystick is always functionally active but visually hidden
     rightJoystick.style.display = 'none';
+    rightJoystick.style.pointerEvents = 'none'; // Ensure it doesn't interfere with touches
 
     document.body.appendChild(leftJoystick);
     document.body.appendChild(rightJoystick);
@@ -380,13 +385,14 @@ export class FirstPersonController {
         rightJoystick.currentX = touchX;
         rightJoystick.currentY = touchY;
 
-        // Position and show joystick at touch location
+        // Right joystick is functionally active but visually hidden
+        // We still track position internally but don't show the joystick UI
         if (rightJoystick.element) {
-          rightJoystick.element.style.display = 'block';
+          // Keep joystick hidden
+          rightJoystick.element.style.display = 'none';
+          // Still update internal position for tracking
           rightJoystick.element.style.left = (touchX - rightJoystick.radius) + 'px';
           rightJoystick.element.style.top = (touchY - rightJoystick.radius) + 'px';
-          rightJoystick.stick.style.left = '50%';
-          rightJoystick.stick.style.top = '50%';
         }
       }
 
@@ -421,8 +427,8 @@ export class FirstPersonController {
             const deltaY = (leftJoystick.currentY - leftJoystick.startY) / leftJoystick.maxDistance;
 
             // Set movement direction based on joystick
-            this.moveRight = deltaX > -0.2; // Left
-            this.moveLeft = deltaX < 0.2;   // Right
+            this.moveRight = deltaX > -0.2; // Right
+            this.moveLeft = deltaX < 0.2;   // Left
             this.moveBackward = deltaY > 0.2; // Down
             this.moveForward = deltaY < -0.2; // Up
           }
@@ -434,8 +440,7 @@ export class FirstPersonController {
             rightJoystick.currentX = touchX;
             rightJoystick.currentY = touchY;
 
-            // Calculate joystick position
-            this.updateJoystickPosition(rightJoystick);
+            // No need to update visual position for right joystick since it's hidden
 
             // Calculate camera rotation based on joystick position
             const deltaX = (rightJoystick.currentX - rightJoystick.startX) / 2;
