@@ -25,3 +25,7 @@
 - Maintain clear separation between UI and business logic
 - 4-space indentation in all code files
 - Mobile detection using comprehensive pattern matching
+
+## Custom Requests
+- **"Don't use Git commands"** - I am manually using git to manage the repo. Please don't use any git commands as they may interfere
+- **"Don't run NPM on completion"** - I will test things manually myself, running an npm server interferes with my ability to test

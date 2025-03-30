@@ -85,6 +85,29 @@
       width: 100%;
       position: relative;
     }
+    .canvas-start-btn {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background-color: #28a745;
+      color: white;
+      font-size: 24px;
+      padding: 20px 40px;
+      border-radius: 10px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+      border: 2px solid rgba(255,255,255,0.3);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      z-index: 50;
+    }
+    .canvas-start-btn:hover {
+      background-color: #218838;
+      transform: translate(-50%, -50%) scale(1.05);
+    }
+    .canvas-start-btn:active {
+      transform: translate(-50%, -50%) scale(0.98);
+    }
     #gameCanvas {
       width: 100%;
       height: 100%;
@@ -179,7 +202,6 @@
       <h1>MAGE FIGHT Mobile</h1>
       <div class="controls">
         <div class="button-row">
-          <button id="startBtn" class="small-button">Start</button>
           <button id="stopBtn" class="small-button" disabled>Stop</button>
           <button id="calibrateBtn" class="small-button" disabled>Calibrate</button>
           <button id="debugBtn">Debug</button>
@@ -189,6 +211,7 @@
     
     <div class="canvas-container">
       <canvas id="gameCanvas"></canvas>
+      <button id="startBtn" class="canvas-start-btn">START SENSORS</button>
     </div>
     
     <div id="debugPanel" class="debug-panel">
@@ -891,6 +914,32 @@ Z: ${sensorData.accel.z.toFixed(2)}g`;
       const centerX = gameCanvas.width / 2;
       const centerY = gameCanvas.height / 2;
       
+      // Draw differently depending on whether sensors are active
+      if (!sensorInterval) {
+        // Draw instructions when sensors are not yet active
+        // Create background glow effect
+        const gradient = ctx.createRadialGradient(
+          centerX, centerY, 10,
+          centerX, centerY, Math.min(gameCanvas.width, gameCanvas.height) * 0.5
+        );
+        gradient.addColorStop(0, 'rgba(40, 167, 69, 0.3)');
+        gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, gameCanvas.width, gameCanvas.height);
+        
+        // Draw connection info
+        if (connectedWithWebRTC || (socket && socket.connected)) {
+          ctx.font = '18px Arial';
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+          ctx.textAlign = 'center';
+          ctx.fillText('Connected to desktop', centerX, centerY - 100);
+          ctx.fillText('Press START to activate sensors', centerX, centerY - 70);
+        }
+        
+        return;
+      }
+      
       // Draw crosshair
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
       ctx.lineWidth = 1;
@@ -1114,14 +1163,14 @@ Accel offsets: x=${calibration.accel.x.toFixed(2)}g y=${calibration.accel.y.toFi
     
     // Update UI when starting sensors
     function updateUIStarted() {
-      startBtn.disabled = true;
+      startBtn.style.display = 'none';
       stopBtn.disabled = false;
       calibrateBtn.disabled = false;
     }
     
     // Update UI when stopping sensors
     function updateUIStopped() {
-      startBtn.disabled = false;
+      startBtn.style.display = 'block';
       stopBtn.disabled = true;
       calibrateBtn.disabled = true;
     }
@@ -1136,13 +1185,25 @@ Accel offsets: x=${calibration.accel.x.toFixed(2)}g y=${calibration.accel.y.toFi
     checkSensorAvailability();
     setupTouchEvents();
     
+    // Start drawing the canvas as soon as the page loads
+    function initialCanvasAnimation() {
+      // Draw initial state with button
+      drawOnCanvas(sensorData);
+      
+      // Keep animating if sensors aren't active
+      if (!sensorInterval) {
+        requestAnimationFrame(initialCanvasAnimation);
+      }
+    }
+    
+    // Start the initial animation
+    initialCanvasAnimation();
+    
     // Example usage of visual logger
     visualLog("Mobile client initialized");
     
     // Expose visualLog to global scope for console debugging
     window.visualLog = visualLog;
   </script>
-  <a target="_blank" href="https://jam.pieter.com" style="font-family: 'system-ui', sans-serif; position: fixed; bottom: -1px; right: -1px; padding: 7px; font-size: 10px; font-weight: bold; background: #fff; color: #000; text-decoration: none; z-index: 10; z-index: 10000; border: 1px solid #fff;">🕹️ Vibe Jam 2025</a>
-  <a target="_blank" href="https://x.com/prodbuilder" style="font-family: 'system-ui', sans-serif; position: fixed; bottom: -1px; right: 116px; padding: 7px; font-size: 10px; font-weight: bold; background: #fff; color: #000; text-decoration: none; z-index: 10; border-top-left-radius: 12px; z-index: 10000; border: 1px solid #fff;">💡 Ideas or feedback? @prodbuilder</a>
 </body>
 </html>

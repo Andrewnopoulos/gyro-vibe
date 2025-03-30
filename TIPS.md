@@ -39,8 +39,4 @@
 - **"Use efficient data structures"** - Ensures good performance with many spells
 - **"Apply lazy initialization"** - Only generates resources when needed
 
-## Custom Requests
-- **"Don't use Git commands"** - I am manually using git to manage the repo. Please don't use any git commands as they may interfere
-- **"Don't run NPM on completion"** - I will test things manually myself, running an npm server interferes with my ability to test
-
 Including these specific keywords in your instructions to Claude Code will help ensure the implementation follows good software engineering practices and remains maintainable as the spellbook feature grows.
