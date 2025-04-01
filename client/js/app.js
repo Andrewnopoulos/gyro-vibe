@@ -88,6 +88,13 @@ class App {
       }
     });
     
+    // Register event listener for getting the enemy manager
+    this.eventBus.on('game:get-enemy-manager', (callback) => {
+      if (typeof callback === 'function') {
+        callback(this.enemyManager);
+      }
+    });
+    
     // Initialize portal manager for VibeVerse portals
     this.portalManager = new PortalManager(
       this.eventBus, 
@@ -279,6 +286,18 @@ class App {
       if (!this.firstPersonController.isEnabled()) {
         this.firstPersonController.toggleFirstPersonMode();
       }
+      
+      // Spawn particle enemies when mobile connects
+      if (this.enemyManager) {
+        // Clear any existing enemies first
+        this.enemyManager.removeAllEnemies();
+        
+        // Spawn both training dummies and particle enemies
+        this.enemyManager.spawnTrainingDummies(20);
+        this.enemyManager.spawnParticleEnemies(300);
+        
+        console.log('Spawned enemies after mobile device connected');
+      }
     });
     
     // Listen for manual room leave event from the UI
@@ -296,13 +315,16 @@ class App {
           this.sceneManager.setFirstPersonMode(true);
           this.firstPersonController.toggleFirstPersonMode();
         }
-        // Spawn training dummies when joining a room
+        // Spawn enemies when joining a room
         if (this.enemyManager) {
           // Remove any existing enemies first
           this.enemyManager.removeAllEnemies();
           
           // Spawn training dummies around the map
           this.enemyManager.spawnTrainingDummies(20);
+          
+          // Spawn particle enemies
+          this.enemyManager.spawnParticleEnemies(300);
         }
       });
       
@@ -313,13 +335,16 @@ class App {
           this.firstPersonController.toggleFirstPersonMode();
         }
         
-        // Spawn training dummies when creating a room
+        // Spawn enemies when creating a room
         if (this.enemyManager) {
           // Remove any existing enemies first
           this.enemyManager.removeAllEnemies();
           
           // Spawn training dummies around the map
           this.enemyManager.spawnTrainingDummies(20);
+          
+          // Spawn particle enemies
+          this.enemyManager.spawnParticleEnemies(300);
         }
       });
     }

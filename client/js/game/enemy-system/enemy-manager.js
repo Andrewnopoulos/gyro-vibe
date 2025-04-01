@@ -1,4 +1,5 @@
 import { TrainingDummy } from './training-dummy.js';
+import { ParticleEnemyGroup } from './particle-enemy-group.js';
 
 /**
  * Manages all enemies in the game
@@ -14,6 +15,13 @@ export class EnemyManager {
     this.scene = scene;
     this.world = world;
     this.enemies = new Map(); // Map of enemy ID -> enemy instance
+    
+    // Initialize particle enemy group for efficient rendering
+    this.particleEnemyGroup = new ParticleEnemyGroup({
+      scene: scene,
+      eventBus: eventBus,
+      maxEnemies: 1000
+    });
     
     this.setupEventListeners();
   }
@@ -47,10 +55,13 @@ export class EnemyManager {
   update(data) {
     const { delta } = data;
     
-    // Update each enemy
+    // Update each regular enemy
     this.enemies.forEach(enemy => {
       enemy.update(delta);
     });
+    
+    // Update particle enemies
+    this.particleEnemyGroup.update(delta);
   }
   
   /**
@@ -83,21 +94,32 @@ export class EnemyManager {
    * @param {Object} data - Spell hit data
    */
   handleSpellHit(data) {
-    const { targetId, spellId, power } = data;
+    const { targetId, spellId, power, instanceId } = data;
     
-    // Check if target is an enemy we're tracking
-    if (targetId && this.enemies.has(targetId)) {
-      // Calculate damage based on spell power
-      const damage = power || 1;
-      
-      // Apply damage to the entity
-      this.eventBus.emit('entity:damage', {
-        id: targetId,
-        amount: damage,
-        damageType: 'spell',
-        sourceId: spellId
-      });
+    let finalTargetId = targetId;
+    
+    // If we have an instanceId but no targetId, get the particle enemy ID
+    if (instanceId !== undefined && !targetId) {
+      finalTargetId = this.particleEnemyGroup.getEnemyIdFromInstance(instanceId);
     }
+    
+    // Ignore if no valid target ID
+    if (!finalTargetId) return;
+    
+    // Check if this is a regular enemy
+    const isRegularEnemy = this.enemies.has(finalTargetId);
+    
+    // Calculate damage based on spell power
+    const damage = power || 1;
+    
+    // Apply damage to the entity - both regular and particle enemies
+    // will be handled by the HealthManager through event system
+    this.eventBus.emit('entity:damage', {
+      id: finalTargetId,
+      amount: damage,
+      damageType: 'spell',
+      sourceId: spellId
+    });
   }
   
   /**
@@ -143,6 +165,42 @@ export class EnemyManager {
   }
   
   /**
+   * Spawn a group of particle-based enemies
+   * @param {number} count - Number of enemies to spawn
+   * @param {Array<{x:number, y:number, z:number}>} [positions] - Optional array of positions, or will generate positions
+   * @return {number} Number of enemies actually spawned
+   */
+  spawnParticleEnemies(count = 100, positions = null) {
+    // Generate positions if not provided
+    if (!positions) {
+      positions = [];
+      const radius = 20; // Spawn area radius
+      const heightVariation = 5; // Vertical spawning range
+      
+      for (let i = 0; i < count; i++) {
+        // Random position in a circular area, with some height variation
+        const angle = Math.random() * Math.PI * 2;
+        const distance = Math.random() * radius;
+        
+        positions.push({
+          x: Math.cos(angle) * distance,
+          y: 1 + Math.random() * heightVariation, // Start at least 1 unit above ground
+          z: Math.sin(angle) * distance
+        });
+      }
+    }
+    
+    // Ensure we have enough positions
+    const spawnCount = Math.min(count, positions.length);
+    
+    // Spawn the enemies
+    this.particleEnemyGroup.spawn(spawnCount, positions);
+    
+    console.log(`Spawned ${spawnCount} particle enemies`);
+    return spawnCount;
+  }
+  
+  /**
    * Remove all enemies
    */
   removeAllEnemies() {
@@ -156,6 +214,9 @@ export class EnemyManager {
         enemy.remove();
       }
     });
+    
+    // Also remove any particle enemies
+    this.particleEnemyGroup.removeAll();
   }
   
   /**
