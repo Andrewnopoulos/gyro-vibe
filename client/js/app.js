@@ -294,7 +294,7 @@ class App {
         
         // Spawn both training dummies and particle enemies
         this.enemyManager.spawnTrainingDummies(20);
-        this.enemyManager.spawnParticleEnemies(200);
+        this.enemyManager.spawnParticleEnemies(80);
         
         console.log('Spawned enemies after mobile device connected');
       }
@@ -324,7 +324,7 @@ class App {
           this.enemyManager.spawnTrainingDummies(20);
           
           // Spawn particle enemies
-          this.enemyManager.spawnParticleEnemies(200);
+          this.enemyManager.spawnParticleEnemies(80);
         }
       });
       
@@ -344,7 +344,7 @@ class App {
           this.enemyManager.spawnTrainingDummies(20);
           
           // Spawn particle enemies
-          this.enemyManager.spawnParticleEnemies(200);
+          this.enemyManager.spawnParticleEnemies(80);
         }
       });
     }

@@ -365,6 +365,8 @@ export class LaserBeamSpell extends Spell {
    * Fire the laser beam after channeling
    */
   fireLaser(context) {
+
+    console.log(context);
     
     if (context.isRemote)
     {
@@ -689,84 +691,30 @@ export class LaserBeamSpell extends Spell {
       enemyManager = manager;
     });
     
-    if (enemyManager && enemyManager.particleEnemyGroup && enemyManager.particleEnemyGroup.instancedMesh) {
-      const particleEnemyMesh = enemyManager.particleEnemyGroup.instancedMesh;
-      
-      // Ensure the instancedMesh has count set correctly
-      if (particleEnemyMesh.count !== enemyManager.particleEnemyGroup.activeCount) {
-        particleEnemyMesh.count = enemyManager.particleEnemyGroup.activeCount;
-        particleEnemyMesh.instanceMatrix.needsUpdate = true;
-      }
-      
-      // Create a line representing the laser beam path
-      const laserOrigin = raycaster.ray.origin.clone();
-      const laserEnd = raycaster.ray.origin.clone().add(
-        raycaster.ray.direction.clone().multiplyScalar(100) // Go far enough to hit anything in the scene
-      );
-      
-      // Set a much larger threshold for particle enemies to make them easier to hit
-      const originalThreshold = raycaster.params.Mesh.threshold;
-      raycaster.params.Mesh.threshold = 0.1; // A bit larger than default
-      
-      try {
-        // Do a direct raycast against the instanced mesh
-        const particleIntersects = raycaster.intersectObject(particleEnemyMesh, false);
+    if (enemyManager && enemyManager.particleEnemyGroup) {
+      // First, try raycasting against the collision spheres (preferred method)
+      if (enemyManager.particleEnemyGroup.collisionGroup && enemyManager.particleEnemyGroup.colliders) {
+        // Set a slightly larger threshold for particle enemies to make them easier to hit
+        const originalThreshold = raycaster.params.Mesh.threshold;
+        raycaster.params.Mesh.threshold = 0.2; // Larger than default for easier hits
         
-        // Process all intersections
-        for (const intersect of particleIntersects) {
-          if (intersect.instanceId !== undefined) {
-            // Get the particle enemy ID from the instance ID
-            const particleEnemyId = enemyManager.particleEnemyGroup.getEnemyIdFromInstance(intersect.instanceId);
-            
-            // If found valid enemy ID and haven't hit it already
-            if (particleEnemyId && !hitEnemies.has(particleEnemyId)) {
-              // Add to set of hit enemies
-              hitEnemies.add(particleEnemyId);
+        try {
+          // Raycast against all collision spheres
+          const colliderIntersects = raycaster.intersectObjects(
+            enemyManager.particleEnemyGroup.colliders.filter(c => c.userData.isActive), 
+            false
+          );
+          
+          // Process all intersections
+          for (const intersect of colliderIntersects) {
+            if (intersect.object && intersect.object.userData && intersect.object.userData.instanceId !== undefined) {
+              const instanceId = intersect.object.userData.instanceId;
               
-              // Emit spell hit event
-              this.eventBus.emit('spell:hit', {
-                targetId: particleEnemyId,
-                spellId: this.id,
-                power: damage,
-                instanceId: intersect.instanceId,
-                hitPoint: intersect.point
-              });
+              // Get the particle enemy ID from the instance ID using the parent group's method
+              const particleEnemyId = enemyManager.particleEnemyGroup.getEnemyIdFromInstance(instanceId);
               
-              // Create hit effect at the impact point
-              this.createLaserImpactEffect(intersect.point);
-              
-              // Log hit for debugging
-              console.log(`Laser hit particle enemy ${particleEnemyId} at instance ${intersect.instanceId}`);
-            }
-          }
-        }
-        
-        // If we didn't get any hits, and there are a lot of particle enemies,
-        // let's do a more generous detection as a fallback
-        if (particleIntersects.length === 0 && enemyManager.particleEnemyGroup.activeCount > 50) {
-          // Fallback: Check if any particle enemy is close to the laser beam path
-          // This helps with very thin beams that might miss small objects
-          for (let i = 0; i < enemyManager.particleEnemyGroup.activeCount; i++) {
-            const enemy = enemyManager.particleEnemyGroup.enemyData[i];
-            if (enemy.state !== 'alive') continue;
-            
-            // Calculate distance from enemy to laser beam path
-            const enemyPos = enemy.position;
-            
-            // Calculate distance from point to line segment (laser beam)
-            const point = new THREE.Vector3(enemyPos.x, enemyPos.y, enemyPos.z);
-            const line = new THREE.Line3(laserOrigin, laserEnd);
-            const closestPoint = new THREE.Vector3();
-            line.closestPointToPoint(point, true, closestPoint);
-            
-            const distance = point.distanceTo(closestPoint);
-            const hitThreshold = 0.5; // Very generous distance for detection with flocking enemies
-            
-            if (distance < hitThreshold) {
-              const particleEnemyId = enemy.id;
-              
-              // If haven't hit this enemy already
-              if (!hitEnemies.has(particleEnemyId)) {
+              // If found valid enemy ID and haven't hit it already
+              if (particleEnemyId && !hitEnemies.has(particleEnemyId)) {
                 // Add to set of hit enemies
                 hitEnemies.add(particleEnemyId);
                 
@@ -775,22 +723,124 @@ export class LaserBeamSpell extends Spell {
                   targetId: particleEnemyId,
                   spellId: this.id,
                   power: damage,
-                  instanceId: i,
-                  hitPoint: closestPoint
+                  instanceId: instanceId,
+                  hitPoint: intersect.point
                 });
                 
                 // Create hit effect at the impact point
-                this.createLaserImpactEffect(closestPoint);
+                this.createLaserImpactEffect(intersect.point);
                 
-                // Log proximity hit for debugging
-                console.log(`Laser proximity hit on particle enemy ${particleEnemyId}`);
+                // Log hit for debugging
+                console.log(`Laser hit particle enemy ${particleEnemyId} at instance ${instanceId} (via collision sphere)`);
               }
             }
           }
+        } finally {
+          // Reset the raycaster threshold to its original value
+          raycaster.params.Mesh.threshold = originalThreshold;
         }
-      } finally {
-        // Reset the raycaster threshold to its original value
-        raycaster.params.Mesh.threshold = originalThreshold;
+      }
+      // Fallback to original particle mesh if colliders aren't available or didn't hit anything
+      else if (enemyManager.particleEnemyGroup.particleMesh) {
+        const particleEnemyMesh = enemyManager.particleEnemyGroup.particleMesh;
+        
+        // Create a line representing the laser beam path
+        const laserOrigin = raycaster.ray.origin.clone();
+        const laserEnd = raycaster.ray.origin.clone().add(
+          raycaster.ray.direction.clone().multiplyScalar(100) // Go far enough to hit anything in the scene
+        );
+        
+        // Set a much larger threshold for particle enemies to make them easier to hit
+        const originalThreshold = raycaster.params.Points ? raycaster.params.Points.threshold : 0.1;
+        if (raycaster.params.Points) {
+          raycaster.params.Points.threshold = 0.5; // Much larger for easier hits with point cloud
+        }
+        
+        try {
+          // Do a direct raycast against the particle mesh
+          const particleIntersects = raycaster.intersectObject(particleEnemyMesh, false);
+          
+          // Process all intersections
+          for (const intersect of particleIntersects) {
+            if (intersect.index !== undefined) {
+              // Get the particle enemy ID from the instance ID
+              const particleEnemyId = enemyManager.particleEnemyGroup.getEnemyIdFromInstance(intersect.index);
+              
+              // If found valid enemy ID and haven't hit it already
+              if (particleEnemyId && !hitEnemies.has(particleEnemyId)) {
+                // Add to set of hit enemies
+                hitEnemies.add(particleEnemyId);
+                
+                // Emit spell hit event
+                this.eventBus.emit('spell:hit', {
+                  targetId: particleEnemyId,
+                  spellId: this.id,
+                  power: damage,
+                  instanceId: intersect.index,
+                  hitPoint: intersect.point
+                });
+                
+                // Create hit effect at the impact point
+                this.createLaserImpactEffect(intersect.point);
+                
+                // Log hit for debugging
+                console.log(`Laser hit particle enemy ${particleEnemyId} at instance ${intersect.index} (via point)`);
+              }
+            }
+          }
+          
+          // If we didn't get any hits, use the proximity detection as a last resort
+          if (particleIntersects.length === 0 && enemyManager.particleEnemyGroup.activeCount > 0) {
+            // Fallback: Check if any particle enemy is close to the laser beam path
+            // This helps with very thin beams that might miss small objects
+            for (let i = 0; i < enemyManager.particleEnemyGroup.activeCount; i++) {
+              const enemy = enemyManager.particleEnemyGroup.enemyData[i];
+              if (enemy.state !== 'alive') continue;
+              
+              // Calculate distance from enemy to laser beam path
+              const enemyPos = enemy.position;
+              
+              // Calculate distance from point to line segment (laser beam)
+              const point = new THREE.Vector3(enemyPos.x, enemyPos.y, enemyPos.z);
+              const line = new THREE.Line3(laserOrigin, laserEnd);
+              const closestPoint = new THREE.Vector3();
+              line.closestPointToPoint(point, true, closestPoint);
+              
+              const distance = point.distanceTo(closestPoint);
+              const hitThreshold = 0.8; // Very generous distance for detection with flocking enemies
+              
+              if (distance < hitThreshold) {
+                const particleEnemyId = enemy.id;
+                
+                // If haven't hit this enemy already
+                if (!hitEnemies.has(particleEnemyId)) {
+                  // Add to set of hit enemies
+                  hitEnemies.add(particleEnemyId);
+                  
+                  // Emit spell hit event
+                  this.eventBus.emit('spell:hit', {
+                    targetId: particleEnemyId,
+                    spellId: this.id,
+                    power: damage,
+                    instanceId: i,
+                    hitPoint: closestPoint
+                  });
+                  
+                  // Create hit effect at the impact point
+                  this.createLaserImpactEffect(closestPoint);
+                  
+                  // Log proximity hit for debugging
+                  console.log(`Laser proximity hit on particle enemy ${particleEnemyId}`);
+                }
+              }
+            }
+          }
+        } finally {
+          // Reset the raycaster threshold to its original value
+          if (raycaster.params.Points) {
+            raycaster.params.Points.threshold = originalThreshold;
+          }
+        }
       }
     }
     

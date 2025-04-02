@@ -66,7 +66,7 @@ export class ParticleEnemyGroup {
 
     // Switch to billboarded particles using THREE.Points instead of InstancedMesh
     // Create a simple quad geometry for particles
-    const size = 1.2; // Size of the billboards - make them larger to be more visible
+    const size = 0.8; // Size of the billboards - make them larger to be more visible
     const halfSize = size / 2;
     
     // Create a PlaneGeometry for the billboard - we'll use THREE.Points to handle billboarding
@@ -225,8 +225,11 @@ export class ParticleEnemyGroup {
       }
     }.bind(this.particleMesh);
     
-    // Define a temp vector for raycast calculations
+    // Define vectors for raycast calculations
     const _vector = new THREE.Vector3();
+    
+    // Create invisible sphere colliders for raycasting
+    this.createCollisionSpheres();
 
     // Initialize enemy data array
     this.enemyData = Array.from({ length: this.maxEnemies }, (_, i) => ({
@@ -256,16 +259,16 @@ export class ParticleEnemyGroup {
     // Add debug visualization to check if background texture is capturing properly
     // Uncomment this section to add a debug plane showing what's in the render target
     
-    this.debugPlane = new THREE.Mesh(
-      new THREE.PlaneGeometry(4, 3),
-      new THREE.MeshBasicMaterial({ 
-        map: this.backgroundRT.texture,
-        transparent: true,
-        opacity: 0.7
-      })
-    );
-    this.debugPlane.position.set(0, 4, 0); // Position above the playing area
-    this.scene.add(this.debugPlane);
+    // this.debugPlane = new THREE.Mesh(
+    //   new THREE.PlaneGeometry(4, 3),
+    //   new THREE.MeshBasicMaterial({ 
+    //     map: this.backgroundRT.texture,
+    //     transparent: true,
+    //     opacity: 0.7
+    //   })
+    // );
+    // this.debugPlane.position.set(0, 4, 0); // Position above the playing area
+    // this.scene.add(this.debugPlane);
     
   }
 
@@ -407,10 +410,10 @@ export class ParticleEnemyGroup {
           scale = 1.0;
         } else if (enemy.phase === 'orbit') {
           // Normal size 
-          scale = 1.2;
+          scale = 1.0;
         } else if (enemy.phase === 'attack') {
           // Larger while attacking
-          scale = 1.6;
+          scale = 1.0;
         }
         sizes.array[i] = scale;
         
@@ -440,7 +443,7 @@ export class ParticleEnemyGroup {
         positions.array[i * 3 + 2] = enemy.position.z;
         
         // Scale down while dying
-        sizes.array[i] = 0.6 * (1 - progress);
+        sizes.array[i] = 1.0 * (1 - progress);
         
         // No need to set colors as we're just inverting the background
         
@@ -454,6 +457,9 @@ export class ParticleEnemyGroup {
       colors.needsUpdate = true;
       sizes.needsUpdate = true;
     }
+    
+    // Update collision spheres for raycasting
+    this.updateCollisionSpheres();
   }
 
   /**
@@ -474,14 +480,7 @@ export class ParticleEnemyGroup {
     if (index === -1) return;
     
     const enemy = this.enemyData[index];
-    const previousHealth = enemy.health;
     enemy.health = Math.max(0, enemy.health - data.amount);
-    
-    // Update colors to reflect new health
-    const healthPercent = enemy.health / enemy.maxHealth;
-    const color = new THREE.Color().setHSL(healthPercent * 0.3, 1, 0.5);
-    this.instancedMesh.setColorAt(index, color);
-    this.instancedMesh.instanceColor.needsUpdate = true;
     
     // If not a networked event and we're handling it for the first time,
     // forward it along to ensure server is notified
@@ -541,6 +540,12 @@ export class ParticleEnemyGroup {
     const enemy = this.enemyData[index];
     enemy.state = 'dead';
     
+    // Update collision sphere for this enemy
+    if (this.colliders && this.colliders[index]) {
+      this.colliders[index].visible = false;
+      this.colliders[index].userData.isActive = false;
+    }
+    
     // If this is not the last active enemy, swap with the last one to keep array dense
     if (index < this.activeCount - 1) {
       // Copy the last active enemy to this slot
@@ -560,10 +565,21 @@ export class ParticleEnemyGroup {
       // No need to set colors since we're just inverting the background
       
       // Update size based on phase
-      let size = 1.2;
+      let size = 1.0;
       if (swappedEnemy.phase === 'idle') size = 1.0;
-      else if (swappedEnemy.phase === 'attack') size = 1.6;
+      else if (swappedEnemy.phase === 'attack') size = 1.0;
       sizes.array[index] = size;
+      
+      // Also swap the collision spheres
+      if (this.colliders) {
+        // Update the swapped collider to match the new entity
+        if (this.colliders[index]) {
+          this.colliders[index].position.copy(swappedEnemy.position);
+          this.colliders[index].userData.instanceId = index;
+          this.colliders[index].visible = false;
+          this.colliders[index].userData.isActive = (swappedEnemy.state === 'alive');
+        }
+      }
     }
     
     // Decrease active count
@@ -588,7 +604,13 @@ export class ParticleEnemyGroup {
    */
   getEnemyIdFromInstance(instanceId) {
     if (instanceId >= 0 && instanceId < this.activeCount) {
-      return this.enemyData[instanceId].id;
+      // Get the enemy data for this instance
+      const enemy = this.enemyData[instanceId];
+      
+      // Only return ID if enemy is alive or dying (not dead)
+      if (enemy && enemy.state !== 'dead') {
+        return enemy.id;
+      }
     }
     return null;
   }
@@ -644,6 +666,87 @@ export class ParticleEnemyGroup {
     
     return this.alpha;
   }
+  
+  /**
+   * Create invisible sphere colliders for raycasting
+   * These spheres will make it easier for laser beams to hit the particle enemies
+   */
+  createCollisionSpheres() {
+    // Create a group to hold all collision spheres
+    this.collisionGroup = new THREE.Group();
+    this.collisionGroup.name = 'particleEnemyColliders';
+    this.collisionGroup.visible = false; // Make invisible
+    
+    // Create a sphere geometry that will be reused for all colliders
+    this.colliderGeometry = new THREE.SphereGeometry(0.5, 8, 8);
+    
+    // Material for the colliders - invisible but raycastable
+    this.colliderMaterial = new THREE.MeshBasicMaterial({
+      color: 0xFFFFFF,
+      transparent: true,
+      opacity: 0.0,
+      depthWrite: false
+    });
+    
+    // Create individual sphere colliders for each potential enemy
+    this.colliders = [];
+    
+    for (let i = 0; i < this.maxEnemies; i++) {
+      const collider = new THREE.Mesh(this.colliderGeometry, this.colliderMaterial);
+      
+      // Store the reference to parent ParticleEnemyGroup and instance index
+      collider.userData = {
+        isParticleEnemyCollider: true,
+        particleEnemyGroupId: this.particleMesh.userData.particleEnemyGroupId,
+        instanceId: i,
+        isRaycastable: true,
+        getEnemyIdFromInstance: (instanceId) => this.getEnemyIdFromInstance(instanceId)
+      };
+      
+      this.colliders.push(collider);
+      this.collisionGroup.add(collider);
+      
+      // Start all colliders inactive (not visible or raycastable)
+      collider.visible = false;
+      collider.userData.isActive = false;
+    }
+    
+    // Add to scene
+    this.scene.add(this.collisionGroup);
+    
+    console.log(`Created ${this.maxEnemies} collision spheres for particle enemies`);
+  }
+  
+  /**
+   * Update the collision spheres positions to match active enemies
+   */
+  updateCollisionSpheres() {
+    // Skip if we don't have collision spheres
+    if (!this.colliders) return;
+    
+    for (let i = 0; i < this.activeCount; i++) {
+      const enemy = this.enemyData[i];
+      const collider = this.colliders[i];
+      
+      if (enemy.state === 'alive' && collider) {
+        // Position the collider at the enemy position
+        collider.position.copy(enemy.position);
+        
+        // Make it active for raycasting
+        collider.visible = false; // Still invisible
+        collider.userData.isActive = true;
+      }
+    }
+    
+    // Deactivate all colliders beyond the active count
+    for (let i = this.activeCount; i < this.colliders.length; i++) {
+      const collider = this.colliders[i];
+      if (collider) {
+        collider.visible = false;
+        collider.userData.isActive = false;
+      }
+    }
+  }
 
   /**
    * Remove all particle enemies
@@ -668,7 +771,56 @@ export class ParticleEnemyGroup {
     // Reset active count
     this.activeCount = 0;
     
+    // Reset all collision spheres
+    if (this.colliders) {
+      this.colliders.forEach(collider => {
+        if (collider) {
+          collider.visible = false;
+          collider.userData.isActive = false;
+        }
+      });
+    }
+    
     // Update the scene to reflect changes
     this.updateInstances();
+  }
+  
+  /**
+   * Clean up resources when no longer needed
+   */
+  dispose() {
+    // Remove from scene
+    if (this.particleMesh && this.particleMesh.parent) {
+      this.particleMesh.parent.remove(this.particleMesh);
+    }
+    
+    // Dispose of collision spheres
+    if (this.collisionGroup && this.collisionGroup.parent) {
+      this.collisionGroup.parent.remove(this.collisionGroup);
+    }
+    
+    if (this.colliders) {
+      this.colliders.forEach(collider => {
+        if (collider.geometry) collider.geometry.dispose();
+        if (collider.material) collider.material.dispose();
+      });
+      this.colliders = [];
+    }
+    
+    if (this.colliderGeometry) this.colliderGeometry.dispose();
+    if (this.colliderMaterial) this.colliderMaterial.dispose();
+    
+    // Dispose of particle mesh resources
+    if (this.particleMesh) {
+      if (this.particleMesh.geometry) this.particleMesh.geometry.dispose();
+      if (this.particleMesh.material) this.particleMesh.material.dispose();
+    }
+    
+    // Remove debug plane if exists
+    if (this.debugPlane && this.debugPlane.parent) {
+      this.debugPlane.parent.remove(this.debugPlane);
+      if (this.debugPlane.geometry) this.debugPlane.geometry.dispose();
+      if (this.debugPlane.material) this.debugPlane.material.dispose();
+    }
   }
 }
