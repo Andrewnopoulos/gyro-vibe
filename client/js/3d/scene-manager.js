@@ -184,19 +184,12 @@ export class SceneManager {
       time: time 
     });
     
-    // Find any particle enemy groups in the scene that need two-pass rendering
-    let particleEnemyGroups = [];
-    this.scene.traverse(object => {
-      if (object.userData && object.userData.isParticleEnemyGroup) {
-        const enemyManager = this.findEnemyManager();
-        if (enemyManager && enemyManager.particleEnemyGroup) {
-          particleEnemyGroups.push(enemyManager.particleEnemyGroup);
-        }
-      }
-    });
-    
-    // Process all found particle enemy groups
-    for (const group of particleEnemyGroups) {
+    // Get the enemy manager directly instead of scene traversal
+    const enemyManager = this.findEnemyManager();
+    if (enemyManager && enemyManager.particleEnemyGroup) {
+      const group = enemyManager.particleEnemyGroup;
+      
+      // Process two-pass rendering regardless of active count (for debugging)
       // Step 1: Render the scene without particles to the render target
       group.prepareBackgroundCapture();
       this.renderer.setRenderTarget(group.backgroundRT);
@@ -205,6 +198,14 @@ export class SceneManager {
       // Step 2: Restore particle visibility for main render
       group.restoreAfterBackgroundCapture();
       this.renderer.setRenderTarget(null);
+      
+      // Debug: Force texture update in shader material
+      if (group.particleMesh && group.particleMesh.material && 
+          group.particleMesh.material.uniforms && 
+          group.particleMesh.material.uniforms.backgroundTexture) {
+        // Ensure texture is updated
+        group.particleMesh.material.uniforms.backgroundTexture.value = group.backgroundRT.texture;
+      }
     }
     
     // Render the final scene with everything visible
@@ -230,6 +231,14 @@ export class SceneManager {
       const enemyManager = this.findEnemyManager();
       if (enemyManager && enemyManager.particleEnemyGroup) {
         enemyManager.particleEnemyGroup.resize(width, height);
+        
+        // Update resolution uniform in shader
+        const group = enemyManager.particleEnemyGroup;
+        if (group.particleMesh && group.particleMesh.material && 
+            group.particleMesh.material.uniforms && 
+            group.particleMesh.material.uniforms.resolution) {
+          group.particleMesh.material.uniforms.resolution.value.set(width, height);
+        }
       }
     }
   }

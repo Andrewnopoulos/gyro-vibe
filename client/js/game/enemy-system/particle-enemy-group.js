@@ -49,9 +49,14 @@ export class ParticleEnemyGroup {
     });
 
     // Create a render target to capture the scene without particles
+    // Get the container dimensions for more accurate sizing
+    const container = document.getElementById('phone3d');
+    const width = container ? container.clientWidth : window.innerWidth;
+    const height = container ? container.clientHeight : window.innerHeight;
+    
     this.backgroundRT = new THREE.WebGLRenderTarget(
-      window.innerWidth, 
-      window.innerHeight, 
+      width, 
+      height, 
       {
         minFilter: THREE.LinearFilter,
         magFilter: THREE.LinearFilter,
@@ -59,81 +64,170 @@ export class ParticleEnemyGroup {
       }
     );
 
-    // Initialize InstancedMesh
-    const geometry = new THREE.SphereGeometry(0.3, 8, 8); // Simple shape for enemies
+    // Switch to billboarded particles using THREE.Points instead of InstancedMesh
+    // Create a simple quad geometry for particles
+    const size = 1.2; // Size of the billboards - make them larger to be more visible
+    const halfSize = size / 2;
     
-    // Custom material with invert-background effect
-    const material = new THREE.MeshStandardMaterial({
-      color: 0x00ff00, // Green by default, will vary per instance
-      transparent: true, // Enable transparency
-      vertexColors: true // Keep support for instance colors
-    });
-
-    // Store alpha value as property for easy tweaking
-    this.alpha = 0.7;
+    // Create a PlaneGeometry for the billboard - we'll use THREE.Points to handle billboarding
+    const geometry = new THREE.BufferGeometry();
     
-    // Customize the shader to invert background colors
-    material.onBeforeCompile = (shader) => {
-      // Add uniform for the background texture
-      shader.uniforms.backgroundTexture = { value: this.backgroundRT.texture };
-      shader.uniforms.particleAlpha = { value: this.alpha }; // Use property value
+    // A single point will be expanded into a billboard by the vertex shader
+    const positions = new Float32Array(this.maxEnemies * 3); // x, y, z positions
+    const colors = new Float32Array(this.maxEnemies * 3); // r, g, b colors
+    const sizes = new Float32Array(this.maxEnemies); // size of each point
+    
+    // Initialize arrays with default values
+    for (let i = 0; i < this.maxEnemies; i++) {
+      positions[i * 3 + 0] = 0; // x
+      positions[i * 3 + 1] = 0; // y
+      positions[i * 3 + 2] = 0; // z
       
-      // Inject the uniform declarations into the fragment shader
-      shader.fragmentShader = `
+      colors[i * 3 + 0] = 0; // r
+      colors[i * 3 + 1] = 1; // g
+      colors[i * 3 + 2] = 0; // b
+      
+      sizes[i] = size;
+    }
+    
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+    
+    // Use a ShaderMaterial for better control of the billboarding and visual effects
+    const material = new THREE.ShaderMaterial({
+      uniforms: {
+        backgroundTexture: { value: this.backgroundRT.texture },
+        particleAlpha: { value: 1.0 },
+        resolution: { value: new THREE.Vector2(
+          window.innerWidth,
+          window.innerHeight
+        )},
+        pointTexture: { value: null } // We'll create a circular texture below
+      },
+      side: THREE.DoubleSide, // Make the particles visible from both sides
+      vertexShader: `
+        attribute float size;
+        varying vec2 vUv;
+        
+        void main() {
+          vUv = vec2(0.5, 0.5); // Center of the point
+          
+          // Billboard calculation - convert to view space
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          
+          // Set size based on the distance from camera (for scale consistency)
+          // Increase the size factor to make particles more visible
+          gl_PointSize = size * (500.0 / -mvPosition.z);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
         uniform sampler2D backgroundTexture;
         uniform float particleAlpha;
-        ${shader.fragmentShader}
-      `;
-      
-      // Replace the output fragment to invert the background color
-      shader.fragmentShader = shader.fragmentShader.replace(
-        '#include <output_fragment>',
-        `
-        // Calculate screen-space UV coordinates
-        vec2 uv = gl_FragCoord.xy / vec2(${window.innerWidth}.0, ${window.innerHeight}.0);
-        // Sample the background color from the render target
-        vec4 backgroundColor = texture2D(backgroundTexture, uv);
-        // Invert the RGB components
-        vec3 invertedColor = vec3(1.0 - backgroundColor.r, 1.0 - backgroundColor.g, 1.0 - backgroundColor.b);
-        // Use the particle's alpha value for transparency
-        float alpha = particleAlpha;
-        // Output the inverted color with alpha
-        gl_FragColor = vec4(invertedColor, alpha);
-        `
-      );
-      
-      // Store the modified shader for later access
-      this.customShader = shader;
-    };
+        uniform vec2 resolution;
+        uniform sampler2D pointTexture;
+        
+        varying vec2 vUv;
+        
+        void main() {
+          // Use gl_PointCoord for texture mapping across the point
+          // It provides coordinates from 0 to 1 across the point quad
+          
+          // Create a circular shape with soft edges
+          float distance = length(gl_PointCoord - vec2(0.5));
+          float alpha = 1.0 - smoothstep(0.2, 0.5, distance);
+          
+          // Calculate UV for background texture
+          vec2 uv = gl_FragCoord.xy / resolution;
+          
+          // Sample background texture
+          vec4 backgroundColor = texture2D(backgroundTexture, uv);
+          
+          // Invert background
+          vec3 invertedColor = vec3(1.0 - backgroundColor.r, 1.0 - backgroundColor.g, 1.0 - backgroundColor.b);
+          
+          // Use the inverted color directly without any particle color influence
+          vec3 finalColor = invertedColor;
+          
+          // Adjust alpha based on distance from center
+          gl_FragColor = vec4(finalColor, alpha * particleAlpha);
+          
+          // Discard pixels with very low alpha (improves performance)
+          if (gl_FragColor.a < 0.05) discard;
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.NormalBlending // Use additive blending for glow effect
+    });
     
-    this.instancedMesh = new THREE.InstancedMesh(geometry, material, this.maxEnemies);
-    this.instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    this.instancedMesh.castShadow = true;
-    this.instancedMesh.receiveShadow = true;
-    this.instancedMesh.count = 0; // Start with no visible instances
+    // Store alpha for easy adjustment
+    this.alpha = 1.0;
+    material.uniforms.particleAlpha.value = this.alpha;
     
-    // Enable raycasting on the instanced mesh
-    this.instancedMesh.frustumCulled = false; // Ensure all instances are considered for raycasting
-    this.instancedMesh.name = 'particleEnemyGroup'; // Set name for easier identification
-    
-    // Add userData to identify this as a particle enemy group and ensure proper raycasting
-    this.instancedMesh.userData = {
+    // Create the point cloud system
+    this.particleMesh = new THREE.Points(geometry, material);
+    this.particleMesh.frustumCulled = false; // Disable frustum culling
+    this.particleMesh.userData = {
       isParticleEnemyGroup: true,
       particleEnemyGroupId: `particleGroup_${Math.random().toString(36).substr(2, 9)}`,
-      isRaycastable: true,  // Explicit flag for raycasting
+      isRaycastable: true,
       getEnemyIdFromInstance: (instanceId) => this.getEnemyIdFromInstance(instanceId)
     };
     
-    // Make sure instanced mesh is included in raycasting operations
-    this.instancedMesh.raycast = THREE.Mesh.prototype.raycast;
+    // Add to scene
+    this.scene.add(this.particleMesh);
     
-    // Enable instance color variations
-    this.instancedMesh.material.vertexColors = true;
-    this.instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(
-      new Float32Array(this.maxEnemies * 3), 3
-    );
+    console.log("Initialized particle system with points:", this.particleMesh);
     
-    this.scene.add(this.instancedMesh);
+    // Set name for easier identification
+    this.particleMesh.name = 'particleEnemyGroup';
+    
+    // Custom raycast method for Points
+    this.particleMesh.raycast = function(raycaster, intersects) {
+      const geometry = this.geometry;
+      const matrixWorld = this.matrixWorld;
+      const threshold = raycaster.params.Points ? raycaster.params.Points.threshold : 0.1;
+      const positions = geometry.getAttribute('position').array;
+      const sizes = geometry.getAttribute('size').array;
+      
+      // Raycast to each point
+      for (let i = 0; i < positions.length / 3; i++) {
+        if (i >= this.parent.activeCount) break;
+        
+        const x = positions[i * 3];
+        const y = positions[i * 3 + 1];
+        const z = positions[i * 3 + 2];
+        
+        const rayPointDist = raycaster.ray.distanceToPoint(
+          _vector.set(x, y, z).applyMatrix4(matrixWorld)
+        );
+        
+        if (rayPointDist < threshold) {
+          const intersectPoint = new THREE.Vector3();
+          raycaster.ray.closestPointToPoint(
+            _vector.set(x, y, z).applyMatrix4(matrixWorld),
+            intersectPoint
+          );
+          
+          const distance = raycaster.ray.origin.distanceTo(intersectPoint);
+          if (distance < raycaster.near || distance > raycaster.far) continue;
+          
+          intersects.push({
+            distance: distance,
+            distanceToRay: rayPointDist,
+            point: intersectPoint.clone(),
+            index: i,
+            face: null,
+            object: this
+          });
+        }
+      }
+    }.bind(this.particleMesh);
+    
+    // Define a temp vector for raycast calculations
+    const _vector = new THREE.Vector3();
 
     // Initialize enemy data array
     this.enemyData = Array.from({ length: this.maxEnemies }, (_, i) => ({
@@ -159,6 +253,21 @@ export class ParticleEnemyGroup {
 
     // Setup event listeners
     this.setupEventListeners();
+
+    // Add debug visualization to check if background texture is capturing properly
+    // Uncomment this section to add a debug plane showing what's in the render target
+    
+    this.debugPlane = new THREE.Mesh(
+      new THREE.PlaneGeometry(4, 3),
+      new THREE.MeshBasicMaterial({ 
+        map: this.backgroundRT.texture,
+        transparent: true,
+        opacity: 0.7
+      })
+    );
+    this.debugPlane.position.set(0, 4, 0); // Position above the playing area
+    this.scene.add(this.debugPlane);
+    
   }
 
   /**
@@ -177,6 +286,11 @@ export class ParticleEnemyGroup {
   spawn(count, positions) {
     const spawnCount = Math.min(count, this.maxEnemies - this.activeCount);
     
+    // Get references to buffers
+    const positionAttr = this.particleMesh.geometry.getAttribute('position');
+    const colorAttr = this.particleMesh.geometry.getAttribute('color');
+    const sizeAttr = this.particleMesh.geometry.getAttribute('size');
+    
     for (let i = 0; i < spawnCount; i++) {
       const index = this.findFreeSlot();
       if (index === -1) break; // No more free slots
@@ -187,6 +301,16 @@ export class ParticleEnemyGroup {
         positions[i].y,
         positions[i].z
       );
+      
+      // Update position in buffer
+      positionAttr.array[index * 3] = enemy.position.x;
+      positionAttr.array[index * 3 + 1] = enemy.position.y;
+      positionAttr.array[index * 3 + 2] = enemy.position.z;
+      
+      // No need to set colors since we're just inverting the background
+      
+      // Set initial size
+      sizeAttr.array[index] = 1.0; // Slightly smaller in idle phase
       
       // Add a small random velocity for movement
       enemy.velocity.set(
@@ -214,7 +338,12 @@ export class ParticleEnemyGroup {
       });
     }
     
-    this.updateInstances();
+    // Mark buffers as needing update
+    positionAttr.needsUpdate = true;
+    colorAttr.needsUpdate = true;
+    sizeAttr.needsUpdate = true;
+    
+    console.log(`Spawned ${spawnCount} particle enemies, active count: ${this.activeCount}`);
   }
 
   /**
@@ -248,6 +377,11 @@ export class ParticleEnemyGroup {
       this.movement.update(this.enemyData, this.activeCount, playerPos, delta);
     }
     
+    // Get references to the buffer attributes
+    const positions = this.particleMesh.geometry.getAttribute('position');
+    const colors = this.particleMesh.geometry.getAttribute('color');
+    const sizes = this.particleMesh.geometry.getAttribute('size');
+    
     let needsUpdate = false;
     
     for (let i = 0; i < this.activeCount; i++) {
@@ -262,42 +396,32 @@ export class ParticleEnemyGroup {
         // Add a small oscillation effect
         enemy.position.y += Math.sin(Date.now() * 0.001 + i) * 0.002;
         
-        // Position the instance
-        this.dummy.position.copy(enemy.position);
+        // Update position in buffer
+        positions.array[i * 3] = enemy.position.x;
+        positions.array[i * 3 + 1] = enemy.position.y;
+        positions.array[i * 3 + 2] = enemy.position.z;
         
-        // Scale based on phase
+        // Determine size based on phase
         let scale;
         if (enemy.phase === 'idle') {
           // Slightly smaller while idle
-          scale = 0.8;
-        } else if (enemy.phase === 'orbit') {
-          // Normal size while orbiting
           scale = 1.0;
+        } else if (enemy.phase === 'orbit') {
+          // Normal size 
+          scale = 1.2;
         } else if (enemy.phase === 'attack') {
           // Larger while attacking
-          scale = 1.3;
+          scale = 1.6;
         }
-        this.dummy.scale.setScalar(scale);
+        sizes.array[i] = scale;
         
-        this.dummy.updateMatrix();
-        this.instancedMesh.setMatrixAt(i, this.dummy.matrix);
+        // // Use a consistent color for all particles - bright cyan
+        // const color = new THREE.Color().setHSL(0.5, 1.0, 0.6);
         
-        // Update color based on phase and health
-        const healthPercent = enemy.health / enemy.maxHealth;
-        let color;
-        
-        if (enemy.phase === 'idle') {
-          // Bright cyan color during idle phase (more visible)
-          color = new THREE.Color().setHSL(0.5, 1.0, 0.6);
-        } else if (enemy.phase === 'orbit') {
-          // Normal health-based green/yellow color during orbit phase
-          color = new THREE.Color().setHSL(healthPercent * 0.3, 1, 0.5);
-        } else if (enemy.phase === 'attack') {
-          // Bright red color during attack phase
-          color = new THREE.Color(1, 0, 0);
-        }
-        
-        this.instancedMesh.setColorAt(i, color);
+        // // Set color in buffer
+        // colors.array[i * 3] = color.r;
+        // colors.array[i * 3 + 1] = color.g;
+        // colors.array[i * 3 + 2] = color.b;
         
         needsUpdate = true;
       } 
@@ -311,33 +435,33 @@ export class ParticleEnemyGroup {
           continue;
         }
         
-        // Scale down while dying
-        this.dummy.position.copy(enemy.position);
-        this.dummy.scale.setScalar(1 - progress);
-        this.dummy.updateMatrix();
-        this.instancedMesh.setMatrixAt(i, this.dummy.matrix);
+        // Update position
+        positions.array[i * 3] = enemy.position.x;
+        positions.array[i * 3 + 1] = enemy.position.y;
+        positions.array[i * 3 + 2] = enemy.position.z;
         
-        // Red color while dying
-        const fadeColor = new THREE.Color(1, 0, 0);
-        this.instancedMesh.setColorAt(i, fadeColor);
+        // Scale down while dying
+        sizes.array[i] = 0.6 * (1 - progress);
+        
+        // No need to set colors as we're just inverting the background
         
         needsUpdate = true;
       }
     }
     
     if (needsUpdate) {
-      this.instancedMesh.instanceMatrix.needsUpdate = true;
-      this.instancedMesh.instanceColor.needsUpdate = true;
+      // Mark attributes as needing update
+      positions.needsUpdate = true;
+      colors.needsUpdate = true;
+      sizes.needsUpdate = true;
     }
-    
-    // Update the visible count
-    this.instancedMesh.count = this.activeCount;
   }
 
   /**
-   * Update all instance matrices after changes
+   * Update all particle positions after changes
    */
   updateInstances() {
+    // Call update with delta=0 to refresh particle positions without movement
     this.update(0);
   }
 
@@ -410,6 +534,11 @@ export class ParticleEnemyGroup {
   removeEnemy(index) {
     if (index < 0 || index >= this.activeCount) return;
     
+    // Get buffer attributes
+    const positions = this.particleMesh.geometry.getAttribute('position');
+    const colors = this.particleMesh.geometry.getAttribute('color');
+    const sizes = this.particleMesh.geometry.getAttribute('size');
+    
     const enemy = this.enemyData[index];
     enemy.state = 'dead';
     
@@ -421,25 +550,30 @@ export class ParticleEnemyGroup {
       // Move the "removed" enemy to the end
       this.enemyData[this.activeCount - 1] = enemy;
       
-      // Update the matrix and color for the swapped element
+      // Update the buffers for the swapped element
       const swappedEnemy = this.enemyData[index];
-      this.dummy.position.copy(swappedEnemy.position);
-      this.dummy.scale.setScalar(1);
-      this.dummy.updateMatrix();
-      this.instancedMesh.setMatrixAt(index, this.dummy.matrix);
       
-      const healthPercent = swappedEnemy.health / swappedEnemy.maxHealth;
-      const color = new THREE.Color().setHSL(healthPercent * 0.3, 1, 0.5);
-      this.instancedMesh.setColorAt(index, color);
+      // Update position
+      positions.array[index * 3] = swappedEnemy.position.x;
+      positions.array[index * 3 + 1] = swappedEnemy.position.y;
+      positions.array[index * 3 + 2] = swappedEnemy.position.z;
+      
+      // No need to set colors since we're just inverting the background
+      
+      // Update size based on phase
+      let size = 1.2;
+      if (swappedEnemy.phase === 'idle') size = 1.0;
+      else if (swappedEnemy.phase === 'attack') size = 1.6;
+      sizes.array[index] = size;
     }
     
     // Decrease active count
     this.activeCount--;
     
-    // Update instance data
-    this.instancedMesh.instanceMatrix.needsUpdate = true;
-    this.instancedMesh.instanceColor.needsUpdate = true;
-    this.instancedMesh.count = this.activeCount;
+    // Mark buffers as needing update
+    positions.needsUpdate = true;
+    colors.needsUpdate = true;
+    sizes.needsUpdate = true;
     
     // Let the health manager know this entity is gone
     this.eventBus.emit('entity:removed', {
@@ -467,20 +601,19 @@ export class ParticleEnemyGroup {
    */
   resize(width, height) {
     // Get window dimensions if not provided
-    width = width || window.innerWidth;
-    height = height || window.innerHeight;
+    const container = document.getElementById('phone3d');
+    width = width || (container ? container.clientWidth : window.innerWidth);
+    height = height || (container ? container.clientHeight : window.innerHeight);
     
     // Resize render target
     this.backgroundRT.setSize(width, height);
     
     // Update shader uniforms if available
     if (this.customShader && this.customShader.uniforms) {
-      // Update the UV calculation in shader (not strictly necessary as we'll recreate on material recompile)
-      // but we can update this manually if we don't want to wait for recompile
-      this.customShader.fragmentShader = this.customShader.fragmentShader.replace(
-        /vec2\(.*?\.0,.*?\.0\)/,
-        `vec2(${width}.0, ${height}.0)`
-      );
+      // Update resolution uniform
+      if (this.customShader.uniforms.resolution) {
+        this.customShader.uniforms.resolution.value.set(width, height);
+      }
     }
   }
 
@@ -488,14 +621,14 @@ export class ParticleEnemyGroup {
    * Prepare for rendering - make particles invisible for background capture
    */
   prepareBackgroundCapture() {
-    this.instancedMesh.visible = false;
+    this.particleMesh.visible = false;
   }
 
   /**
    * Restore visibility after background capture
    */
   restoreAfterBackgroundCapture() {
-    this.instancedMesh.visible = true;
+    this.particleMesh.visible = true;
   }
   
   /**
@@ -505,9 +638,9 @@ export class ParticleEnemyGroup {
   setAlpha(alpha) {
     this.alpha = Math.max(0, Math.min(1, alpha)); // Clamp between 0 and 1
     
-    // Update the shader uniform if available
-    if (this.customShader && this.customShader.uniforms && this.customShader.uniforms.particleAlpha) {
-      this.customShader.uniforms.particleAlpha.value = this.alpha;
+    // Update the shader uniform 
+    if (this.particleMesh.material.uniforms && this.particleMesh.material.uniforms.particleAlpha) {
+      this.particleMesh.material.uniforms.particleAlpha.value = this.alpha;
     }
     
     return this.alpha;
@@ -533,9 +666,10 @@ export class ParticleEnemyGroup {
       enemy.state = 'dead';
     });
     
-    // Reset active count and update mesh
+    // Reset active count
     this.activeCount = 0;
-    this.instancedMesh.count = 0;
+    
+    // Update the scene to reflect changes
     this.updateInstances();
   }
 }
