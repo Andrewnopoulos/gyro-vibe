@@ -44,9 +44,6 @@ export class Spell {
     this.isKeyDown = true;
     
     const cast_data = this.effectKeyDown(context);
-
-    console.log("cast data")
-    console.log(cast_data)
     
     if (!isRemote && context.eventBus) {
       let cameraPosition = null;
@@ -76,14 +73,12 @@ export class Spell {
       };
 
       if (cast_data) {
-        console.log("emitting generated cast data");
         // Add spellData to cast_data if it doesn't already have it
         if (!cast_data.spellData) {
           cast_data.spellData = spellData;
         }
         context.eventBus.emit('spell:cast', cast_data);
       } else {
-        console.log("don't emit generic cast data");
         // context.eventBus.emit('spell:cast', {
         //   spellId: this.id,
         //   targetPosition,
@@ -106,9 +101,6 @@ export class Spell {
     this.isKeyDown = false;
     
     const cast_data = this.effectKeyUp(context);
-
-    console.log("cast up data")
-    console.log(cast_data)
     
     if (!isRemote && context.eventBus) {
       let cameraPosition = null;
@@ -142,14 +134,12 @@ export class Spell {
       };
 
       if (cast_data) {
-        console.log("emitting generated cast data");
         // Add spellData to cast_data if it doesn't already have it
         if (!cast_data.spellData) {
           cast_data.spellData = spellData;
         }
         context.eventBus.emit('spell:cast', cast_data);
       } else {
-        console.log("don't emit generic cast data");
         // context.eventBus.emit('spell:cast', {
         //   spellId: this.id,
         //   targetPosition,
@@ -184,18 +174,18 @@ export class Spell {
       spellData: data.spellData || {}
     };
     
-    console.log(`Initial remote cast of ${this.name} from player ${data.playerId}`, {
-      targetPosition: data.targetPosition ? 
-        `(${data.targetPosition.x.toFixed(2)}, ${data.targetPosition.y.toFixed(2)}, ${data.targetPosition.z.toFixed(2)})` : 
-        'none',
-      cameraPosition: data.cameraPosition ?
-        `(${data.cameraPosition.x.toFixed(2)}, ${data.cameraPosition.y.toFixed(2)}, ${data.cameraPosition.z.toFixed(2)})` :
-        'none',
-      targetDirection: data.targetDirection ?
-        `(${data.targetDirection.x.toFixed(2)}, ${data.targetDirection.y.toFixed(2)}, ${data.targetDirection.z.toFixed(2)})` :
-        'none',
-      spellData: data.spellData
-    });
+    // console.log(`Initial remote cast of ${this.name} from player ${data.playerId}`, {
+    //   targetPosition: data.targetPosition ? 
+    //     `(${data.targetPosition.x.toFixed(2)}, ${data.targetPosition.y.toFixed(2)}, ${data.targetPosition.z.toFixed(2)})` : 
+    //     'none',
+    //   cameraPosition: data.cameraPosition ?
+    //     `(${data.cameraPosition.x.toFixed(2)}, ${data.cameraPosition.y.toFixed(2)}, ${data.cameraPosition.z.toFixed(2)})` :
+    //     'none',
+    //   targetDirection: data.targetDirection ?
+    //     `(${data.targetDirection.x.toFixed(2)}, ${data.targetDirection.y.toFixed(2)}, ${data.targetDirection.z.toFixed(2)})` :
+    //     'none',
+    //   spellData: data.spellData
+    // });
     
     // Determine if this is a keydown or keyup event
     if (data.spellData && data.spellData.isKeyUp) {

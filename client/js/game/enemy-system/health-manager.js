@@ -40,8 +40,6 @@ export class HealthManager {
       isEnemy,
       isDead: false
     });
-    
-    console.log(`Registered entity ${id} with ${health}/${maxHealth} health`);
   }
   
   /**

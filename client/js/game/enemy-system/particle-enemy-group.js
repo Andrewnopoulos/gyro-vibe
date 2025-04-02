@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { FlockingMovement } from './flocking-movement.js';
 
 /**
  * Manages a group of particle-based enemies using instanced rendering
@@ -9,13 +10,43 @@ export class ParticleEnemyGroup {
    * @param {Object} options - Configuration options
    * @param {THREE.Scene} options.scene - Three.js scene
    * @param {EventBus} options.eventBus - Application event bus
+   * @param {Function} options.getPlayerPosition - Function to get player's position
    * @param {number} [options.maxEnemies=1000] - Maximum number of enemies to support
    */
   constructor(options) {
     this.scene = options.scene;
     this.eventBus = options.eventBus;
+    this.getPlayerPosition = options.getPlayerPosition || (() => null);
     this.maxEnemies = options.maxEnemies || 1000;
     this.activeCount = 0;
+    
+    // Initialize the flocking movement system with idle, orbit and attack behaviors
+    this.movement = new FlockingMovement({
+      // Flocking parameters
+      separationDistance: 1.0,
+      alignmentDistance: 2.0,
+      cohesionDistance: 2.0,
+      separationStrength: 0.05,
+      alignmentStrength: 0.03,
+      cohesionStrength: 0.02,
+      maxSpeed: 0.1,
+      
+      // Idle parameters
+      idleBobAmplitude: 0.0005,   // How high the enemy bobs in place (reduced)
+      idleBobFrequency: 0.6,    // How fast the enemy bobs (slightly slower)
+      awarenessRadius: 10.0,    // Distance at which enemies notice player (decreased)
+      
+      // Orbit parameters
+      orbitRadius: 7.0,         // Distance to maintain from player
+      orbitStrength: 20,       // Force to maintain orbit distance (stronger)
+      orbitSpeed: 20,          // Speed of circular motion (much faster)
+      
+      // Attack parameters
+      attackSpeed: 15.0,        // Extremely high speed during attack
+      attackDuration: 0.8,      // Duration of attack
+      minAttackTime: 40.0,      // Minimum time between attacks (extremely rare)
+      maxAttackTime: 60.0       // Maximum time between attacks (extremely rare)
+    });
 
     // Initialize InstancedMesh
     const geometry = new THREE.SphereGeometry(0.3, 8, 8); // Simple shape for enemies
@@ -32,11 +63,16 @@ export class ParticleEnemyGroup {
     this.instancedMesh.frustumCulled = false; // Ensure all instances are considered for raycasting
     this.instancedMesh.name = 'particleEnemyGroup'; // Set name for easier identification
     
-    // Add userData to identify this as a particle enemy group
+    // Add userData to identify this as a particle enemy group and ensure proper raycasting
     this.instancedMesh.userData = {
       isParticleEnemyGroup: true,
-      particleEnemyGroupId: `particleGroup_${Math.random().toString(36).substr(2, 9)}`
+      particleEnemyGroupId: `particleGroup_${Math.random().toString(36).substr(2, 9)}`,
+      isRaycastable: true,  // Explicit flag for raycasting
+      getEnemyIdFromInstance: (instanceId) => this.getEnemyIdFromInstance(instanceId)
     };
+    
+    // Make sure instanced mesh is included in raycasting operations
+    this.instancedMesh.raycast = THREE.Mesh.prototype.raycast;
     
     // Enable instance color variations
     this.instancedMesh.material.vertexColors = true;
@@ -55,6 +91,11 @@ export class ParticleEnemyGroup {
       maxHealth: 5,
       state: 'dead', // 'alive', 'dying', 'dead'
       deathStartTime: 0,
+      // New phase-related fields
+      phase: 'idle', // Current phase: 'idle', 'orbit' or 'attack'
+      phaseTimer: Math.random() * 10 + 15, // Much longer time until attack (15-25 seconds initially)
+      attackDirection: new THREE.Vector3(), // Direction to move during attack phase
+      orbitDirection: Math.random() < 0.5 ? 1 : -1, // Random orbit direction (clockwise or counter-clockwise)
     }));
     
     // Matrix and Object3D for position updates
@@ -100,6 +141,13 @@ export class ParticleEnemyGroup {
       
       enemy.health = enemy.maxHealth;
       enemy.state = 'alive';
+      
+      // Initialize phase data
+      enemy.phase = 'idle';
+      // Initialize with a random attack timer between min and max values (40-60 seconds)
+      enemy.phaseTimer = this.movement.minAttackTime + Math.random() * (this.movement.maxAttackTime - this.movement.minAttackTime);
+      enemy.attackDirection.set(0, 0, 0);
+      enemy.orbitDirection = Math.random() < 0.5 ? 1 : -1; // Random orbit direction
 
       // Register with HealthManager
       this.eventBus.emit('entity:register', {
@@ -138,29 +186,61 @@ export class ParticleEnemyGroup {
    * @param {number} delta - Time since last update in seconds
    */
   update(delta) {
+    const playerPos = this.getPlayerPosition();
+    if (playerPos) {
+      // Update enemy velocities using flocking behavior
+      this.movement.update(this.enemyData, this.activeCount, playerPos, delta);
+    }
+    
     let needsUpdate = false;
     
     for (let i = 0; i < this.activeCount; i++) {
       const enemy = this.enemyData[i];
       
       if (enemy.state === 'alive') {
-        // Update position based on velocity
-        enemy.position.x += enemy.velocity.x;
-        enemy.position.y += enemy.velocity.y; 
-        enemy.position.z += enemy.velocity.z;
+        // Update position based on velocity (already modified by flocking)
+        enemy.position.x += enemy.velocity.x * delta;
+        enemy.position.y += enemy.velocity.y * delta; 
+        enemy.position.z += enemy.velocity.z * delta;
         
-        // Simple oscillation effect
-        enemy.position.y += Math.sin(Date.now() * 0.001 + i) * 0.005;
+        // Add a small oscillation effect
+        enemy.position.y += Math.sin(Date.now() * 0.001 + i) * 0.002;
         
         // Position the instance
         this.dummy.position.copy(enemy.position);
-        this.dummy.scale.setScalar(1);
+        
+        // Scale based on phase
+        let scale;
+        if (enemy.phase === 'idle') {
+          // Slightly smaller while idle
+          scale = 0.8;
+        } else if (enemy.phase === 'orbit') {
+          // Normal size while orbiting
+          scale = 1.0;
+        } else if (enemy.phase === 'attack') {
+          // Larger while attacking
+          scale = 1.3;
+        }
+        this.dummy.scale.setScalar(scale);
+        
         this.dummy.updateMatrix();
         this.instancedMesh.setMatrixAt(i, this.dummy.matrix);
         
-        // Update color based on health
+        // Update color based on phase and health
         const healthPercent = enemy.health / enemy.maxHealth;
-        const color = new THREE.Color().setHSL(healthPercent * 0.3, 1, 0.5);
+        let color;
+        
+        if (enemy.phase === 'idle') {
+          // Bright cyan color during idle phase (more visible)
+          color = new THREE.Color().setHSL(0.5, 1.0, 0.6);
+        } else if (enemy.phase === 'orbit') {
+          // Normal health-based green/yellow color during orbit phase
+          color = new THREE.Color().setHSL(healthPercent * 0.3, 1, 0.5);
+        } else if (enemy.phase === 'attack') {
+          // Bright red color during attack phase
+          color = new THREE.Color(1, 0, 0);
+        }
+        
         this.instancedMesh.setColorAt(i, color);
         
         needsUpdate = true;

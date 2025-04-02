@@ -648,7 +648,7 @@ export class LaserBeamSpell extends Spell {
     
     // First, check for intersections with regular enemies
     const intersects = raycaster.intersectObjects(scene.children, true);
-    
+
     // Check each intersection for enemy objects
     for (const intersect of intersects) {
       // Traverse up the parent hierarchy to find the root model with enemyId
@@ -680,38 +680,6 @@ export class LaserBeamSpell extends Spell {
         // Create hit effect at the impact point
         this.createLaserImpactEffect(intersect.point);
       }
-      
-      // Check if this is an instanced mesh (particle enemy group)
-      if (intersect.object && intersect.object.isInstancedMesh && intersect.instanceId !== undefined) {
-        // Find the enemy manager to get the particle enemy group
-        let enemyManager = null;
-        this.eventBus.emit('game:get-enemy-manager', (manager) => {
-          enemyManager = manager;
-        });
-        
-        if (enemyManager && enemyManager.particleEnemyGroup) {
-          // Get the particle enemy ID from the instance ID
-          const particleEnemyId = enemyManager.particleEnemyGroup.getEnemyIdFromInstance(intersect.instanceId);
-          
-          // If found valid enemy ID and haven't hit it already
-          if (particleEnemyId && !hitEnemies.has(particleEnemyId)) {
-            // Add to set of hit enemies
-            hitEnemies.add(particleEnemyId);
-            
-            // Emit spell hit event
-            this.eventBus.emit('spell:hit', {
-              targetId: particleEnemyId,
-              spellId: this.id,
-              power: damage,
-              instanceId: intersect.instanceId,
-              hitPoint: intersect.point
-            });
-            
-            // Create hit effect at the impact point
-            this.createLaserImpactEffect(intersect.point);
-          }
-        }
-      }
     }
     
     // Next, specifically check for intersections with particle enemy groups
@@ -736,7 +704,7 @@ export class LaserBeamSpell extends Spell {
         raycaster.ray.direction.clone().multiplyScalar(100) // Go far enough to hit anything in the scene
       );
       
-      // Set a slightly larger threshold for particle enemies to make them easier to hit
+      // Set a much larger threshold for particle enemies to make them easier to hit
       const originalThreshold = raycaster.params.Mesh.threshold;
       raycaster.params.Mesh.threshold = 0.1; // A bit larger than default
       
@@ -792,7 +760,7 @@ export class LaserBeamSpell extends Spell {
             line.closestPointToPoint(point, true, closestPoint);
             
             const distance = point.distanceTo(closestPoint);
-            const hitThreshold = 0.5; // Generous distance for detection
+            const hitThreshold = 0.5; // Very generous distance for detection with flocking enemies
             
             if (distance < hitThreshold) {
               const particleEnemyId = enemy.id;

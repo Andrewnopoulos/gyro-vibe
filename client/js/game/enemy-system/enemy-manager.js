@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import { TrainingDummy } from './training-dummy.js';
 import { ParticleEnemyGroup } from './particle-enemy-group.js';
 
@@ -20,6 +21,33 @@ export class EnemyManager {
     this.particleEnemyGroup = new ParticleEnemyGroup({
       scene: scene,
       eventBus: eventBus,
+      getPlayerPosition: () => {
+        // Create a variable to hold the position
+        let position = null;
+        
+        // Use the camera:get-position event to get the local player's camera position
+        this.eventBus.emit('camera:get-position', (cameraPos) => {
+          position = cameraPos;
+        });
+        
+        // If we got a position from the event, return it
+        if (position) return position;
+        
+        // If camera position isn't available, try to fall back to scene camera
+        const camera = this.scene.getObjectByName('camera');
+        if (camera) {
+          position = camera.position.clone();
+        } else {
+          // Final fallback - look for any PerspectiveCamera in the scene
+          const perspectiveCamera = this.scene.children.find(child => 
+            child instanceof THREE.PerspectiveCamera);
+          if (perspectiveCamera) {
+            position = perspectiveCamera.position.clone();
+          }
+        }
+        
+        return position;
+      },
       maxEnemies: 1000
     });
     
@@ -174,8 +202,8 @@ export class EnemyManager {
     // Generate positions if not provided
     if (!positions) {
       positions = [];
-      const radius = 20; // Spawn area radius
-      const heightVariation = 5; // Vertical spawning range
+      const radius = 25; // Spawn area radius (moderate value)
+      const heightVariation = 10; // Vertical spawning range (increased from 5 to 10)
       
       for (let i = 0; i < count; i++) {
         // Random position in a circular area, with some height variation
