@@ -48,11 +48,64 @@ export class ParticleEnemyGroup {
       maxAttackTime: 60.0       // Maximum time between attacks (extremely rare)
     });
 
+    // Create a render target to capture the scene without particles
+    this.backgroundRT = new THREE.WebGLRenderTarget(
+      window.innerWidth, 
+      window.innerHeight, 
+      {
+        minFilter: THREE.LinearFilter,
+        magFilter: THREE.LinearFilter,
+        format: THREE.RGBAFormat
+      }
+    );
+
     // Initialize InstancedMesh
     const geometry = new THREE.SphereGeometry(0.3, 8, 8); // Simple shape for enemies
+    
+    // Custom material with invert-background effect
     const material = new THREE.MeshStandardMaterial({
       color: 0x00ff00, // Green by default, will vary per instance
+      transparent: true, // Enable transparency
+      vertexColors: true // Keep support for instance colors
     });
+
+    // Store alpha value as property for easy tweaking
+    this.alpha = 0.7;
+    
+    // Customize the shader to invert background colors
+    material.onBeforeCompile = (shader) => {
+      // Add uniform for the background texture
+      shader.uniforms.backgroundTexture = { value: this.backgroundRT.texture };
+      shader.uniforms.particleAlpha = { value: this.alpha }; // Use property value
+      
+      // Inject the uniform declarations into the fragment shader
+      shader.fragmentShader = `
+        uniform sampler2D backgroundTexture;
+        uniform float particleAlpha;
+        ${shader.fragmentShader}
+      `;
+      
+      // Replace the output fragment to invert the background color
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <output_fragment>',
+        `
+        // Calculate screen-space UV coordinates
+        vec2 uv = gl_FragCoord.xy / vec2(${window.innerWidth}.0, ${window.innerHeight}.0);
+        // Sample the background color from the render target
+        vec4 backgroundColor = texture2D(backgroundTexture, uv);
+        // Invert the RGB components
+        vec3 invertedColor = vec3(1.0 - backgroundColor.r, 1.0 - backgroundColor.g, 1.0 - backgroundColor.b);
+        // Use the particle's alpha value for transparency
+        float alpha = particleAlpha;
+        // Output the inverted color with alpha
+        gl_FragColor = vec4(invertedColor, alpha);
+        `
+      );
+      
+      // Store the modified shader for later access
+      this.customShader = shader;
+    };
+    
     this.instancedMesh = new THREE.InstancedMesh(geometry, material, this.maxEnemies);
     this.instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.instancedMesh.castShadow = true;
@@ -100,6 +153,9 @@ export class ParticleEnemyGroup {
     
     // Matrix and Object3D for position updates
     this.dummy = new THREE.Object3D();
+
+    // Register for window resize events
+    window.addEventListener('resize', this.resize.bind(this));
 
     // Setup event listeners
     this.setupEventListeners();
@@ -402,6 +458,59 @@ export class ParticleEnemyGroup {
       return this.enemyData[instanceId].id;
     }
     return null;
+  }
+
+  /**
+   * Update render target when window is resized
+   * @param {number} width - New width
+   * @param {number} height - New height
+   */
+  resize(width, height) {
+    // Get window dimensions if not provided
+    width = width || window.innerWidth;
+    height = height || window.innerHeight;
+    
+    // Resize render target
+    this.backgroundRT.setSize(width, height);
+    
+    // Update shader uniforms if available
+    if (this.customShader && this.customShader.uniforms) {
+      // Update the UV calculation in shader (not strictly necessary as we'll recreate on material recompile)
+      // but we can update this manually if we don't want to wait for recompile
+      this.customShader.fragmentShader = this.customShader.fragmentShader.replace(
+        /vec2\(.*?\.0,.*?\.0\)/,
+        `vec2(${width}.0, ${height}.0)`
+      );
+    }
+  }
+
+  /**
+   * Prepare for rendering - make particles invisible for background capture
+   */
+  prepareBackgroundCapture() {
+    this.instancedMesh.visible = false;
+  }
+
+  /**
+   * Restore visibility after background capture
+   */
+  restoreAfterBackgroundCapture() {
+    this.instancedMesh.visible = true;
+  }
+  
+  /**
+   * Set the alpha (transparency) value for the inverted background effect
+   * @param {number} alpha - Alpha value between 0.0 and 1.0
+   */
+  setAlpha(alpha) {
+    this.alpha = Math.max(0, Math.min(1, alpha)); // Clamp between 0 and 1
+    
+    // Update the shader uniform if available
+    if (this.customShader && this.customShader.uniforms && this.customShader.uniforms.particleAlpha) {
+      this.customShader.uniforms.particleAlpha.value = this.alpha;
+    }
+    
+    return this.alpha;
   }
 
   /**

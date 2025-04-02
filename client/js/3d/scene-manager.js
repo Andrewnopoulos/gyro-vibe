@@ -184,7 +184,30 @@ export class SceneManager {
       time: time 
     });
     
-    // Render the scene
+    // Find any particle enemy groups in the scene that need two-pass rendering
+    let particleEnemyGroups = [];
+    this.scene.traverse(object => {
+      if (object.userData && object.userData.isParticleEnemyGroup) {
+        const enemyManager = this.findEnemyManager();
+        if (enemyManager && enemyManager.particleEnemyGroup) {
+          particleEnemyGroups.push(enemyManager.particleEnemyGroup);
+        }
+      }
+    });
+    
+    // Process all found particle enemy groups
+    for (const group of particleEnemyGroups) {
+      // Step 1: Render the scene without particles to the render target
+      group.prepareBackgroundCapture();
+      this.renderer.setRenderTarget(group.backgroundRT);
+      this.renderer.render(this.scene, this.camera);
+      
+      // Step 2: Restore particle visibility for main render
+      group.restoreAfterBackgroundCapture();
+      this.renderer.setRenderTarget(null);
+    }
+    
+    // Render the final scene with everything visible
     this.renderer.render(this.scene, this.camera);
     
     this.prevTime = time;
@@ -196,9 +219,18 @@ export class SceneManager {
    */
   onWindowResize() {
     if (this.camera && this.renderer) {
-      this.camera.aspect = this.container.clientWidth / this.container.clientHeight;
+      const width = this.container.clientWidth;
+      const height = this.container.clientHeight;
+      
+      this.camera.aspect = width / height;
       this.camera.updateProjectionMatrix();
-      this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
+      this.renderer.setSize(width, height);
+      
+      // Also resize any particle enemy render targets
+      const enemyManager = this.findEnemyManager();
+      if (enemyManager && enemyManager.particleEnemyGroup) {
+        enemyManager.particleEnemyGroup.resize(width, height);
+      }
     }
   }
 
@@ -296,5 +328,17 @@ export class SceneManager {
    */
   getContainer() {
     return this.container;
+  }
+  
+  /**
+   * Finds the EnemyManager instance
+   * @returns {EnemyManager|null} The EnemyManager instance or null
+   */
+  findEnemyManager() {
+    let enemyManager = null;
+    this.eventBus.emit('enemy:get-manager', (manager) => {
+      enemyManager = manager;
+    });
+    return enemyManager;
   }
 }

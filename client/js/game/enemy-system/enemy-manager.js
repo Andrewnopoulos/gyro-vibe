@@ -74,6 +74,13 @@ export class EnemyManager {
     this.eventBus.on('enemy:spawn', this.handleEnemySpawn.bind(this));
     this.eventBus.on('enemy:update', this.handleEnemyUpdate.bind(this));
     this.eventBus.on('enemy:death', this.handleEnemyDeath.bind(this));
+    
+    // Add a listener for getting the enemy manager instance
+    this.eventBus.on('enemy:get-manager', (callback) => {
+      if (typeof callback === 'function') {
+        callback(this);
+      }
+    });
   }
   
   /**
