@@ -134,9 +134,13 @@ export class ParticleEnemyGroup {
           // Use gl_PointCoord for texture mapping across the point
           // It provides coordinates from 0 to 1 across the point quad
           
-          // Create a circular shape with soft edges
+          // Create a clean circle with hard edges
           float distance = length(gl_PointCoord - vec2(0.5));
-          float alpha = 1.0 - smoothstep(0.2, 0.5, distance);
+          
+          // Cut off at 0.5 to create a perfect circle with sharp edges
+          if (distance > 0.5) {
+            discard; // Discard pixels outside the circle
+          }
           
           // Calculate UV for background texture
           vec2 uv = gl_FragCoord.xy / resolution;
@@ -147,22 +151,17 @@ export class ParticleEnemyGroup {
           // Invert background
           vec3 invertedColor = vec3(1.0 - backgroundColor.r, 1.0 - backgroundColor.g, 1.0 - backgroundColor.b);
           
-          // Use the inverted color directly without any particle color influence
-          vec3 finalColor = invertedColor;
-          
-          // Adjust alpha based on distance from center
-          gl_FragColor = vec4(finalColor, alpha * particleAlpha);
-          
-          // Discard pixels with very low alpha (improves performance)
-          if (gl_FragColor.a < 0.05) discard;
+          // Use the inverted color directly without any blending
+          // Full opacity for a sharp edge
+          gl_FragColor = vec4(invertedColor, particleAlpha);
         }
       `,
       transparent: true,
       depthWrite: false,
-      blending: THREE.NormalBlending // Use additive blending for glow effect
+      blending: THREE.NormalBlending // Use normal blending for clean edges
     });
     
-    // Store alpha for easy adjustment
+    // Set alpha to 1.0 for fully opaque particles with sharp edges
     this.alpha = 1.0;
     material.uniforms.particleAlpha.value = this.alpha;
     
