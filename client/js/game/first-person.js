@@ -1058,32 +1058,57 @@ export class FirstPersonController {
 
   /**
    * Apply velocity to the player (used by flight spell)
-   * @param {Object} data - Velocity data with x, y, z components
+   * @param {Object} data - Velocity data with x, y, z components in world space
    */
   applyVelocity(data) {
     if (!this.enabled) return;
     
-    // Extract velocity from data
-    const velocity = data.velocity;
-    if (!velocity) return;
+    // Extract velocity from data (in world space)
+    const worldVelocity = data.velocity;
+    if (!worldVelocity) return;
     
-    // Apply velocity to the player
-    this.velocity.x += velocity.x;
-    this.velocity.z += velocity.z;
+    // Convert world velocity to Vector3 for easier manipulation
+    const worldVelocityVec = new THREE.Vector3(worldVelocity.x, worldVelocity.y, worldVelocity.z);
     
-    // Only apply upward (y) velocity if in God Mode, or if velocity is positive (upward)
-    if (this.godMode || velocity.y > 0) {
-      if (!this.velocity.y) this.velocity.y = 0;
-      this.velocity.y += velocity.y;
-      
-      // Set gravity delay timer if requested
-      if (data.gravityDelay) {
-        this.gravityDelayUntil = Date.now() + (data.gravityDelay * 1000);
-      }
+    // Get the player's forward and right directions (same as in update method)
+    const cameraDirection = new THREE.Vector3();
+    this.camera.getWorldDirection(cameraDirection);
+    
+    // Get forward vector (normalized to XZ plane)
+    const forward = new THREE.Vector3(cameraDirection.x, 0, cameraDirection.z).normalize();
+    
+    // Get right vector (perpendicular to forward in XZ plane)
+    const right = new THREE.Vector3(forward.z, 0, -forward.x);
+    
+    // Project world velocity onto player's forward and right axes
+    const forwardComponent = worldVelocityVec.dot(forward);
+    const rightComponent = worldVelocityVec.dot(right);
+    
+    // Apply to player's velocity with correct signs (negative = forward/right in controller)
+    this.velocity.z -= forwardComponent;
+    this.velocity.x -= rightComponent; 
+    
+    // Handle vertical velocity (y) directly
+    if (this.velocity.y === undefined) this.velocity.y = 0;
+    this.velocity.y += worldVelocity.y;
+    
+    // Set gravity delay timer if requested
+    if (data.gravityDelay) {
+      this.gravityDelayUntil = Date.now() + (data.gravityDelay * 1000);
     }
     
     // Flag to remember if we need to prevent going below ground
     this.preventGroundPenetration = data.preventGroundPenetration === true;
+    
+    // Debug output
+    console.log("Flight velocity applied:", {
+      worldVelocity: [worldVelocity.x.toFixed(2), worldVelocity.y.toFixed(2), worldVelocity.z.toFixed(2)],
+      playerRelative: {
+        forward: forwardComponent.toFixed(2),
+        right: rightComponent.toFixed(2)
+      },
+      resultingVelocity: [this.velocity.x.toFixed(2), this.velocity.y.toFixed(2), this.velocity.z.toFixed(2)]
+    });
   }
 
   /**
