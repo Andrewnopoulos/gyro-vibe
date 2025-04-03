@@ -25,6 +25,7 @@ export class FirstPersonController {
     this.velocity = new THREE.Vector3();
     this.direction = new THREE.Vector3();
     this.enabled = false;
+    this.preventGroundPenetration = true; // Always prevent falling through the ground
 
     // God Mode
     this.godMode = false;    // New - God Mode toggle
@@ -338,6 +339,9 @@ export class FirstPersonController {
         callback(direction);
       }
     });
+    
+    // Listen for flight spell velocity application
+    this.eventBus.on('firstperson:apply-velocity', this.applyVelocity.bind(this));
   }
 
   /**
@@ -739,6 +743,9 @@ export class FirstPersonController {
       // Enable first-person mode
       this.sceneManager.setFirstPersonMode(true);
 
+      // Initialize velocity vector to prevent undefined values
+      this.velocity = new THREE.Vector3(0, 0, 0);
+
       // Try to get a spawn point from the environment
       if (this.sceneManager.environment &&
         typeof this.sceneManager.environment.getRandomSpawnPoint === 'function') {
@@ -747,7 +754,7 @@ export class FirstPersonController {
         // Set position from spawn point
         this.camera.position.set(
           spawnPoint.x,
-          PLAYER_HEIGHT, // Use standard player height
+          PLAYER_HEIGHT + 0.5, // Add a small buffer to prevent falling through ground
           spawnPoint.z
         );
 
@@ -758,7 +765,7 @@ export class FirstPersonController {
         }
       } else {
         // Default position if no spawn points available
-        this.camera.position.y = PLAYER_HEIGHT;
+        this.camera.position.y = PLAYER_HEIGHT + 0.5; // Add a small buffer
       }
 
       // Always show controls guide when first-person mode is enabled
@@ -839,11 +846,27 @@ export class FirstPersonController {
     this.velocity.x -= this.velocity.x * 10.0 * delta;
     this.velocity.z -= this.velocity.z * 10.0 * delta;
 
-    // God Mode: Add vertical movement
-    if (this.godMode) {
-      // Add vertical velocity component
-      if (!this.velocity.y) this.velocity.y = 0;
-      this.velocity.y -= this.velocity.y * 10.0 * delta;
+    // Add vertical velocity component for God Mode or flight spell
+    if (this.godMode || this.velocity.y !== undefined) {
+      // Ensure velocity.y exists
+      if (this.velocity.y === undefined) this.velocity.y = 0;
+      
+      // Apply reduced gravity unless in God Mode or during gravity delay
+      if (!this.godMode) {
+        // Check if we're in a gravity delay period
+        const now = Date.now();
+        if (!this.gravityDelayUntil || now > this.gravityDelayUntil) {
+          // No active delay, apply gravity normally
+          this.velocity.y -= 5.5 * delta; // Apply reduced gravity for better flight experience
+        } else {
+          // During delay period, no gravity is applied
+          // Optionally add a slight upward force for better feel
+          this.velocity.y += 0.1 * delta;
+        }
+      }
+      
+      // Apply damping
+      this.velocity.y -= this.velocity.y * 2.0 * delta;
     }
 
     // Set movement direction based on key states
@@ -893,9 +916,17 @@ export class FirstPersonController {
       // Apply movement
       this.camera.position.add(forward.multiplyScalar(-this.velocity.z * delta));
       this.camera.position.add(right.multiplyScalar(-this.velocity.x * delta));
-
-      // Maintain player height in normal mode
-      this.camera.position.y = PLAYER_HEIGHT;
+      
+      // Apply vertical movement if we have vertical velocity (from flight spell)
+      if (this.velocity.y !== undefined) {
+        this.camera.position.y += this.velocity.y * delta;
+      }
+      
+      // Always prevent falling below ground level
+      if (this.camera.position.y < PLAYER_HEIGHT) {
+        this.camera.position.y = PLAYER_HEIGHT;
+        this.velocity.y = 0; // Stop vertical movement when hitting ground
+      }
     }
 
     // Determine if player is moving for weapon bob effect
@@ -1026,6 +1057,36 @@ export class FirstPersonController {
   }
 
   /**
+   * Apply velocity to the player (used by flight spell)
+   * @param {Object} data - Velocity data with x, y, z components
+   */
+  applyVelocity(data) {
+    if (!this.enabled) return;
+    
+    // Extract velocity from data
+    const velocity = data.velocity;
+    if (!velocity) return;
+    
+    // Apply velocity to the player
+    this.velocity.x += velocity.x;
+    this.velocity.z += velocity.z;
+    
+    // Only apply upward (y) velocity if in God Mode, or if velocity is positive (upward)
+    if (this.godMode || velocity.y > 0) {
+      if (!this.velocity.y) this.velocity.y = 0;
+      this.velocity.y += velocity.y;
+      
+      // Set gravity delay timer if requested
+      if (data.gravityDelay) {
+        this.gravityDelayUntil = Date.now() + (data.gravityDelay * 1000);
+      }
+    }
+    
+    // Flag to remember if we need to prevent going below ground
+    this.preventGroundPenetration = data.preventGroundPenetration === true;
+  }
+
+  /**
    * Check if first-person mode is enabled
    * @returns {boolean} First-person mode status
    */
@@ -1034,10 +1095,6 @@ export class FirstPersonController {
   }
 
 
-  /**
-   * Handle touch updates from the mobile device
-   * @param {Object} touchData - Touch data from mobile device
-   */
   /**
    * Handle touch updates from the mobile device
    * @param {Object} touchData - Touch data from mobile device

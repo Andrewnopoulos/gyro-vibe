@@ -3,6 +3,7 @@ import { ObjectSpawnerSpell } from './object-spawner-spell.js';
 import { GravityGunSpell } from './gravity-gun-spell.js';
 import { BlackHoleSpell } from './black-hole-spell.js';
 import { LaserBeamSpell } from './laser-beam-spell.js';
+import { FlightSpell } from './flight-spell.js';
 
 /**
  * Registry for all available spells
@@ -157,6 +158,14 @@ export class SpellRegistry {
       cooldown: 0 // No cooldown as specified
     });
     this.registerSpell(laserBeamSpell);
+    
+    // Flight Spell
+    const flightSpell = new FlightSpell({
+      eventBus: this.eventBus,
+      page: 5,
+      cooldown: 0.5 // 0.5 second cooldown as requested
+    });
+    this.registerSpell(flightSpell);
   }
 
   /**

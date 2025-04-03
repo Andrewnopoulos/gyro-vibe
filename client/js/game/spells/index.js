@@ -8,6 +8,7 @@ import { ObjectSpawnerSpell } from './object-spawner-spell.js';
 import { GravityGunSpell } from './gravity-gun-spell.js';
 import { BlackHoleSpell } from './black-hole-spell.js';
 import { LaserBeamSpell } from './laser-beam-spell.js';
+import { FlightSpell } from './flight-spell.js';
 import { SpellAudioManager } from './audio-manager.js';
 
 // Export main spell classes
@@ -19,5 +20,6 @@ export {
   GravityGunSpell,
   BlackHoleSpell,
   LaserBeamSpell,
+  FlightSpell,
   SpellAudioManager
 };
