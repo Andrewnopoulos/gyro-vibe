@@ -146,7 +146,7 @@ export class PortalManager {
         this.exitPortalGroup = new THREE.Group();
         
         // Position exit portal in an accessible area of the map
-        this.exitPortalGroup.position.set(0, 5, -20);
+        this.exitPortalGroup.position.set(0, 5, -30);
         this.exitPortalGroup.rotation.x = 0.35;
         this.exitPortalGroup.rotation.y = 0;
 
